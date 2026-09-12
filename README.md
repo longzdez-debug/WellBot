@@ -1,151 +1,151 @@
-# WellBOT
+# HUNT
 
-Telegram бот-парсер для отслеживания новых объявлений на белорусских площадках (Kufar.by, Onliner.by, Av.by).
+**HUNT** — Telegram listing monitor for resellers. Add a search URL with filters, and the bot watches it continuously and sends new listings to Telegram as soon as they appear in the source feed.
 
-WellBOT предоставляет простой способ получать уведомления о новых объявлениях по заданным пользователем ссылкам с фильтрами.
+## MVP
 
-## Возможности
+- 🟢 Kufar search monitoring with preserved URL filters
+- 🔵 Onliner search monitoring
+- 🚗 Av.by search monitoring
+- ⚡ Default polling interval: **5 seconds** (minimum 1 second)
+- 🚀 Concurrent parsing of up to 20 search URLs by default
+- 🧠 Baseline snapshot on first run — existing listings are not spammed as "new"
+- 🔁 Duplicate protection per Telegram user
+- 📉 Price-drop detection
+- 🛡️ Telegram rate limiting and retries for transient `429` responses
+- 📱 Telegram Mini App for adding a Kufar monitor
+- 🗄️ PostgreSQL persistence
+- 🐳 Docker / Docker Compose deployment
 
-- 🟢 Отслеживание объявлений на Kufar.by
-- 🔵 Отслеживание объявлений на Onliner.by (Барахолка и Авто)
-- 🟠 Отслеживание объявлений на Av.by
-- 📢 Уведомления о новых объявлениях в реальном времени
-- 👤 Поддержка до 10 активных ссылок на пользователя
-- 🎯 Простое управление ссылками через Telegram
+> The 5-second setting is a polling target. Actual detection latency also depends on when the marketplace makes a listing visible to its search/API feed and on network/Telegram delivery time. HUNT does not claim an exact one-second guarantee.
 
-## Технологии
+## Stack
 
-- Node.js 20+ / TypeScript
-- Telegram Bot API (node-telegram-bot-api)
+- Node.js 22
+- TypeScript (strict)
+- Telegram Bot API via `node-telegram-bot-api`
 - PostgreSQL 16
-- Docker & Docker Compose
-- Axios, Cheerio, node-cron
+- Axios / Cheerio
+- Docker Compose
+- GitHub Actions CI
 
-## Быстрый старт
+## Quick start with Docker
 
-### Требования
+### 1. Configure environment
 
-- Docker и Docker Compose
-- Telegram Bot Token (получить у [@BotFather](https://t.me/BotFather))
-
-### Установка
-
-1. Клонируйте репозиторий:
-```bash
-git clone https://github.com/wellbot/wellbot.git
-cd wellbot
-```
-
-2. Создайте `.env` файл:
 ```bash
 cp .env.example .env
 ```
 
-3. Отредактируйте `.env` и добавьте ваш токен:
+Set at minimum:
+
 ```env
 TELEGRAM_BOT_TOKEN=your_bot_token_here
-DB_PASSWORD=your_secure_password
+DATABASE_URL=postgresql://bot_user:your_password@localhost:5432/wellbot
+HUNT_WEBAPP_URL=https://hunt.example.com/
+HUNT_WEB_PORT=8080
+PARSE_INTERVAL_SECONDS=5
+PARSE_CONCURRENCY=20
 ```
 
-4. Запустите бота:
+For the included Compose stack, `DB_PASSWORD` controls the PostgreSQL password and the container builds `DATABASE_URL` automatically.
+
+### 2. Start
+
 ```bash
-docker-compose up -d
+docker compose up -d --build
 ```
 
-> **Важно:** Бот автоматически запускает парсинг сразу после добавления ссылки, и затем проверяет объявления каждые 60 секунд (настраивается через `PARSE_INTERVAL_SECONDS`).
+The bot and the HUNT Mini App are served by the same application container. The built-in web server listens on port `8080`.
 
-Бот автоматически создаст необходимые таблицы в базе данных при первом запуске.
+For production, put an HTTPS reverse proxy (for example, Caddy or Nginx) in front of port `8080` and set `HUNT_WEBAPP_URL` to the public HTTPS URL.
 
-### Локальная разработка
+### 3. Logs / status
 
-1. Установите зависимости:
 ```bash
-npm install
+docker compose ps
+docker compose logs -f bot
 ```
 
-2. Создайте `.env` файл с настройками
+Look for:
 
-3. Запустите PostgreSQL (или используйте docker-compose только для БД):
-```bash
-docker-compose up -d postgres
+```text
+HUNT WebApp server started
+Parser scheduler started
+Parsing cycle completed
+NEW AD DETECTED!
 ```
 
-4. Запустите бота в режиме разработки:
-```bash
-npm run dev
-```
+## Telegram setup
 
-## Использование
+1. Create a bot with `@BotFather` and copy its token to `.env`.
+2. Start the bot with `/start`.
+3. Use **➕ Добавить ссылку** or open the HUNT Mini App.
+4. Paste a supported marketplace search URL with the filters you want.
+5. HUNT performs an initial baseline snapshot, then alerts on subsequent new listings.
 
-1. Найдите вашего бота в Telegram и отправьте `/start`
-2. Нажмите "➕ Добавить ссылку"
-3. Отправьте ссылку на страницу с фильтрами (например, `https://kufar.by/l/minsk/...`)
-4. Получайте уведомления о новых объявлениях!
+### HUNT Mini App
 
-### Поддерживаемые форматы ссылок
+Set `HUNT_WEBAPP_URL` to the public HTTPS URL of the web server. The bot exposes an **⚡ Открыть HUNT** button in private chats when this variable is configured.
 
-- **Kufar**: `https://kufar.by/l/*`
-- **Onliner**: `https://baraholka.onliner.by/*` или `https://ab.onliner.by/*`
-- **Realt**: `https://realt.by/*`
+The Mini App sends the entered search URL back to the bot using Telegram Web App data; the same server-side URL validation and persistence path is then used as for normal Telegram input.
 
-## Архитектура
+## Monitoring configuration
 
-```
+| Variable | Default | Meaning |
+|---|---:|---|
+| `PARSE_INTERVAL_SECONDS` | `5` | Polling interval; values below 1 second are clamped to 1 second |
+| `PARSE_CONCURRENCY` | `20` | Maximum search URLs parsed in parallel, clamped to 1–50 |
+| `HUNT_WEB_PORT` | disabled | Built-in Mini App server port |
+| `HUNT_WEBAPP_URL` | empty | Public HTTPS Mini App URL |
+
+## Supported search links
+
+The server validates supported search pages before creating a monitor. For Kufar, use a search/category URL (`kufar.by/l/*`) rather than a direct listing URL. URL query parameters and filters are preserved for the parser.
+
+## Architecture
+
+```text
 src/
-├── bot/              # Telegram bot handlers
-├── database/         # Database service and schema
-├── parsers/          # Platform parsers (Kufar, Onliner, Realt)
-├── scheduler/        # Cron scheduler for parsing
-├── types/            # TypeScript types
-├── utils/            # Utilities (logger, validator, rate limiter)
-└── index.ts          # Entry point
+├── bot/              # Telegram handlers + Mini App bridge
+├── database/         # PostgreSQL service and schema
+├── parsers/          # Kufar / Onliner / Av.by parsers
+├── scheduler/        # concurrent polling, dedup, notifications
+├── services/         # Telegram sender, WebApp server, presentation
+├── types/            # shared domain types
+└── index.ts          # application entry point
+
+web/
+├── index.html        # HUNT Mini App UI
+├── styles.css
+└── app.js            # URL monitor form + Telegram WebApp bridge
 ```
 
-## Мониторинг
+## Reliability model
 
-Просмотр логов:
+- A running parse cycle cannot overlap another cycle.
+- A trigger arriving during a cycle is queued and executed immediately after the current cycle.
+- First successful parse of a new monitor creates a baseline without notifications.
+- New listings are deduplicated before Telegram delivery.
+- Telegram sender enforces per-chat/global pacing and retries rate-limit responses.
+- Repeated parser failures increment an error counter; persistently failing links can be disabled.
+
+## Development
+
 ```bash
-docker-compose logs -f bot
+npm ci
+npm run build
+npm test -- --runInBand
 ```
 
-Проверка статуса:
-```bash
-docker-compose ps
-```
+CI runs the same build and test commands on Node 22.
 
-## Остановка
+## Repository
 
-```bash
-docker-compose down
-```
+- GitHub: `https://github.com/longzdez-debug/WellBot`
+- Active development branch: `feature/hunt-ui`
+- Pull request: `https://github.com/longzdez-debug/WellBot/pull/1`
 
-Для удаления данных:
-```bash
-docker-compose down -v
-```
-
-## Документация
-
-- [Requirements](.kiro/specs/wellbot/requirements.md) - Требования к проекту
-- [Design](.kiro/specs/wellbot/design.md) - Архитектура и дизайн
-- [Tasks](.kiro/specs/wellbot/tasks.md) - План реализации
-
-## Troubleshooting
-
-### Бот не отвечает
-- Проверьте правильность `TELEGRAM_BOT_TOKEN` в `.env`
-- Убедитесь, что контейнер запущен: `docker-compose ps`
-- Проверьте логи: `docker-compose logs bot`
-
-### Не приходят уведомления
-- Проверьте, что ссылка активна (команда "Мои ссылки")
-- Убедитесь, что парсер работает: `docker-compose logs bot | grep "Parsing"`
-- Проверьте, что на странице есть новые объявления
-
-### Ошибки подключения к БД
-- Убедитесь, что PostgreSQL запущен: `docker-compose ps postgres`
-- Проверьте `DATABASE_URL` в `.env`
-
-## Лицензия
+## License
 
 MIT

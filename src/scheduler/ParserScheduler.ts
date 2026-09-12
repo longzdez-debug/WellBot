@@ -3,270 +3,178 @@ import { ParserFactory } from '../parsers/ParserFactory';
 import { BotHandler } from '../bot/BotHandler';
 import { logger } from '../utils/logger';
 
+interface ParseLink { id: number; user_id: number; url: string; platform: string; last_parsed_at?: Date | null; error_count?: number; }
+interface ParseResult { newAds: any[]; priceDrops: any[]; }
+
 export class ParserScheduler {
   private db: DatabaseService;
   private bot: BotHandler;
   private intervalId: NodeJS.Timeout | null = null;
   private intervalMs: number;
+  private concurrency: number;
+  private isRunning = false;
+  private pendingTrigger = false;
 
   constructor(db: DatabaseService, bot: BotHandler) {
     this.db = db;
     this.bot = bot;
-    
-    const intervalSeconds = parseInt(process.env.PARSE_INTERVAL_SECONDS || '30', 10);
-    this.intervalMs = intervalSeconds * 1000;
-    
-    logger.info('Parser scheduler configured', { 
-      intervalSeconds, 
-      intervalMinutes: (intervalSeconds / 60).toFixed(1) 
-    });
+    const intervalSeconds = parseInt(process.env.PARSE_INTERVAL_SECONDS || '5', 10);
+    const configuredConcurrency = parseInt(process.env.PARSE_CONCURRENCY || '20', 10);
+    this.intervalMs = Math.max(1000, Number.isFinite(intervalSeconds) ? intervalSeconds * 1000 : 5000);
+    this.concurrency = Math.max(1, Math.min(50, Number.isFinite(configuredConcurrency) ? configuredConcurrency : 20));
+    logger.info('Parser scheduler configured', { intervalSeconds: this.intervalMs / 1000, concurrency: this.concurrency, overlapProtection: true });
   }
 
   start(): void {
-    // Запускаем сразу при старте
-    this.runParsing();
-    
-    // Затем запускаем по интервалу — без блокировки, каждый цикл работает независимо
+    if (this.intervalId) return;
+    void this.runParsing();
     this.intervalId = setInterval(() => {
-      this.runParsing();
+      if (!this.isRunning) void this.runParsing();
+      else logger.debug('Skipping scheduler tick because previous cycle is still running');
     }, this.intervalMs);
-
-    logger.info('Parser scheduler started', { 
-      intervalMs: this.intervalMs,
-      intervalMinutes: (this.intervalMs / 60000).toFixed(1)
-    });
+    logger.info('Parser scheduler started', { intervalMs: this.intervalMs });
   }
 
   async runParsing(): Promise<void> {
+    if (this.isRunning) { this.pendingTrigger = true; return; }
+    this.isRunning = true;
+    this.pendingTrigger = false;
     const startTime = Date.now();
-
     try {
-      const links = await this.db.getActiveLinks();
-      logger.info('🔄 Parsing cycle started', { linksCount: links.length, intervalMs: this.intervalMs });
-
-      const processedPairs = new Set<string>();
+      const links = await this.db.getActiveLinks() as ParseLink[];
+      const seen = new Set<string>();
       const uniqueLinks = links.filter(link => {
         const key = `${link.user_id}|${link.url}`;
-        if (processedPairs.has(key)) {
-          logger.warn('Skipping duplicate link in this cycle (same user + same URL)', {
-            linkId: link.id,
-            userId: link.user_id,
-            url: link.url,
-          });
-          return false;
-        }
-        processedPairs.add(key);
+        if (seen.has(key)) return false;
+        seen.add(key);
         return true;
       });
+      logger.info('🔄 Parsing cycle started', { linksCount: uniqueLinks.length, concurrency: this.concurrency });
 
-      // Собираем ВСЕ новые объявления по всем ссылкам
+      const results = await this.mapWithConcurrency(uniqueLinks, this.concurrency, link => this.parseLink(link));
       const allNewAds: Array<{ ad: any; telegramId: number }> = [];
       const allPriceDrops: Array<{ drop: any; telegramId: number; userId: number }> = [];
-      const batchSize = 10;
-      let totalNewAds = 0;
 
-      for (let i = 0; i < uniqueLinks.length; i += batchSize) {
-        const batch = uniqueLinks.slice(i, i + batchSize);
-        const results = await Promise.allSettled(batch.map(link => this.parseLink(link)));
-        
-        for (let j = 0; j < results.length; j++) {
-          const result = results[j];
-          const link = batch[j];
-          if (result.status === 'fulfilled' && result.value) {
-            const { newAds, priceDrops } = result.value;
-            totalNewAds += newAds.length;
-            
-            const user = await this.db.getUserById(link.user_id);
-            if (user) {
-              for (const ad of newAds) {
-                allNewAds.push({ ad, telegramId: user.telegram_id });
-              }
-              for (const drop of priceDrops) {
-                allPriceDrops.push({ drop, telegramId: user.telegram_id, userId: user.id });
-              }
-            }
-          } else {
-            logger.error('Batch parseLink error', { 
-              linkId: link.id, 
-              error: (result as PromiseRejectedResult).reason?.message 
-            });
-          }
-        }
-        
-        if (i + batchSize < uniqueLinks.length) {
-          await this.sleep(100);
-        }
+      const users = new Map<number, { telegram_id: number; id: number }>();
+      for (const link of uniqueLinks) {
+        if (users.has(link.user_id)) continue;
+        const user = await this.db.getUserById(link.user_id);
+        if (user) users.set(link.user_id, user);
       }
 
-      // Дедупликация на уровне пользователя: telegramId + external_id
-      const notifiedDmByUser = new Set<string>();
-      const notifiedChannelByUser = new Set<string>();
-
-      // Отправляем новые объявления (без дублей)
-      for (const { ad, telegramId } of allNewAds) {
-        const dmKey = `${telegramId}|${ad.external_id}`;
-        if (notifiedDmByUser.has(dmKey)) {
-          logger.info('Skipping duplicate ad (already sent this cycle)', { telegramId, adId: ad.external_id });
-          continue;
-        }
-        notifiedDmByUser.add(dmKey);
-        
-        logger.info('Sending notification for ad', { 
-          adId: ad.id, 
-          telegramId,
-          imageUrl: ad.image_url || 'NO IMAGE'
-        });
-        await this.bot.sendNotification(telegramId, ad);
-        await this.sleep(100);
+      for (let i = 0; i < uniqueLinks.length; i++) {
+        const result = results[i];
+        if (!result) continue;
+        const user = users.get(uniqueLinks[i].user_id);
+        if (!user) continue;
+        for (const ad of result.newAds) allNewAds.push({ ad, telegramId: user.telegram_id });
+        for (const drop of result.priceDrops) allPriceDrops.push({ drop, telegramId: user.telegram_id, userId: user.id });
       }
 
-      // Отправляем уведомления о снижении цены (без дублей)
-      for (const { drop, telegramId, userId } of allPriceDrops) {
-        const dmKey = `${telegramId}|${drop.externalId}`;
-        if (!notifiedDmByUser.has(dmKey)) {
-          notifiedDmByUser.add(dmKey);
-          logger.info('Sending price drop notification', { telegramId });
-          await this.bot.sendPriceDropNotification(telegramId, drop);
-        }
-        
-        const channelSub = await this.db.getActiveChannelSubscription(userId);
-        if (channelSub) {
-          const chKey = `${channelSub.channel_id}|${drop.externalId}`;
-          if (!notifiedChannelByUser.has(chKey)) {
-            notifiedChannelByUser.add(chKey);
-            try {
-              await this.bot.sendPriceDropNotification(channelSub.channel_id, drop);
-              logger.info('Sent price drop to channel', { channelId: channelSub.channel_id });
-            } catch (error: any) {
-              logger.error('Failed to send price drop to channel', { 
-                adId: drop.adId, 
-                channelId: channelSub.channel_id,
-                error: error.message
-              });
-            }
-          }
-        }
-        await this.sleep(100);
-      }
-
+      await this.notifyNewAds(allNewAds);
+      await this.notifyPriceDrops(allPriceDrops);
       const duration = Date.now() - startTime;
-      logger.info('Parsing cycle completed', { 
-        duration: `${duration}ms`, 
-        linksCount: uniqueLinks.length,
-        totalNewAds,
-        uniqueAdsSent: notifiedDmByUser.size,
-        newAdsDetected: totalNewAds,
-        cycleTime: `${(duration/1000).toFixed(1)}s`
-      });
+      logger.info('Parsing cycle completed', { duration: `${duration}ms`, linksCount: uniqueLinks.length, totalNewAds: allNewAds.length });
     } catch (error: any) {
-      logger.error('Parsing cycle failed', { error: error.message });
+      logger.error('Parsing cycle failed', { error: error.message, stack: error.stack });
+    } finally {
+      this.isRunning = false;
+      if (this.pendingTrigger) { this.pendingTrigger = false; setImmediate(() => void this.runParsing()); }
     }
   }
 
-  private async parseLink(link: any): Promise<{ newAds: any[]; priceDrops: any[] } | null> {
+  private async mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let nextIndex = 0;
+    const runWorker = async (): Promise<void> => {
+      while (true) {
+        const index = nextIndex++;
+        if (index >= items.length) return;
+        try { results[index] = await worker(items[index]); }
+        catch (error: any) { logger.error('Scheduler worker failed', { index, error: error?.message }); }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => runWorker()));
+    return results;
+  }
+
+  private async notifyNewAds(items: Array<{ ad: any; telegramId: number }>): Promise<void> {
+    const groups = new Map<number, any[]>();
+    const sent = new Set<string>();
+    for (const { ad, telegramId } of items) {
+      const key = `${telegramId}|${ad.external_id}`;
+      if (sent.has(key)) continue;
+      sent.add(key);
+      groups.set(telegramId, [...(groups.get(telegramId) ?? []), ad]);
+    }
+    await Promise.all(Array.from(groups.entries()).map(async ([telegramId, ads]) => {
+      for (const ad of ads) {
+        try { await this.bot.sendNotification(telegramId, ad); }
+        catch (error: any) { logger.error('Failed to send new-ad notification', { telegramId, externalId: ad?.external_id, error: error.message }); }
+      }
+    }));
+  }
+
+  private async notifyPriceDrops(items: Array<{ drop: any; telegramId: number; userId: number }>): Promise<void> {
+    const groups = new Map<number, Array<{ drop: any; userId: number }>>();
+    const dmSent = new Set<string>();
+    const channelSent = new Set<string>();
+    for (const item of items) {
+      const key = `${item.telegramId}|${item.drop.externalId}`;
+      if (dmSent.has(key)) continue;
+      dmSent.add(key);
+      groups.set(item.telegramId, [...(groups.get(item.telegramId) ?? []), { drop: item.drop, userId: item.userId }]);
+    }
+    await Promise.all(Array.from(groups.entries()).map(async ([telegramId, drops]) => {
+      for (const { drop, userId } of drops) {
+        try { await this.bot.sendPriceDropNotification(telegramId, drop); }
+        catch (error: any) { logger.error('Failed to send price-drop notification', { telegramId, externalId: drop.externalId, error: error.message }); }
+        const channelSub = await this.db.getActiveChannelSubscription(userId);
+        if (channelSub) {
+          const key = `${channelSub.channel_id}|${drop.externalId}`;
+          if (!channelSent.has(key)) {
+            channelSent.add(key);
+            try { await this.bot.sendPriceDropNotification(channelSub.channel_id, drop); }
+            catch (error: any) { logger.error('Failed to send price drop to channel', { channelId: channelSub.channel_id, externalId: drop.externalId, error: error.message }); }
+          }
+        }
+      }
+    }));
+  }
+
+  private async parseLink(link: ParseLink): Promise<ParseResult> {
     const newAds: any[] = [];
     const priceDrops: any[] = [];
-    
     try {
-      const parser = ParserFactory.getParser(link.platform);
-      if (!parser) {
-        logger.error('No parser found for platform', { platform: link.platform, linkId: link.id });
-        return { newAds, priceDrops };
-      }
-
+      const parser = ParserFactory.getParser(link.platform as any);
+      if (!parser) return { newAds, priceDrops };
       const parsePromise = parser.parseUrl(link.url);
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Parse timeout after 5 minutes')), 300000);
-      });
+      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Parse timeout after 15 seconds')), 15000));
       let ads: any[];
-      try {
-        ads = await Promise.race([parsePromise, timeoutPromise]);
-      } catch {
-        return { newAds, priceDrops };
-      }
-      
-      if (!Array.isArray(ads)) {
-        logger.error('Parser returned non-array', { linkId: link.id, platform: link.platform, result: ads });
-        return { newAds, priceDrops };
-      }
-      
+      try { ads = await Promise.race([parsePromise, timeoutPromise]); }
+      catch (error: any) { logger.warn('Parser request timed out or failed', { linkId: link.id, error: error.message }); await this.db.incrementErrorCount(link.id); return { newAds, priceDrops }; }
+      if (!Array.isArray(ads)) { await this.db.incrementErrorCount(link.id); return { newAds, priceDrops }; }
+
+      const isBaseline = !link.last_parsed_at;
       await this.db.updateLastParsed(link.id);
-
-      if (link.error_count > 0) {
-        await this.db.resetErrorCount(link.id);
-      }
-
-      const skippedCount = { alreadyExists: 0, filtered: 0 };
-      const processedExternalIds = new Set<string>();
-
-      logger.info('Starting to process ads', { 
-        linkId: link.id, 
-        totalAdsInResult: ads.length,
-        externalIds: ads.map(a => `${a.external_id}: ${a.title}`)
-      });
-
-      for (let i = 0; i < ads.length; i++) {
-        const adData = ads[i];
-        
-        if (processedExternalIds.has(adData.external_id)) {
-          skippedCount.filtered++;
-          continue;
-        }
-        processedExternalIds.add(adData.external_id);
-        
+      if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
+      const processed = new Set<string>();
+      for (const adData of ads) {
+        if (!adData?.external_id || processed.has(adData.external_id)) continue;
+        processed.add(adData.external_id);
+        if (isBaseline) { await this.db.createAd(link.id, adData); continue; }
         const isNew = await this.db.isNewAdForUser(link.user_id, adData.external_id);
-        if (!isNew) {
-          skippedCount.alreadyExists++;
-          logger.info('Skipping existing ad (user-level dedup)', { 
-            linkId: link.id, 
-            external_id: adData.external_id,
-            title: adData.title,
-            location: adData.location || adData.address || 'unknown'
-          });
-          await this.checkPriceDrop(link.id, adData.external_id, adData.price, priceDrops);
-          continue;
-        }
-        
+        if (!isNew) { await this.checkPriceDrop(link.id, adData.external_id, adData.price, priceDrops); continue; }
         const ad = await this.db.createAd(link.id, adData);
-        if (ad) {
-          newAds.push(ad);
-          logger.info('📢 NEW AD DETECTED!', { 
-            linkId: link.id, 
-            external_id: adData.external_id, 
-            title: adData.title,
-            price: adData.price,
-            location: adData.location || adData.address || 'unknown',
-            ad_url: adData.ad_url,
-            timestamp: new Date().toISOString()
-          });
-        } else {
-          logger.error('Failed to save ad (returned null)', { 
-            linkId: link.id, 
-            external_id: adData.external_id, 
-            title: adData.title
-          });
-        }
+        if (ad) { newAds.push(ad); logger.info('📢 NEW AD DETECTED!', { linkId: link.id, external_id: adData.external_id, title: adData.title, price: adData.price, timestamp: new Date().toISOString() }); }
       }
-
-      logger.info('Processed ads for link', { 
-        linkId: link.id, 
-        totalAds: ads.length, 
-        newAds: newAds.length,
-        skipped: skippedCount
-      });
-
+      if (isBaseline) logger.info('Baseline snapshot stored; no notifications sent', { linkId: link.id, adsCount: processed.size });
       return { newAds, priceDrops };
     } catch (error: any) {
       logger.error('Failed to parse link', { linkId: link.id, url: link.url, error: error.message });
-      
       await this.db.incrementErrorCount(link.id);
       const currentLink = await this.db.getLink(link.id);
-      
-      if (currentLink && currentLink.error_count >= 5) {
-        await this.db.markLinkInactive(link.id);
-        logger.warn('Link marked as inactive due to errors', { linkId: link.id, errorCount: currentLink.error_count });
-      }
-      
+      if (currentLink && currentLink.error_count >= 5) { await this.db.markLinkInactive(link.id); logger.warn('Link marked inactive', { linkId: link.id, errorCount: currentLink.error_count }); }
       return { newAds, priceDrops };
     }
   }
@@ -275,77 +183,18 @@ export class ParserScheduler {
     try {
       const lastPrice = await this.db.getLastPriceForAd(linkId, externalId);
       if (!lastPrice) return;
-      
       const oldPriceNum = this.db.parsePriceToNumber(lastPrice.price);
       const newPriceNum = this.db.parsePriceToNumber(newPrice);
-      
       if (oldPriceNum === null || newPriceNum === null) return;
-
-      // Цена упала
       if (newPriceNum < oldPriceNum) {
         const changePercent = ((oldPriceNum - newPriceNum) / oldPriceNum * 100).toFixed(1);
-        
-        // Атомарно фиксируем снижение. Уникальный индекс (ad_id, old_price, new_price)
-        // не даёт создать дубликат, даже если две ссылки обрабатываются параллельно.
-        // Запись уже была — значит такое снижение уже уведомили, пропускаем.
         const recorded = await this.db.createPriceDropRecord(lastPrice.adId, externalId, lastPrice.price, newPrice, parseFloat(changePercent));
-        if (!recorded) {
-          logger.info('Price drop already notified, skipping', { 
-            linkId, 
-            externalId, 
-            oldPrice: lastPrice.price, 
-            newPrice 
-          });
-        } else {
-          priceDrops.push({
-            adId: lastPrice.adId,
-            oldPrice: lastPrice.price,
-            newPrice: newPrice,
-            changePercent: changePercent,
-            externalId: externalId,
-            linkId: linkId
-          });
-          
-          logger.info('Price drop detected', { 
-            linkId, 
-            externalId, 
-            oldPrice: lastPrice.price, 
-            newPrice, 
-            changePercent 
-          });
-        }
+        if (recorded) priceDrops.push({ adId: lastPrice.adId, oldPrice: lastPrice.price, newPrice, changePercent, externalId, linkId });
       }
-      
-      // Синхронизируем сохранённую цену с актуальной.
-      // Без этого одно и то же снижение будет детектиться на каждом цикле парсинга.
-      if (oldPriceNum !== newPriceNum) {
-        await this.db.updateAdPrice(lastPrice.adId, newPrice);
-      }
-    } catch (error: any) {
-      logger.error('Failed to check price drop', { 
-        linkId, 
-        externalId, 
-        error: error.message 
-      });
-    }
+      if (oldPriceNum !== newPriceNum) await this.db.updateAdPrice(lastPrice.adId, newPrice);
+    } catch (error: any) { logger.error('Failed to check price drop', { linkId, externalId, error: error.message }); }
   }
 
-  private async sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-    }
-    logger.info('Parser scheduler stopped');
-  }
-
-  /** Запуск парсинга вручную (например, после добавления новой ссылки) */
-  triggerParse(): void {
-    // Запускаем сразу, не дожидаясь следующего цикла
-    this.runParsing().catch(err => {
-      logger.error('Triggered parse failed', { error: err.message });
-    });
-  }
+  stop(): void { if (this.intervalId) { clearInterval(this.intervalId); this.intervalId = null; } this.pendingTrigger = false; logger.info('Parser scheduler stopped'); }
+  triggerParse(): void { if (this.isRunning) { this.pendingTrigger = true; return; } void this.runParsing(); }
 }
