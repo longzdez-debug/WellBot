@@ -21,6 +21,13 @@ CREATE TABLE IF NOT EXISTS links (
 
 CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id);
 CREATE INDEX IF NOT EXISTS idx_links_active ON links(is_active) WHERE is_active = true;
+
+-- Remove duplicate legacy rows before enforcing user+URL uniqueness.
+DELETE FROM links a
+USING links b
+WHERE a.id > b.id
+  AND a.user_id = b.user_id
+  AND a.url = b.url;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_links_user_url_unique ON links(user_id, url);
 
 -- Ads table
@@ -70,7 +77,6 @@ CREATE TABLE IF NOT EXISTS price_history (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Migrate rows created before user-scoped price-drop dedup existed.
 ALTER TABLE price_history ADD COLUMN IF NOT EXISTS external_id VARCHAR(255);
 ALTER TABLE price_history ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
 UPDATE price_history ph
@@ -84,12 +90,8 @@ WHERE ph.ad_id = a.id
 CREATE INDEX IF NOT EXISTS idx_price_history_ad_id ON price_history(ad_id);
 CREATE INDEX IF NOT EXISTS idx_price_history_user_id ON price_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_price_history_notified ON price_history(notified_at) WHERE notified_at IS NULL;
-
--- Remove legacy global dedup. A price drop must be deduplicated per user,
--- otherwise one reseller can suppress the same notification for another reseller.
 DROP INDEX IF EXISTS idx_price_history_unique_drop_external;
 
--- Clean duplicates before creating the user-scoped unique index.
 DELETE FROM price_history a
 USING price_history b
 WHERE a.id > b.id
@@ -103,8 +105,6 @@ WHERE a.id > b.id
 CREATE UNIQUE INDEX IF NOT EXISTS idx_price_history_unique_user_drop
   ON price_history(user_id, external_id, old_price, new_price)
   WHERE user_id IS NOT NULL AND external_id IS NOT NULL;
-
--- Preserve per-ad idempotency for legacy rows and concurrent writes.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_price_history_unique_ad_drop
   ON price_history(ad_id, old_price, new_price)
   WHERE ad_id IS NOT NULL;
