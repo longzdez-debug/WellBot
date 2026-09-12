@@ -191,12 +191,12 @@ export class ParserScheduler {
       }
 
       const baseline = !link.last_parsed_at;
-      await this.db.updateLastParsed(link.id);
-      if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
       const externalIds = [...new Set(ads.filter(ad => ad?.external_id).map(ad => String(ad.external_id)))];
 
       if (baseline) {
         const created = await this.db.bulkCreateAds(link.id, ads);
+        await this.db.updateLastParsed(link.id);
+        if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
         logger.info('Baseline snapshot stored; no notifications sent', { linkId: link.id, adsFound: externalIds.length, adsInserted: created });
         return { newAds, priceDrops };
       }
@@ -223,12 +223,19 @@ export class ParserScheduler {
           logger.info('📢 NEW AD DETECTED!', { linkId: link.id, external_id: id, title: adData.title, price: adData.price, timestamp: new Date().toISOString() });
         }
       }
+      await this.db.updateLastParsed(link.id);
+      if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
       return { newAds, priceDrops };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       const stack = error instanceof Error ? error.stack : undefined;
       logger.error('Failed to parse link', { linkId: link.id, url: link.url, error: message, stack });
-      await this.recordLinkFailure(link, message);
+      try {
+        await this.recordLinkFailure(link, message);
+      } catch (failureError: unknown) {
+        const failureMessage = failureError instanceof Error ? failureError.message : String(failureError);
+        logger.error('Failed to record link parse failure', { linkId: link.id, error: failureMessage });
+      }
       return { newAds, priceDrops };
     }
   }
