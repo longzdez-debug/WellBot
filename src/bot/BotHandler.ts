@@ -45,15 +45,22 @@ export class BotHandler {
   }
 
   private getMainKeyboard() {
-    return {
-      keyboard: [
-        [{ text: '➕ Добавить ссылку' }],
-        [{ text: '📋 Мои ссылки' }, { text: '🗑 Удалить все ссылки' }],
-        [{ text: '📊 Статистика' }, { text: '🗑 Очистить объявления' }],
-        [{ text: '📺 Привязать канал' }, { text: '📺 Статус канала' }],
-        [{ text: '📺 Отключить канал' }],
-      ], resize_keyboard: true, persistent: true,
-    };
+    const webAppUrl = process.env.HUNT_WEBAPP_URL?.trim();
+    const keyboard: TelegramBot.KeyboardButton[][] = [];
+
+    if (webAppUrl) {
+      keyboard.push([{ text: '⚡ HUNT', web_app: { url: webAppUrl } }]);
+    }
+
+    keyboard.push(
+      [{ text: '➕ Добавить ссылку' }],
+      [{ text: '📋 Мои ссылки' }, { text: '🗑 Удалить все ссылки' }],
+      [{ text: '📊 Статистика' }, { text: '🗑 Очистить объявления' }],
+      [{ text: '📺 Привязать канал' }, { text: '📺 Статус канала' }],
+      [{ text: '📺 Отключить канал' }],
+    );
+
+    return { keyboard, resize_keyboard: true, persistent: true };
   }
 
   private setupHandlers(): void {
