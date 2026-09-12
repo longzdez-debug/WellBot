@@ -9,6 +9,7 @@ export class TelegramSender {
   private readonly MIN_CHAT_INTERVAL_MS = 1050;
   private readonly GLOBAL_MIN_INTERVAL_MS = 35;
   private lastGlobalSendTime = 0;
+  private rateLimitQueue: Promise<void> = Promise.resolve();
   private readonly MAX_MEDIA_PER_GROUP = 10;
   private readonly MAX_CAPTION_LENGTH = 1024;
   private readonly MAX_RETRIES = 3;
@@ -18,19 +19,31 @@ export class TelegramSender {
   }
 
   private async waitForRateLimit(chatId: number): Promise<void> {
-    const now = Date.now();
-    const retryUntil = this.retryAfterByChat.get(chatId) ?? 0;
-    const chatUntil = (this.lastSendByChat.get(chatId) ?? 0) + this.MIN_CHAT_INTERVAL_MS;
-    const globalUntil = this.lastGlobalSendTime + this.GLOBAL_MIN_INTERVAL_MS;
-    const waitUntil = Math.max(now, retryUntil, chatUntil, globalUntil);
+    // Serialize only the short rate-limit reservation section. This prevents
+    // concurrent sends for different chats from racing on the global timestamp
+    // without serializing the actual Telegram network requests.
+    let release!: () => void;
+    const previous = this.rateLimitQueue;
+    this.rateLimitQueue = new Promise<void>(resolve => { release = resolve; });
+    await previous;
 
-    if (waitUntil > now) {
-      await new Promise(resolve => setTimeout(resolve, waitUntil - now));
+    try {
+      const now = Date.now();
+      const retryUntil = this.retryAfterByChat.get(chatId) ?? 0;
+      const chatUntil = (this.lastSendByChat.get(chatId) ?? 0) + this.MIN_CHAT_INTERVAL_MS;
+      const globalUntil = this.lastGlobalSendTime + this.GLOBAL_MIN_INTERVAL_MS;
+      const waitUntil = Math.max(now, retryUntil, chatUntil, globalUntil);
+
+      if (waitUntil > now) {
+        await new Promise(resolve => setTimeout(resolve, waitUntil - now));
+      }
+
+      const sentAt = Date.now();
+      this.lastSendByChat.set(chatId, sentAt);
+      this.lastGlobalSendTime = sentAt;
+    } finally {
+      release();
     }
-
-    const sentAt = Date.now();
-    this.lastSendByChat.set(chatId, sentAt);
-    this.lastGlobalSendTime = sentAt;
   }
 
   private truncateCaption(text: string): string {
@@ -66,7 +79,6 @@ export class TelegramSender {
       } catch (error: any) {
         const statusCode = this.getStatusCode(error);
         if (statusCode === 400) {
-          // Some image URLs can expire or be rejected by Telegram. Keep the alert alive with a text fallback.
           logger.warn('Media group rejected, falling back to text notification', {
             chatId,
             error: error?.response?.body?.description || error.message,
