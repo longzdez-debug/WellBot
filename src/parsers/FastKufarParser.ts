@@ -3,18 +3,25 @@ import { Ad } from '../types';
 import { logger } from '../utils/logger';
 
 const CATEGORY_MAP: Record<string, string> = {
-  avtomobili: '2010', mototsikly: '2020', 'shiny-i-diski': '2100',
+  avtomobili: '2010', mototsikly: '2020', 'avtobusy-i-mikroavtobusy': '2030', 'shiny-i-diski': '2100',
   'telefony-i-planshety': '17010', 'mobilnye-telefony': '17010', telefony: '17010',
-  noutbuki: '19020', kompyutery: '19010', televizory: '12030',
-  'kvartiru': '1010', komnatu: '1030', dom: '1020', dachu: '1020',
-  uchastok: '1050', kommercheskaya: '1060', garazh: '1040', mebel: '15040',
-  velosipedy: '8030',
+  noutbuki: '19020', kompyutery: '19010', televizory: '12030', 'igrovye-pristavki-i-igry': '12040',
+  'stiralnye-mashiny': '14050', kvartiru: '1010', komnatu: '1030', dom: '1020', dachu: '1020',
+  uchastok: '1050', kommercheskaya: '1060', garazh: '1040', mebel: '15040', velosipedy: '8030',
+};
+
+const BRAND_SLUG_TO_API: Record<string, string> = {
+  apple: 'Apple', samsung: 'Samsung', xiaomi: 'Xiaomi', huawei: 'Huawei', honor: 'Honor', nokia: 'Nokia',
+  realme: 'Realme', oppo: 'OPPO', vivo: 'Vivo', oneplus: 'OnePlus', google: 'Google', tecno: 'Tecno', infinix: 'Infinix',
 };
 
 const REGION_MAP: Record<string, string> = {
   minsk: '7', brest: '1', vitebsk: '6', gomel: '2', grodno: '3', mogilev: '4',
   'minskaya-oblast': '5', 'brestskaya-oblast': '1', 'vitebskaya-oblast': '6',
   'gomelskaya-oblast': '2', 'grodnenskaya-oblast': '3', 'mogilevskaya-oblast': '4',
+  baranovichi: '1', pinsk: '1', kobrin: '1', bereza: '1', orsha: '6', polotsk: '6', novopolotsk: '6',
+  zhlobin: '2', mozyr: '2', rechitsa: '2', svetlogorsk: '2', lida: '3', volkovysk: '3', slonim: '3',
+  borisov: '5', soligorsk: '5', molodechno: '5', zhodino: '5', slutsk: '5', bobruisk: '4',
 };
 
 export class FastKufarParser extends BaseParser {
@@ -29,8 +36,26 @@ export class FastKufarParser extends BaseParser {
       if (CATEGORY_MAP[part]) { params.cat = CATEGORY_MAP[part]; break; }
     }
 
+    for (const part of parts) {
+      const brand = part.match(/^mt~(.+)$/)?.[1];
+      if (brand && BRAND_SLUG_TO_API[brand]) {
+        params.subcat = BRAND_SLUG_TO_API[brand];
+        break;
+      }
+    }
+
     const gtsy = parsed.searchParams.get('gtsy');
-    if (gtsy) params.gtsy = gtsy;
+    if (gtsy) {
+      params.gtsy = gtsy;
+      if (gtsy.includes('province-minsk_gorod')) params.rgn = '7';
+      else if (gtsy.includes('province-minskaja_oblast')) params.rgn = '5';
+      else if (gtsy.includes('province-brestskaja_oblast')) params.rgn = '1';
+      else if (gtsy.includes('province-vitebskaja_oblast')) params.rgn = '6';
+      else if (gtsy.includes('province-gomelskaja_oblast')) params.rgn = '2';
+      else if (gtsy.includes('province-grodnenskaja_oblast')) params.rgn = '3';
+      else if (gtsy.includes('province-mogilevskaja_oblast')) params.rgn = '4';
+    }
+
     const query = parsed.searchParams.get('query');
     if (query) params.query = query;
     for (const key of ['prc', 'rms']) {
@@ -38,10 +63,13 @@ export class FastKufarParser extends BaseParser {
       if (value) params[key] = value;
     }
 
-    for (const part of parts) {
-      const region = part.match(/^r~(.+)$/)?.[1] || part;
-      if (REGION_MAP[region]) { params.rgn = REGION_MAP[region]; break; }
+    if (!params.rgn) {
+      for (const part of parts) {
+        const region = part.match(/^r~(.+)$/)?.[1] || part;
+        if (REGION_MAP[region]) { params.rgn = REGION_MAP[region]; break; }
+      }
     }
+
     if (parts.includes('snyat')) params.typ = 'let';
     if (parts.includes('kupit')) params.typ = 'sell';
 
@@ -82,7 +110,7 @@ export class FastKufarParser extends BaseParser {
         } as Ad;
       });
 
-    logger.debug?.('Fast Kufar parse complete', { url, ads: result.length });
+    logger.debug('Fast Kufar parse complete', { url, ads: result.length });
     return result;
   }
 }
