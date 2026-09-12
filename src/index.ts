@@ -1,6 +1,7 @@
 import * as dotenv from 'dotenv';
 import { DatabaseService } from './database/DatabaseService';
 import { BotHandler } from './bot/BotHandler';
+import { WebAppBridge } from './bot/WebAppBridge';
 import { ParserScheduler } from './scheduler/ParserScheduler';
 import { logger } from './utils/logger';
 
@@ -20,27 +21,21 @@ if (!DATABASE_URL) {
 }
 
 async function main() {
-  logger.info('Starting WellBOT...', { version: '2.0.1', priceDropDedup: 'unique(external_id, old_price, new_price)' });
+  logger.info('Starting WellBOT...', { version: '2.0.3', priceDropDedup: 'unique(external_id, old_price, new_price)' });
 
-  // Initialize database
   const db = new DatabaseService(DATABASE_URL!);
   await db.initialize();
   logger.info('Database initialized');
 
-  // Initialize bot
   const bot = new BotHandler(TELEGRAM_BOT_TOKEN!, db);
-  
-  // Initialize scheduler (passes bot for notifications)
-  const scheduler = new ParserScheduler(db, bot);
 
-  // Передаём планировщик боту — нужно для немедленного парсинга
-  // после добавления новой ссылки (triggerParse).
+  const scheduler = new ParserScheduler(db, bot);
   bot.setScheduler(scheduler);
-  
-  // Start scheduler
+
+  WebAppBridge.install(bot);
+
   scheduler.start();
 
-  // Graceful shutdown
   const shutdown = async () => {
     logger.info('Shutting down...');
     scheduler.stop();
