@@ -4,59 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090b" />
-  <title>HUNT — Kufar Monitor</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css" />
+  <meta name="color-scheme" content="dark" />
+  <title>HUNT — Reseller Radar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <div class="app-shell">
-    <header class="topbar">
-      <div class="brand"><span class="brand-mark">⌖</span><div><strong>HUNT</strong><small>Kufar Monitor</small></div></div>
-      <div class="live-pill"><i></i> LIVE</div>
-    </header>
-
+    <header class="topbar"><div class="brand"><span class="brand-mark">⌖</span><div><strong>HUNT</strong><small>RESELLER RADAR</small></div></div><div class="live-pill"><i></i> LIVE</div></header>
     <main>
-      <section class="hero">
-        <div class="eyebrow">MARKET RADAR <span>•</span> 24/7</div>
-        <h1>Лови объявления<br><em>раньше всех.</em></h1>
-        <p>Мониторим твои поиски и отправляем сигнал сразу, когда появляется цель.</p>
-        <button class="primary" data-action="add">+ Добавить мониторинг <span>→</span></button>
-      </section>
-
-      <section class="stats">
-        <article><b>7</b><span>активных<br>мониторов</span></article>
-        <article><b>23</b><span>новых<br>сегодня</span></article>
-        <article><b>−14%</b><span>средняя<br>скидка</span></article>
-      </section>
-
-      <section class="radar-card">
-        <div class="section-head"><div><span class="label">RADAR</span><h2>Охота идёт</h2></div><span class="pulse">● SCANNING</span></div>
-        <div class="radar">
-          <div class="sweep"></div><div class="cross h"></div><div class="cross v"></div>
-          <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="target t1"></div><div class="target t2"></div><div class="target t3"></div><div class="radar-core">⌖</div>
-        </div>
-        <div class="radar-footer"><strong>7</strong> новых объявлений <span>•</span> последние 60 сек.</div>
-      </section>
-
-      <section class="section"><div class="section-head"><div><span class="label">FEED</span><h2>Новые объявления</h2></div><button class="icon-btn">⌘</button></div>
-        <div class="chips"><button class="chip active">Все 7</button><button class="chip">NEW 4</button><button class="chip">TARGET 2</button><button class="chip">WATCH 1</button></div>
-        <div id="feed" class="feed"></div>
-      </section>
-
-      <section class="section"><div class="section-head"><div><span class="label">MONITORS</span><h2>Мои поиски</h2></div><button class="link-btn" data-action="add">+ Добавить</button></div>
-        <div class="monitor"><span class="monitor-icon">🚗</span><div><strong>BMW 3 Series</strong><small>Минск · до 25 000 BYN</small></div><span class="count">24</span><i class="switch on"></i></div>
-        <div class="monitor"><span class="monitor-icon">▣</span><div><strong>iPhone 15 Pro</strong><small>Минск · до 2 500 BYN</small></div><span class="count">8</span><i class="switch on"></i></div>
-        <div class="monitor"><span class="monitor-icon">▱</span><div><strong>MacBook Pro</strong><small>Вся Беларусь · до 5 000 BYN</small></div><span class="count">13</span><i class="switch on"></i></div>
-      </section>
-
-      <section class="hot-card"><div class="hot-head"><span>🔥 TARGET</span><small>15 сек. назад</small></div><img src="https://images.unsplash.com/photo-1555215695-3004980ad54e?auto=format&fit=crop&w=1000&q=80" alt="BMW"/><div class="hot-body"><div><span class="tag">HOT DEAL</span><h2>BMW X5</h2><p>2016 · 210 000 км · Минск</p></div><strong>42 000 <small>BYN</small></strong></div><div class="deal-row"><span>Рынок ≈ 48 500 BYN</span><b>−11%</b><span>Потенциальная выгода <strong>6 500 BYN</strong></span></div><button class="primary">Открыть объявление <span>→</span></button></section>
+      <section class="hero"><div class="eyebrow">MARKET RADAR <span>•</span> 24/7</div><h1>Лови объявления<br><em>раньше всех.</em></h1><p id="hero-copy">Твои поиски под контролем. Новая цель — сразу в Telegram.</p><button class="primary" data-action="add">+ Добавить мониторинг <span>→</span></button></section>
+      <section class="stats"><article><b id="stat-active">—</b><span>активных<br>мониторов</span></article><article><b id="stat-new">—</b><span>новых<br>сегодня</span></article><article><b id="stat-drops">—</b><span>снижений<br>сегодня</span></article></section>
+      <section class="radar-card"><div class="section-head"><div><span class="label">RADAR</span><h2>Охота идёт</h2></div><span class="pulse">● SCANNING</span></div><div class="radar"><div class="sweep"></div><div class="cross h"></div><div class="cross v"></div><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="target t1"></div><div class="target t2"></div><div class="target t3"></div><div class="radar-core">⌖</div></div><div class="radar-footer"><strong id="radar-count">—</strong> объявлений поймано сегодня <span>•</span> мониторинг активен</div></section>
+      <section class="section" id="feed-section"><div class="section-head"><div><span class="label">FEED</span><h2>Новые объявления</h2></div><button class="icon-btn" data-action="refresh" aria-label="Обновить">↻</button></div><div class="chips"><button class="chip active" data-filter="all">Все</button><button class="chip" data-filter="kufar">KUFAR</button><button class="chip" data-filter="onliner">ONLINER</button><button class="chip" data-filter="av">AV.BY</button></div><div id="feed" class="feed"><div class="empty">Загружаю ленту…</div></div></section>
+      <section class="section" id="monitors-section"><div class="section-head"><div><span class="label">MONITORS</span><h2>Мои поиски</h2></div><button class="link-btn" data-action="add">+ Добавить</button></div><div id="monitors"><div class="empty">Загружаю мониторы…</div></div></section>
+      <section class="section" id="drops-section"><div class="section-head"><div><span class="label">PRICE ACTION</span><h2>Снижения цены</h2></div></div><div id="drops"><div class="empty">Пока нет снижений цены.</div></div></section>
     </main>
-
-    <nav class="bottom-nav"><button class="nav-item active"><span>⌂</span>Главная</button><button class="nav-item"><span>⌖</span>Радар</button><button class="nav-item"><span>◌</span>Уведомления<sup>7</sup></button><button class="nav-item"><span>○</span>Профиль</button></nav>
+    <nav class="bottom-nav"><button class="nav-item active" data-scroll="feed-section"><span>⌂</span>Главная</button><button class="nav-item" data-scroll="feed-section"><span>⌖</span>Радар</button><button class="nav-item" data-scroll="drops-section"><span>◌</span>Снижения</button><button class="nav-item" data-scroll="monitors-section"><span>○</span>Поиски</button></nav>
   </div>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="./app.js"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script><script src="./app.js"></script>
 </body>
 </html>
