@@ -74,7 +74,19 @@ export class DatabaseService {
     return r.rows[0] || null;
   }
 
-  async deleteLink(linkId: number): Promise<void> { await this.pool.query('DELETE FROM links WHERE id=$1', [linkId]); }
+  async getLinkForUser(linkId: number, userId: number): Promise<Link | null> {
+    const r = await this.pool.query<Link>('SELECT * FROM links WHERE id=$1 AND user_id=$2', [linkId, userId]);
+    return r.rows[0] || null;
+  }
+
+  async deleteLink(linkId: number, userId?: number): Promise<boolean> {
+    const query = userId == null
+      ? 'DELETE FROM links WHERE id=$1'
+      : 'DELETE FROM links WHERE id=$1 AND user_id=$2';
+    const params = userId == null ? [linkId] : [linkId, userId];
+    const r = await this.pool.query(query, params);
+    return (r.rowCount || 0) > 0;
+  }
 
   async getActiveLinks(): Promise<Link[]> {
     const r = await this.pool.query<Link>('SELECT * FROM links WHERE is_active=true ORDER BY id', []);
@@ -116,24 +128,20 @@ export class DatabaseService {
     const values: unknown[] = [];
     const placeholders = rows.map((ad, i) => {
       const base = i * 11;
-      values.push(
-        linkId, ad.external_id, ad.title, ad.description || null, ad.price || null,
+      values.push(linkId, ad.external_id, ad.title, ad.description || null, ad.price || null,
         ad.image_url || null, ad.ad_url, ad.location || null, ad.address || null,
-        ad.published_at || null, ad.updated_at || null
-      );
+        ad.published_at || null, ad.updated_at || null);
       return `($${base + 1},$${base + 2},$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8},$${base + 9},$${base + 10},$${base + 11})`;
     }).join(',');
 
     const result = await this.pool.query(
       `INSERT INTO ads (link_id,external_id,title,description,price,image_url,ad_url,location,address,published_at,updated_at)
-       VALUES ${placeholders} ON CONFLICT (external_id,link_id) DO NOTHING`,
-      values
-    );
+       VALUES ${placeholders} ON CONFLICT (external_id,link_id) DO NOTHING`, values);
     return result.rowCount || 0;
   }
 
   async getAdByExternalId(externalId: string): Promise<Ad | null> {
-    const r = await this.pool.query<Ad>('SELECT * FROM ads WHERE external_id=$1 LIMIT 1', [externalId]);
+    const r = await this.pool.query<Ad>('SELECT * FROM ads WHERE external_id=$1 ORDER BY id LIMIT 1', [externalId]);
     return r.rows[0] || null;
   }
 
@@ -149,31 +157,34 @@ export class DatabaseService {
     return r.rows.length === 0;
   }
 
+  async getExistingAdExternalIdsForLink(linkId: number, externalIds: string[]): Promise<Set<string>> {
+    if (!externalIds.length) return new Set();
+    const r = await this.pool.query<{ external_id: string }>(
+      'SELECT external_id FROM ads WHERE link_id=$1 AND external_id=ANY($2::text[])', [linkId, externalIds]);
+    return new Set(r.rows.map(x => x.external_id));
+  }
+
   async getExistingAdExternalIdsForUser(userId: number, externalIds: string[]): Promise<Set<string>> {
     if (!externalIds.length) return new Set();
     const r = await this.pool.query<{ external_id: string }>(
       'SELECT DISTINCT a.external_id FROM ads a JOIN links l ON a.link_id=l.id WHERE l.user_id=$1 AND a.external_id=ANY($2::text[])',
-      [userId, externalIds]
-    );
+      [userId, externalIds]);
     return new Set(r.rows.map(x => x.external_id));
   }
 
   async getLastPricesForAds(linkId: number, externalIds: string[]): Promise<Map<string, { price: string; adId: number }>> {
     if (!externalIds.length) return new Map();
     const r = await this.pool.query<{ external_id: string; price: string; ad_id: number }>(
-      `SELECT DISTINCT ON (external_id) external_id,price,id as ad_id
-       FROM ads WHERE link_id=$1 AND external_id=ANY($2::text[])
-       ORDER BY external_id,updated_at DESC NULLS LAST,id DESC`,
-      [linkId, externalIds]
-    );
+      `SELECT DISTINCT ON (external_id) external_id,price,id as ad_id FROM ads
+       WHERE link_id=$1 AND external_id=ANY($2::text[])
+       ORDER BY external_id,updated_at DESC NULLS LAST,id DESC`, [linkId, externalIds]);
     return new Map(r.rows.filter(x => x.price != null).map(x => [x.external_id, { price: x.price, adId: x.ad_id }]));
   }
 
   async getUserAdsCount(userId: number): Promise<{ linkId: number; linkPlatform: string; count: number }[]> {
     const r = await this.pool.query(
       'SELECT l.id as "linkId",l.platform as "linkPlatform",COUNT(a.id) as "count" FROM links l LEFT JOIN ads a ON a.link_id=l.id WHERE l.user_id=$1 GROUP BY l.id ORDER BY l.id',
-      [userId]
-    );
+      [userId]);
     return r.rows;
   }
 
@@ -196,8 +207,7 @@ export class DatabaseService {
   async getLastPriceForAd(linkId: number, externalId: string): Promise<{ price: string; adId: number } | null> {
     const r = await this.pool.query(
       'SELECT a.price,a.id as ad_id FROM ads a WHERE a.link_id=$1 AND a.external_id=$2 ORDER BY a.updated_at DESC NULLS LAST,a.id DESC LIMIT 1',
-      [linkId, externalId]
-    );
+      [linkId, externalId]);
     return r.rows[0] || null;
   }
 
@@ -207,8 +217,7 @@ export class DatabaseService {
         `INSERT INTO price_history (ad_id,user_id,external_id,old_price,new_price,price_change_percent,notified_at)
          VALUES ($1,$2,$3,$4,$5,$6,CURRENT_TIMESTAMP)
          ON CONFLICT (user_id,external_id,old_price,new_price) DO NOTHING`,
-        [adId, userId, externalId, oldPrice, newPrice, changePercent]
-      );
+        [adId, userId, externalId, oldPrice, newPrice, changePercent]);
       return (r.rowCount || 0) > 0;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -226,8 +235,7 @@ export class DatabaseService {
       `INSERT INTO channel_subscriptions (user_id,channel_id,channel_username,channel_title)
        VALUES ($1,$2,$3,$4) ON CONFLICT (user_id,channel_id)
        DO UPDATE SET channel_username=EXCLUDED.channel_username,channel_title=EXCLUDED.channel_title,is_active=true`,
-      [userId, channelId, channelUsername, channelTitle]
-    );
+      [userId, channelId, channelUsername, channelTitle]);
   }
 
   async deleteChannelSubscription(userId: number, channelId: number): Promise<void> {
@@ -240,9 +248,7 @@ export class DatabaseService {
 
   async getActiveChannelSubscription(userId: number): Promise<{ channel_id: number; channel_username: string | null; channel_title: string | null } | null> {
     const r = await this.pool.query(
-      'SELECT channel_id,channel_username,channel_title FROM channel_subscriptions WHERE user_id=$1 AND is_active=true ORDER BY created_at DESC LIMIT 1',
-      [userId]
-    );
+      'SELECT channel_id,channel_username,channel_title FROM channel_subscriptions WHERE user_id=$1 AND is_active=true ORDER BY created_at DESC LIMIT 1', [userId]);
     return r.rows[0] || null;
   }
 }
