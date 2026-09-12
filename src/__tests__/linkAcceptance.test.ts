@@ -3,17 +3,11 @@ import { LinkAcceptance } from '../utils/linkAcceptance';
 describe('LinkAcceptance.assess', () => {
   describe('kufar', () => {
     test('accepts /l/ search page', () => {
-      expect(LinkAcceptance.assess('https://www.kufar.by/l/r~minsk/muzykalnye-instrumenty')).toEqual({
-        platform: 'kufar',
-        ok: true,
-      });
+      expect(LinkAcceptance.assess('https://www.kufar.by/l/r~minsk/muzykalnye-instrumenty')).toEqual({ platform: 'kufar', ok: true });
     });
 
     test('accepts /re/ real-estate search page', () => {
-      expect(LinkAcceptance.assess('https://re.kufar.by/l/minsk/snyat/kvartiru')).toEqual({
-        platform: 'kufar',
-        ok: true,
-      });
+      expect(LinkAcceptance.assess('https://re.kufar.by/l/minsk/snyat/kvartiru')).toEqual({ platform: 'kufar', ok: true });
     });
 
     test('rejects single ad link on kufar', () => {
@@ -22,28 +16,25 @@ describe('LinkAcceptance.assess', () => {
       expect(result.ok).toBe(false);
       expect(result.reason).toBeDefined();
     });
+
+    test('rejects kufar-lookalike hostname', () => {
+      const result = LinkAcceptance.assess('https://evil-kufar.by/l/minsk');
+      expect(result.ok).toBe(false);
+      expect(result.platform).toBeNull();
+    });
   });
 
   describe('onliner', () => {
-    test('accepts baraholka hostname', () => {
-      expect(LinkAcceptance.assess('https://baraholka.onliner.by/category')).toEqual({
-        platform: 'onliner',
-        ok: true,
-      });
+    test('accepts supported hostnames', () => {
+      expect(LinkAcceptance.assess('https://baraholka.onliner.by/category')).toEqual({ platform: 'onliner', ok: true });
+      expect(LinkAcceptance.assess('https://ab.onliner.by/cars')).toEqual({ platform: 'onliner', ok: true });
+      expect(LinkAcceptance.assess('https://r.onliner.by/ak/')).toEqual({ platform: 'onliner', ok: true });
     });
 
-    test('accepts ab.onliner hostname', () => {
-      expect(LinkAcceptance.assess('https://ab.onliner.by/cars')).toEqual({
-        platform: 'onliner',
-        ok: true,
-      });
-    });
-
-    test('accepts r.onliner hostname', () => {
-      expect(LinkAcceptance.assess('https://r.onliner.by/ak/')).toEqual({
-        platform: 'onliner',
-        ok: true,
-      });
+    test('rejects onliner lookalike hostname', () => {
+      const result = LinkAcceptance.assess('https://r.onliner.by.evil.example/ak/');
+      expect(result.ok).toBe(false);
+      expect(result.platform).toBeNull();
     });
 
     test('rejects onliner single ad / unsupported page', () => {
@@ -56,10 +47,7 @@ describe('LinkAcceptance.assess', () => {
 
   describe('av', () => {
     test('accepts av.by hostname', () => {
-      expect(LinkAcceptance.assess('https://cars.av.by/filter')).toEqual({
-        platform: 'av',
-        ok: true,
-      });
+      expect(LinkAcceptance.assess('https://cars.av.by/filter')).toEqual({ platform: 'av', ok: true });
     });
 
     test('rejects non-av.by subdomains', () => {
@@ -72,6 +60,18 @@ describe('LinkAcceptance.assess', () => {
   describe('invalid and unsupported', () => {
     test('rejects non-URL', () => {
       const result = LinkAcceptance.assess('not a url');
+      expect(result.ok).toBe(false);
+      expect(result.platform).toBeNull();
+    });
+
+    test('rejects credentials in URL', () => {
+      const result = LinkAcceptance.assess('https://user:pass@kufar.by/l/minsk');
+      expect(result.ok).toBe(false);
+      expect(result.platform).toBeNull();
+    });
+
+    test('rejects unsupported protocol', () => {
+      const result = LinkAcceptance.assess('ftp://kufar.by/l/minsk');
       expect(result.ok).toBe(false);
       expect(result.platform).toBeNull();
     });
