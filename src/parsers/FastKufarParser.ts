@@ -32,6 +32,14 @@ export class FastKufarParser extends BaseParser {
     const parts = parsed.pathname.split('/').filter(Boolean);
     const params: Record<string, string | number> = { size: 100, sort: 'lst.d' };
 
+    // Preserve all query filters from the user's Kufar search URL. This avoids
+    // silently dropping less common filters and keeps the monitor identical to
+    // the search the user configured on Kufar.
+    for (const [key, value] of parsed.searchParams.entries()) {
+      if (!key || key === 'page' || key === 'size' || key === 'sort') continue;
+      params[key] = value;
+    }
+
     for (const part of parts) {
       if (CATEGORY_MAP[part]) { params.cat = CATEGORY_MAP[part]; break; }
     }
