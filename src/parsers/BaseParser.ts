@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { Ad, Platform } from '../types';
 import { logger } from '../utils/logger';
+import { IParser } from './IParser';
 
 export abstract class BaseParser implements IParser {
   abstract platform: Platform;
