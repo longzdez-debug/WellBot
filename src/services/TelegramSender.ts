@@ -4,34 +4,33 @@ import { logger } from '../utils/logger';
 
 export class TelegramSender {
   private bot: TelegramBot;
-  // Telegram API лимит: ~30 сообщений/сек, но безопасно — 2-3 сообщения/сек
-  private lastSendTime: number = 0;
-  private readonly MIN_SEND_INTERVAL_MS = 500; // Минимум 500мс между сообщениями (2 msg/sec)
-  private readonly MAX_MEDIA_PER_GROUP = 10; // Telegram лимит для media group
-  private readonly MAX_CAPTION_LENGTH = 1024; // Telegram лимит для caption
-  private retryAfterTimer: number = 0; // Таймер для обработки 429
+  private readonly lastSendByChat: Map<number, number> = new Map();
+  private readonly retryAfterByChat: Map<number, number> = new Map();
+  private readonly MIN_CHAT_INTERVAL_MS = 1050;
+  private readonly GLOBAL_MIN_INTERVAL_MS = 35;
+  private lastGlobalSendTime = 0;
+  private readonly MAX_MEDIA_PER_GROUP = 10;
+  private readonly MAX_CAPTION_LENGTH = 1024;
+  private readonly MAX_RETRIES = 3;
 
   constructor(bot: TelegramBot) {
     this.bot = bot;
   }
 
-  private async waitForRateLimit(): Promise<void> {
-    // Обработка 429 (Too Many Requests) от Telegram
-    if (this.retryAfterTimer > Date.now()) {
-      const waitMs = this.retryAfterTimer - Date.now();
-      logger.warn('Telegram rate limited (429), waiting', { waitMs });
-      await new Promise(resolve => setTimeout(resolve, waitMs));
+  private async waitForRateLimit(chatId: number): Promise<void> {
+    const now = Date.now();
+    const retryUntil = this.retryAfterByChat.get(chatId) ?? 0;
+    const chatUntil = (this.lastSendByChat.get(chatId) ?? 0) + this.MIN_CHAT_INTERVAL_MS;
+    const globalUntil = this.lastGlobalSendTime + this.GLOBAL_MIN_INTERVAL_MS;
+    const waitUntil = Math.max(now, retryUntil, chatUntil, globalUntil);
+
+    if (waitUntil > now) {
+      await new Promise(resolve => setTimeout(resolve, waitUntil - now));
     }
 
-    const now = Date.now();
-    const timeSinceLastSend = now - this.lastSendTime;
-    
-    if (timeSinceLastSend < this.MIN_SEND_INTERVAL_MS) {
-      const waitTime = this.MIN_SEND_INTERVAL_MS - timeSinceLastSend;
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-    
-    this.lastSendTime = Date.now();
+    const sentAt = Date.now();
+    this.lastSendByChat.set(chatId, sentAt);
+    this.lastGlobalSendTime = sentAt;
   }
 
   private truncateCaption(text: string): string {
@@ -40,69 +39,75 @@ export class TelegramSender {
     return text.slice(0, this.MAX_CAPTION_LENGTH);
   }
 
-  private handleTelegramError(error: any): void {
-    // Обработка 429 Too Many Requests
-    if (error.response?.statusCode === 429) {
-      const retryAfter = error.response?.body?.retry_after || 5;
-      this.retryAfterTimer = Date.now() + retryAfter * 1000;
-      logger.error('Telegram rate limited (429)', { retryAfter });
+  private getStatusCode(error: any): number | undefined {
+    return error?.response?.statusCode;
+  }
+
+  private getRetryAfter(error: any): number {
+    const value = Number(error?.response?.body?.parameters?.retry_after ?? error?.response?.body?.retry_after ?? 1);
+    return Number.isFinite(value) && value > 0 ? Math.min(value, 30) : 1;
+  }
+
+  private async sendOnce(chatId: number, formatted: FormattedAd): Promise<void> {
+    await this.waitForRateLimit(chatId);
+
+    if (formatted.media && formatted.media.length >= 1) {
+      const mediaToSend = formatted.media.slice(0, this.MAX_MEDIA_PER_GROUP);
+      const caption = this.truncateCaption(formatted.text);
+      const inputMedia: TelegramBot.InputMediaPhoto[] = mediaToSend.map((url, index) => ({
+        type: 'photo',
+        media: url,
+        caption: index === 0 ? caption : undefined,
+        parse_mode: index === 0 ? 'HTML' : undefined,
+      }));
+
+      try {
+        await this.bot.sendMediaGroup(chatId, inputMedia);
+      } catch (error: any) {
+        const statusCode = this.getStatusCode(error);
+        if (statusCode === 400) {
+          // Some image URLs can expire or be rejected by Telegram. Keep the alert alive with a text fallback.
+          logger.warn('Media group rejected, falling back to text notification', {
+            chatId,
+            error: error?.response?.body?.description || error.message,
+          });
+          await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML' });
+          return;
+        }
+        throw error;
+      }
+      return;
     }
-    
-    // Если пользователь заблокировал бота — ничего не делаем
-    if (error.response?.statusCode === 403) {
-      logger.warn('User blocked the bot', { chatId: 0 });
-    }
+
+    await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML' });
   }
 
   async send(chatId: number, formatted: FormattedAd): Promise<void> {
-    try {
-      await this.waitForRateLimit();
-
-      // Media group (до 10 фото — лимит Telegram)
-      // В media: [фото_товара, карта] — всё в одной группе
-      // Текст прикреплён к первому фото
-      if (formatted.media && formatted.media.length >= 1) {
-        // Отрезаем лишние фото (Telegram лимит — 10)
-        const mediaToSend = formatted.media.slice(0, this.MAX_MEDIA_PER_GROUP);
-        
-        // Формируем массив для sendMediaGroup: первое фото с caption
-        const caption = mediaToSend.length > 0 ? this.truncateCaption(formatted.text) : undefined;
-        const inputMedia: TelegramBot.InputMediaPhoto[] = mediaToSend.map((url, index) => ({
-          type: 'photo',
-          media: url,
-          caption: index === 0 ? caption : undefined,
-        }));
-        
-        try {
-          await this.bot.sendMediaGroup(chatId, inputMedia);
-          logger.info('Media group sent', { chatId, count: mediaToSend.length });
-        } catch (error: any) {
-          this.handleTelegramError(error);
-          logger.warn('Failed to send media group, falling back to single photo', {
-            error: error.response?.body?.description || error.message,
-            count: mediaToSend.length,
-          });
-          // Fallback: отправляем первое фото с подписью
-          await this.bot.sendPhoto(chatId, mediaToSend[0], {
-            caption: this.truncateCaption(formatted.text),
-            parse_mode: 'HTML',
-          });
+    for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt += 1) {
+      try {
+        await this.sendOnce(chatId, formatted);
+        return;
+      } catch (error: any) {
+        const statusCode = this.getStatusCode(error);
+        if (statusCode === 429 && attempt < this.MAX_RETRIES) {
+          const retryAfter = this.getRetryAfter(error);
+          this.retryAfterByChat.set(chatId, Date.now() + retryAfter * 1000);
+          logger.warn('Telegram rate limited, retrying', { chatId, retryAfter, attempt: attempt + 1 });
+          continue;
         }
-      } else {
-        // Только текст (без фото и карты)
-        await this.bot.sendMessage(chatId, formatted.text, {
-          parse_mode: 'HTML',
-        });
-      }
 
-      // location больше не используется — карта уже в media
-    } catch (error: any) {
-      this.handleTelegramError(error);
-      logger.error('Failed to send Telegram message', {
-        chatId,
-        error: error.message,
-        statusCode: error.response?.statusCode,
-      });
+        if (statusCode === 403) {
+          logger.warn('User blocked the bot', { chatId });
+          return;
+        }
+
+        logger.error('Failed to send Telegram message', {
+          chatId,
+          error: error.message,
+          statusCode,
+        });
+        throw error;
+      }
     }
   }
 
@@ -112,4 +117,3 @@ export class TelegramSender {
     }
   }
 }
-
