@@ -3,6 +3,7 @@ import { DatabaseService } from './database/DatabaseService';
 import { BotHandler } from './bot/BotHandler';
 import { installWebAppBridge } from './bot/WebAppBridge';
 import { ParserScheduler } from './scheduler/ParserScheduler';
+import { startWebAppServer } from './services/WebAppServer';
 import { logger } from './utils/logger';
 
 dotenv.config();
@@ -21,18 +22,22 @@ if (!DATABASE_URL) {
 }
 
 async function main() {
-  logger.info('Starting WellBOT...', { version: '2.0.3', priceDropDedup: 'unique(external_id, old_price, new_price)' });
+  logger.info('Starting WellBOT...', { version: '2.1.0', priceDropDedup: 'unique(external_id, old_price, new_price)' });
 
-  const db = new DatabaseService(DATABASE_URL!);
+  const db = new DatabaseService(DATABASE_URL);
   await db.initialize();
   logger.info('Database initialized');
 
-  const bot = new BotHandler(TELEGRAM_BOT_TOKEN!, db);
+  const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
 
   const scheduler = new ParserScheduler(db, bot);
   bot.setScheduler(scheduler);
 
   installWebAppBridge(bot);
+
+  const webPort = Number(process.env.HUNT_WEB_PORT || 0);
+  const webServer = webPort > 0 && webPort < 65536 ? startWebAppServer(webPort) : null;
+  if (!webServer) logger.info('HUNT WebApp server disabled; set HUNT_WEB_PORT to enable it');
 
   scheduler.start();
 
@@ -40,6 +45,7 @@ async function main() {
     logger.info('Shutting down...');
     scheduler.stop();
     bot.stop();
+    if (webServer) await webServer.close();
     await db.close();
     process.exit(0);
   };
