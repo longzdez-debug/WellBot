@@ -8,21 +8,20 @@ import { logger } from './utils/logger';
 
 dotenv.config();
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const DATABASE_URL = process.env.DATABASE_URL;
-
-if (!TELEGRAM_BOT_TOKEN) {
-  logger.error('TELEGRAM_BOT_TOKEN is not set');
-  process.exit(1);
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    logger.error(`${name} is not set`);
+    process.exit(1);
+  }
+  return value;
 }
 
-if (!DATABASE_URL) {
-  logger.error('DATABASE_URL is not set');
-  process.exit(1);
-}
+const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
+const DATABASE_URL = requiredEnv('DATABASE_URL');
 
 async function main() {
-  logger.info('Starting WellBOT...', { version: '2.1.0', priceDropDedup: 'unique(external_id, old_price, new_price)' });
+  logger.info('Starting WellBOT...', { version: '2.1.1', priceDropDedup: 'unique(external_id, old_price, new_price)' });
 
   const db = new DatabaseService(DATABASE_URL);
   await db.initialize();
