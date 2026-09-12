@@ -43,11 +43,6 @@ export function installWebAppBridge(handler: BotHandler): void {
         return;
       }
 
-      // A Mini App user may open the app before ever sending /start. Create the
-      // account here; handleAddLink remains the single source of truth for all
-      // validation, parser checks and persistence rules.
-      await handler.ensureUser(userId, msg.from.username);
-
       logger.info('HUNT Mini App submitted monitoring URL', { userId, url });
       await handler.handleAddLink(chatId, userId, url);
     } catch (error: unknown) {
