@@ -33,22 +33,28 @@ export function installWebAppBridge(handler: BotHandler): void {
       }
 
       const url = typeof payload === 'string'
-        ? payload
+        ? payload.trim()
         : (payload && typeof payload === 'object' && 'url' in payload && typeof (payload as { url?: unknown }).url === 'string'
-          ? (payload as { url: string }).url
+          ? (payload as { url: string }).url.trim()
           : '');
 
-      if (!url) {
-        await bot.sendMessage(chatId, '❌ HUNT не получил ссылку. Вставьте ссылку на поиск и попробуйте ещё раз.');
+      if (!url || url.length > 4096) {
+        await bot.sendMessage(chatId, '❌ Некорректная ссылка. Отправьте ссылку на страницу поиска.');
         return;
       }
 
+      // A Mini App user may open the app before ever sending /start. Create the
+      // account here; handleAddLink remains the single source of truth for all
+      // validation, parser checks and persistence rules.
+      await handler.ensureUser(userId, msg.from.username);
+
       logger.info('HUNT Mini App submitted monitoring URL', { userId, url });
       await handler.handleAddLink(chatId, userId, url);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       logger.error('HUNT Mini App bridge failed', {
         userId,
-        error: error.message,
+        error: message,
       });
       await bot.sendMessage(chatId, '❌ Не удалось добавить мониторинг. Попробуйте ещё раз.');
     }
@@ -76,10 +82,11 @@ export function installWebAppBridge(handler: BotHandler): void {
       await bot.sendMessage(msg.chat.id, '⚡ Открыть HUNT терминал:', {
         reply_markup: replyMarkup,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       logger.error('Failed to send HUNT WebApp button', {
         userId: msg.from.id,
-        error: error.message,
+        error: message,
       });
     }
   });
