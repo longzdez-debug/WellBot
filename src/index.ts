@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv';
 import { DatabaseService } from './database/DatabaseService';
 import { BotHandler } from './bot/BotHandler';
-import { WebAppBridge } from './bot/WebAppBridge';
+import { installWebAppBridge } from './bot/WebAppBridge';
 import { ParserScheduler } from './scheduler/ParserScheduler';
 import { logger } from './utils/logger';
 
@@ -32,7 +32,7 @@ async function main() {
   const scheduler = new ParserScheduler(db, bot);
   bot.setScheduler(scheduler);
 
-  WebAppBridge.install(bot);
+  installWebAppBridge(bot);
 
   scheduler.start();
 
