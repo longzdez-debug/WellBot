@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosError, AxiosInstance } from 'axios';
 import { Ad, Platform } from '../types';
 import { logger } from '../utils/logger';
 import { IParser } from './IParser';
@@ -32,9 +32,19 @@ export abstract class BaseParser implements IParser {
     return this.userAgents[Math.floor(Math.random() * this.userAgents.length)];
   }
 
+  private isRetryable(error: unknown): boolean {
+    if (!axios.isAxiosError(error)) return true;
+    const axiosError = error as AxiosError;
+    if (!axiosError.response) return true;
+    const status = axiosError.response.status;
+    return status === 408 || status === 425 || status === 429 || status >= 500;
+  }
+
   protected async fetchWithRetry(url: string, retries: number = 2): Promise<string> {
+    const attempts = Math.max(1, Math.floor(retries));
     let lastError: unknown;
-    for (let i = 0; i < retries; i++) {
+
+    for (let i = 0; i < attempts; i++) {
       try {
         const response = await this.axiosInstance.get(url, {
           timeout: 6500,
@@ -47,13 +57,17 @@ export abstract class BaseParser implements IParser {
       } catch (error: unknown) {
         lastError = error;
         const message = error instanceof Error ? error.message : String(error);
-        logger.warn(`Fetch attempt ${i + 1} failed for ${url}`, {
+        const retryable = this.isRetryable(error);
+        logger.warn(`Fetch attempt ${i + 1}/${attempts} failed for ${url}`, {
           platform: this.platform,
           error: message,
+          retryable,
         });
-        if (i < retries - 1) await this.sleep(250 * (i + 1));
+        if (!retryable || i >= attempts - 1) break;
+        await this.sleep(250 * (i + 1));
       }
     }
+
     throw lastError instanceof Error ? lastError : new Error('All retry attempts failed');
   }
 
