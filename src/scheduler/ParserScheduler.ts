@@ -201,7 +201,10 @@ export class ParserScheduler {
         return { newAds, priceDrops };
       }
 
-      const existing = await this.db.getExistingAdExternalIdsForUser(link.user_id, externalIds);
+      // Existence is scoped to the link: the same marketplace ad can legitimately
+      // belong to several saved searches. Notification deduplication is user-scoped
+      // later, in notifyNewAds().
+      const existing = await this.db.getExistingAdExternalIdsForLink(link.id, externalIds);
       const prices = await this.db.getLastPricesForAds(link.id, externalIds);
       const processed = new Set<string>();
       for (const adData of ads) {
