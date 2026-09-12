@@ -195,7 +195,6 @@ export class ParserScheduler {
     } catch (error: any) { logger.error('Failed to check price drop', { linkId, externalId, error: error.message }); }
   }
 
-  private sleep(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
   stop(): void { if (this.intervalId) { clearInterval(this.intervalId); this.intervalId = null; } this.pendingTrigger = false; logger.info('Parser scheduler stopped'); }
   triggerParse(): void { if (this.isRunning) { this.pendingTrigger = true; return; } void this.runParsing(); }
 }
