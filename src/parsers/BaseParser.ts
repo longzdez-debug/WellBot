@@ -1,5 +1,4 @@
 import axios, { AxiosInstance } from 'axios';
-import { IParser } from './IParser';
 import { Ad, Platform } from '../types';
 import { logger } from '../utils/logger';
 
@@ -17,7 +16,7 @@ export abstract class BaseParser implements IParser {
       this.axiosInstance = axiosInstance;
     } else {
       this.axiosInstance = axios.create({
-        timeout: 15000,
+        timeout: 7000,
         headers: {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -32,31 +31,29 @@ export abstract class BaseParser implements IParser {
     return this.userAgents[Math.floor(Math.random() * this.userAgents.length)];
   }
 
-  protected async fetchWithRetry(url: string, retries: number = 3): Promise<string> {
+  protected async fetchWithRetry(url: string, retries: number = 2): Promise<string> {
+    let lastError: unknown;
     for (let i = 0; i < retries; i++) {
       try {
         const response = await this.axiosInstance.get(url, {
+          timeout: 6500,
           headers: {
             'User-Agent': this.getRandomUserAgent(),
             'Host': new URL(url).hostname,
           },
         });
         return response.data;
-      } catch (error: any) {
+      } catch (error: unknown) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
         logger.warn(`Fetch attempt ${i + 1} failed for ${url}`, {
           platform: this.platform,
-          error: error.message,
+          error: message,
         });
-
-        if (i === retries - 1) {
-          throw error;
-        }
-
-        // Exponential backoff
-        await this.sleep(Math.pow(2, i) * 1000);
+        if (i < retries - 1) await this.sleep(250 * (i + 1));
       }
     }
-    throw new Error('All retry attempts failed');
+    throw lastError instanceof Error ? lastError : new Error('All retry attempts failed');
   }
 
   protected sleep(ms: number): Promise<void> {
