@@ -53,8 +53,6 @@ export class ParserScheduler {
       const allNewAds: Array<{ ad: any; telegramId: number }> = [];
       const allPriceDrops: Array<{ drop: any; telegramId: number; userId: number }> = [];
 
-      // Fetch users in parallel. With many monitored links this avoids turning
-      // notification preparation into N sequential database round trips.
       const userIds = [...new Set(uniqueLinks.map(link => link.user_id))];
       const userEntries = await Promise.all(userIds.map(async userId => [userId, await this.db.getUserById(userId)] as const));
       const users = new Map<number, { telegram_id: number; id: number }>();
@@ -70,8 +68,7 @@ export class ParserScheduler {
       }
 
       await Promise.all([this.notifyNewAds(allNewAds), this.notifyPriceDrops(allPriceDrops)]);
-      const duration = Date.now() - startTime;
-      logger.info('Parsing cycle completed', { duration: `${duration}ms`, linksCount: uniqueLinks.length, totalNewAds: allNewAds.length });
+      logger.info('Parsing cycle completed', { duration: `${Date.now() - startTime}ms`, linksCount: uniqueLinks.length, totalNewAds: allNewAds.length });
     } catch (error: any) {
       logger.error('Parsing cycle failed', { error: error.message, stack: error.stack });
     } finally {
@@ -97,30 +94,26 @@ export class ParserScheduler {
 
   private async notifyNewAds(items: Array<{ ad: any; telegramId: number }>): Promise<void> {
     const groups = new Map<number, any[]>();
-    const sent = new Set<string>();
     for (const { ad, telegramId } of items) {
       const key = `${telegramId}|${ad.external_id}`;
-      if (sent.has(key)) continue;
-      sent.add(key);
-      groups.set(telegramId, [...(groups.get(telegramId) ?? []), ad]);
+      const group = groups.get(telegramId) ?? [];
+      if (!group.some(existing => existing.external_id === ad.external_id)) group.push(ad);
+      groups.set(telegramId, group);
     }
     await Promise.all(Array.from(groups.entries()).map(async ([telegramId, ads]) => {
-      for (const ad of ads) {
+      await Promise.all(ads.map(async ad => {
         try { await this.bot.sendNotification(telegramId, ad); }
         catch (error: any) { logger.error('Failed to send new-ad notification', { telegramId, externalId: ad?.external_id, error: error.message }); }
-      }
+      }));
     }));
   }
 
   private async notifyPriceDrops(items: Array<{ drop: any; telegramId: number; userId: number }>): Promise<void> {
     const groups = new Map<number, Array<{ drop: any; userId: number }>>();
-    const dmSent = new Set<string>();
-    const channelSent = new Set<string>();
     for (const item of items) {
-      const key = `${item.telegramId}|${item.drop.externalId}`;
-      if (dmSent.has(key)) continue;
-      dmSent.add(key);
-      groups.set(item.telegramId, [...(groups.get(item.telegramId) ?? []), { drop: item.drop, userId: item.userId }]);
+      const group = groups.get(item.telegramId) ?? [];
+      if (!group.some(existing => existing.drop.externalId === item.drop.externalId)) group.push({ drop: item.drop, userId: item.userId });
+      groups.set(item.telegramId, group);
     }
     await Promise.all(Array.from(groups.entries()).map(async ([telegramId, drops]) => {
       for (const { drop, userId } of drops) {
@@ -128,12 +121,8 @@ export class ParserScheduler {
         catch (error: any) { logger.error('Failed to send price-drop notification', { telegramId, externalId: drop.externalId, error: error.message }); }
         const channelSub = await this.db.getActiveChannelSubscription(userId);
         if (channelSub) {
-          const key = `${channelSub.channel_id}|${drop.externalId}`;
-          if (!channelSent.has(key)) {
-            channelSent.add(key);
-            try { await this.bot.sendPriceDropNotification(channelSub.channel_id, drop); }
-            catch (error: any) { logger.error('Failed to send price drop to channel', { channelId: channelSub.channel_id, externalId: drop.externalId, error: error.message }); }
-          }
+          try { await this.bot.sendPriceDropNotification(channelSub.channel_id, drop); }
+          catch (error: any) { logger.error('Failed to send price drop to channel', { channelId: channelSub.channel_id, externalId: drop.externalId, error: error.message }); }
         }
       }
     }));
