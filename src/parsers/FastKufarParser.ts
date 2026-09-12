@@ -19,10 +19,11 @@ const REGION_MAP: Record<string, string> = {
   borisov: '5', soligorsk: '5', molodechno: '5', zhodino: '5', slutsk: '5', bobruisk: '4',
 };
 
-// Only parameters accepted by the public Kufar search endpoint are forwarded.
-// Tracking/UI parameters from copied browser URLs (utm_*, queryOrigin, etc.) can
-// make the API reject an otherwise valid search with HTTP 422.
 const ALLOWED_SEARCH_PARAMS = new Set(['query', 'prc', 'rms', 'gtsy']);
+const API_ENDPOINTS = [
+  'https://api.kufar.by/search-api/v2/search/rendered-paginated',
+  'https://cre-api.kufar.by/ads-search/v1/engine/v1/search/rendered-paginated',
+];
 
 export class FastKufarParser extends BaseParser {
   platform = 'kufar' as const;
@@ -39,10 +40,6 @@ export class FastKufarParser extends BaseParser {
     for (const part of parts) {
       if (CATEGORY_MAP[part]) { params.cat = CATEGORY_MAP[part]; break; }
     }
-
-    // Do not invent API filter names for URL path segments such as mt~apple.
-    // Kufar's web URL taxonomy and search API parameters are not 1:1, and the
-    // previous `subcat=Apple` mapping caused HTTP 422 on valid browser URLs.
 
     const gtsy = parsed.searchParams.get('gtsy');
     if (gtsy) {
@@ -65,25 +62,23 @@ export class FastKufarParser extends BaseParser {
     if (parts.includes('snyat')) params.typ = 'let';
     if (parts.includes('kupit')) params.typ = 'sell';
 
-    try {
-      const response = await this.axiosInstance.get(
-        'https://api.kufar.by/search-api/v2/search/rendered-paginated',
-        {
+    let lastError: any = null;
+    for (let i = 0; i < API_ENDPOINTS.length; i++) {
+      const endpoint = API_ENDPOINTS[i];
+      try {
+        const response = await this.axiosInstance.get(endpoint, {
           params,
-          timeout: 8000,
+          timeout: 7000,
           headers: {
-            Host: 'api.kufar.by',
+            Host: new URL(endpoint).host,
             'User-Agent': this.getRandomUserAgent(),
             Accept: 'application/json',
             Referer: 'https://www.kufar.by/',
           },
-        },
-      );
+        });
 
-      const ads = Array.isArray(response.data?.ads) ? response.data.ads : [];
-      const result: Ad[] = ads
-        .filter((ad: any) => ad?.ad_id)
-        .map((ad: any) => {
+        const ads = Array.isArray(response.data?.ads) ? response.data.ads : [];
+        return ads.filter((ad: any) => ad?.ad_id).map((ad: any) => {
           let price = 'Договорная';
           if (ad.price_byn != null) price = `${(Number(ad.price_byn) / 100).toFixed(2)} BYN`;
           else if (ad.price_usd != null) price = `${(Number(ad.price_usd) / 100).toFixed(2)} USD`;
@@ -103,18 +98,13 @@ export class FastKufarParser extends BaseParser {
             updated_at: ad.list_time_up ? new Date(ad.list_time_up) : undefined,
           } as Ad;
         });
-
-      logger.debug('Fast Kufar parse complete', { url, ads: result.length });
-      return result;
-    } catch (error: any) {
-      logger.warn('Kufar API request failed', {
-        url,
-        status: error?.response?.status,
-        response: error?.response?.data,
-        params,
-        error: error?.message,
-      });
-      throw error;
+      } catch (error: any) {
+        lastError = error;
+        const status = error?.response?.status;
+        logger.warn('Kufar API request failed', { endpoint, status, params, error: error?.message });
+        if (status !== 422 || i === API_ENDPOINTS.length - 1) throw error;
+      }
     }
+    throw lastError || new Error('Kufar API request failed');
   }
 }
