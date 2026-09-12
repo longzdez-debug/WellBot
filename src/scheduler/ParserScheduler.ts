@@ -9,6 +9,7 @@ export class ParserScheduler {
   private intervalId: NodeJS.Timeout | null = null;
   private intervalMs: number;
   private isRunning = false;
+  private pendingTrigger = false;
 
   constructor(db: DatabaseService, bot: BotHandler) {
     this.db = db;
@@ -25,7 +26,7 @@ export class ParserScheduler {
   }
 
   start(): void {
-    this.runParsing();
+    void this.runParsing();
 
     this.intervalId = setInterval(() => {
       if (!this.isRunning) {
@@ -43,10 +44,13 @@ export class ParserScheduler {
 
   async runParsing(): Promise<void> {
     if (this.isRunning) {
-      logger.debug('Parsing cycle already running');
+      this.pendingTrigger = true;
+      logger.debug('Parsing cycle already running; queued trigger');
       return;
     }
+
     this.isRunning = true;
+    this.pendingTrigger = false;
     const startTime = Date.now();
 
     try {
@@ -150,6 +154,10 @@ export class ParserScheduler {
       logger.error('Parsing cycle failed', { error: error.message });
     } finally {
       this.isRunning = false;
+      if (this.pendingTrigger) {
+        this.pendingTrigger = false;
+        setImmediate(() => void this.runParsing());
+      }
     }
   }
 
@@ -173,14 +181,17 @@ export class ParserScheduler {
         ads = await Promise.race([parsePromise, timeoutPromise]);
       } catch (error: any) {
         logger.warn('Parser request timed out or failed', { linkId: link.id, error: error.message });
+        await this.db.incrementErrorCount(link.id);
         return { newAds, priceDrops };
       }
 
       if (!Array.isArray(ads)) {
         logger.error('Parser returned non-array', { linkId: link.id, platform: link.platform });
+        await this.db.incrementErrorCount(link.id);
         return { newAds, priceDrops };
       }
 
+      const isBaseline = !link.last_parsed_at;
       await this.db.updateLastParsed(link.id);
       if (link.error_count > 0) await this.db.resetErrorCount(link.id);
 
@@ -189,6 +200,11 @@ export class ParserScheduler {
       for (const adData of ads) {
         if (!adData?.external_id || processedExternalIds.has(adData.external_id)) continue;
         processedExternalIds.add(adData.external_id);
+
+        if (isBaseline) {
+          await this.db.createAd(link.id, adData);
+          continue;
+        }
 
         const isNew = await this.db.isNewAdForUser(link.user_id, adData.external_id);
         if (!isNew) {
@@ -207,6 +223,13 @@ export class ParserScheduler {
             timestamp: new Date().toISOString(),
           });
         }
+      }
+
+      if (isBaseline) {
+        logger.info('Baseline snapshot stored; no notifications sent', {
+          linkId: link.id,
+          adsCount: processedExternalIds.size,
+        });
       }
 
       return { newAds, priceDrops };
@@ -265,10 +288,16 @@ export class ParserScheduler {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+    this.pendingTrigger = false;
     logger.info('Parser scheduler stopped');
   }
 
   triggerParse(): void {
+    if (this.isRunning) {
+      this.pendingTrigger = true;
+      logger.debug('Immediate parse queued until active cycle completes');
+      return;
+    }
     void this.runParsing();
   }
 }
