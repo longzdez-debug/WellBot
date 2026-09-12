@@ -64,15 +64,17 @@ export function installWebAppBridge(handler: BotHandler): void {
     if (!msg.from || msg.text !== '/start' || msg.chat.type !== 'private') return;
 
     try {
+      const replyMarkup = {
+        keyboard: [[{
+          text: '⚡ Открыть HUNT',
+          web_app: { url: webAppUrl },
+        }]],
+        resize_keyboard: true,
+        persistent: true,
+      } as any;
+
       await bot.sendMessage(msg.chat.id, '⚡ Открыть HUNT терминал:', {
-        reply_markup: {
-          keyboard: [[{
-            text: '⚡ Открыть HUNT',
-            web_app: { url: webAppUrl },
-          }]],
-          resize_keyboard: true,
-          persistent: true,
-        },
+        reply_markup: replyMarkup,
       });
     } catch (error: any) {
       logger.error('Failed to send HUNT WebApp button', {
