@@ -20,9 +20,25 @@ export function startWebAppServer(port: number, webRoot = join(process.cwd(), 'w
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     try {
       const requestPath = decodeURIComponent((req.url || '/').split('?')[0]);
+
+      if (requestPath === '/health' || requestPath === '/healthz') {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(JSON.stringify({ status: 'ok', service: 'hunt-web' }));
+        return;
+      }
+
       const relativePath = requestPath === '/' ? '/index.html' : requestPath;
-      const safePath = normalize(relativePath).replace(/^([.][.][/\\])+/, '');
-      const filePath = join(webRoot, safePath);
+      const normalizedPath = normalize(relativePath).replace(/^[/\\]+/, '');
+      if (normalizedPath.startsWith('..')) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.end('Bad request');
+        return;
+      }
+
+      const filePath = join(webRoot, normalizedPath);
       const body = await readFile(filePath);
       const extension = extname(filePath).toLowerCase();
 
