@@ -1,0 +1,6 @@
+# Copy to Caddyfile and replace the hostname with your real domain.
+# HUNT_WEBAPP_URL in .env must match this HTTPS URL.
+
+hunt.example.com {
+    reverse_proxy 127.0.0.1:8080
+}
