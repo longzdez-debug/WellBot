@@ -55,10 +55,17 @@ export class ParserScheduler {
       const allNewAds: Array<{ ad: any; telegramId: number }> = [];
       const allPriceDrops: Array<{ drop: any; telegramId: number; userId: number }> = [];
 
+      const users = new Map<number, { telegram_id: number; id: number }>();
+      for (const link of uniqueLinks) {
+        if (users.has(link.user_id)) continue;
+        const user = await this.db.getUserById(link.user_id);
+        if (user) users.set(link.user_id, user);
+      }
+
       for (let i = 0; i < uniqueLinks.length; i++) {
         const result = results[i];
         if (!result) continue;
-        const user = await this.db.getUserById(uniqueLinks[i].user_id);
+        const user = users.get(uniqueLinks[i].user_id);
         if (!user) continue;
         for (const ad of result.newAds) allNewAds.push({ ad, telegramId: user.telegram_id });
         for (const drop of result.priceDrops) allPriceDrops.push({ drop, telegramId: user.telegram_id, userId: user.id });
@@ -101,10 +108,9 @@ export class ParserScheduler {
       groups.set(telegramId, [...(groups.get(telegramId) ?? []), ad]);
     }
     await Promise.all(Array.from(groups.entries()).map(async ([telegramId, ads]) => {
-      for (let i = 0; i < ads.length; i++) {
-        try { await this.bot.sendNotification(telegramId, ads[i]); }
-        catch (error: any) { logger.error('Failed to send new-ad notification', { telegramId, externalId: ads[i]?.external_id, error: error.message }); }
-        if (i + 1 < ads.length) await this.sleep(1050);
+      for (const ad of ads) {
+        try { await this.bot.sendNotification(telegramId, ad); }
+        catch (error: any) { logger.error('Failed to send new-ad notification', { telegramId, externalId: ad?.external_id, error: error.message }); }
       }
     }));
   }
@@ -120,8 +126,7 @@ export class ParserScheduler {
       groups.set(item.telegramId, [...(groups.get(item.telegramId) ?? []), { drop: item.drop, userId: item.userId }]);
     }
     await Promise.all(Array.from(groups.entries()).map(async ([telegramId, drops]) => {
-      for (let i = 0; i < drops.length; i++) {
-        const { drop, userId } = drops[i];
+      for (const { drop, userId } of drops) {
         try { await this.bot.sendPriceDropNotification(telegramId, drop); }
         catch (error: any) { logger.error('Failed to send price-drop notification', { telegramId, externalId: drop.externalId, error: error.message }); }
         const channelSub = await this.db.getActiveChannelSubscription(userId);
@@ -133,7 +138,6 @@ export class ParserScheduler {
             catch (error: any) { logger.error('Failed to send price drop to channel', { channelId: channelSub.channel_id, externalId: drop.externalId, error: error.message }); }
           }
         }
-        if (i + 1 < drops.length) await this.sleep(1050);
       }
     }));
   }
