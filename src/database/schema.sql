@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS ads (
 CREATE INDEX IF NOT EXISTS idx_ads_link_id ON ads(link_id);
 CREATE INDEX IF NOT EXISTS idx_ads_external_id ON ads(external_id);
 CREATE INDEX IF NOT EXISTS idx_ads_created_at ON ads(created_at);
+CREATE INDEX IF NOT EXISTS idx_ads_link_created_at ON ads(link_id, created_at DESC);
 
 -- Migration for old databases.
 DO $$
@@ -89,6 +90,7 @@ WHERE ph.ad_id = a.id
 
 CREATE INDEX IF NOT EXISTS idx_price_history_ad_id ON price_history(ad_id);
 CREATE INDEX IF NOT EXISTS idx_price_history_user_id ON price_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_price_history_created_at ON price_history(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_price_history_notified ON price_history(notified_at) WHERE notified_at IS NULL;
 DROP INDEX IF EXISTS idx_price_history_unique_drop_external;
 
