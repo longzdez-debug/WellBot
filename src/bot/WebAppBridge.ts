@@ -80,18 +80,32 @@ export function installWebAppBridge(handler: BotHandler): void {
     web_app: { url: webAppUrl },
   };
 
-  // Configure the Telegram chat menu as the single primary entry point.
-  // This avoids sending a second /start message and works even when the
-  // user's reply keyboard is stale.
-  void bot.setChatMenuButton({ menu_button: menuButton })
-    .then(() => logger.info('HUNT Mini App menu button configured', { webAppUrl }))
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to configure HUNT Mini App menu button', {
-        webAppUrl,
-        error: message,
+  const configureMenuButton = (chatId?: number): void => {
+    void bot.setChatMenuButton({
+      ...(chatId !== undefined ? { chat_id: chatId } : {}),
+      menu_button: menuButton,
+    })
+      .then(() => logger.info('HUNT Mini App menu button configured', { webAppUrl, chatId }))
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('Failed to configure HUNT Mini App menu button', {
+          webAppUrl,
+          chatId,
+          error: message,
+        });
       });
-    });
+  };
+
+  // Set the default button for chats without an override.
+  configureMenuButton();
+
+  // Telegram clients can retain a per-chat menu configuration. Re-apply the
+  // HUNT button after /start without sending another message to the user.
+  bot.on('message', (msg: Message) => {
+    if (msg.text === '/start' && msg.chat.type === 'private') {
+      configureMenuButton(msg.chat.id);
+    }
+  });
 
   logger.info('HUNT Mini App bridge installed', { webAppUrl });
 }
