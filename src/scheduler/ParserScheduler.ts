@@ -16,8 +16,6 @@ export class ParserScheduler {
   private pendingTrigger = false;
 
   constructor(db: DatabaseService, bot: BotHandler) {
-    this.db = db;
-    this.bot = bot;
     const intervalSeconds = parseInt(process.env.PARSE_INTERVAL_SECONDS || '5', 10);
     const configuredConcurrency = parseInt(process.env.PARSE_CONCURRENCY || '20', 10);
     this.intervalMs = Math.max(1000, Number.isFinite(intervalSeconds) ? intervalSeconds * 1000 : 5000);
@@ -55,12 +53,12 @@ export class ParserScheduler {
       const allNewAds: Array<{ ad: any; telegramId: number }> = [];
       const allPriceDrops: Array<{ drop: any; telegramId: number; userId: number }> = [];
 
+      // Fetch users in parallel. With many monitored links this avoids turning
+      // notification preparation into N sequential database round trips.
+      const userIds = [...new Set(uniqueLinks.map(link => link.user_id))];
+      const userEntries = await Promise.all(userIds.map(async userId => [userId, await this.db.getUserById(userId)] as const));
       const users = new Map<number, { telegram_id: number; id: number }>();
-      for (const link of uniqueLinks) {
-        if (users.has(link.user_id)) continue;
-        const user = await this.db.getUserById(link.user_id);
-        if (user) users.set(link.user_id, user);
-      }
+      for (const [userId, user] of userEntries) if (user) users.set(userId, user);
 
       for (let i = 0; i < uniqueLinks.length; i++) {
         const result = results[i];
@@ -71,8 +69,7 @@ export class ParserScheduler {
         for (const drop of result.priceDrops) allPriceDrops.push({ drop, telegramId: user.telegram_id, userId: user.id });
       }
 
-      await this.notifyNewAds(allNewAds);
-      await this.notifyPriceDrops(allPriceDrops);
+      await Promise.all([this.notifyNewAds(allNewAds), this.notifyPriceDrops(allPriceDrops)]);
       const duration = Date.now() - startTime;
       logger.info('Parsing cycle completed', { duration: `${duration}ms`, linksCount: uniqueLinks.length, totalNewAds: allNewAds.length });
     } catch (error: any) {
