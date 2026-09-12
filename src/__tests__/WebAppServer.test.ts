@@ -1,7 +1,9 @@
 import { createHmac } from 'node:crypto';
 import { parseTelegramInitData } from '../services/WebAppServer';
 
-function makeInitData(botToken: string, authDate: number, user = { id: 123456789, username: 'tester' }): string {
+type TestUser = { id: number; username?: string };
+
+function makeInitData(botToken: string, authDate: number, user: TestUser = { id: 123456789, username: 'tester' }): string {
   const params = new URLSearchParams({
     auth_date: String(authDate),
     query_id: 'AAEAAAE',
@@ -18,7 +20,7 @@ function makeInitData(botToken: string, authDate: number, user = { id: 123456789
 }
 
 describe('parseTelegramInitData', () => {
-  const botToken = '123456:TEST_TOKEN';
+  const botToken = 'test-bot-token';
   const now = 1_700_000_000;
 
   it('accepts a valid Telegram initData signature', () => {
