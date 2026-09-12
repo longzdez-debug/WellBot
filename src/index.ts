@@ -10,10 +10,7 @@ dotenv.config();
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
-  if (!value) {
-    logger.error(`${name} is not set`);
-    process.exit(1);
-  }
+  if (!value) { logger.error(`${name} is not set`); process.exit(1); }
   return value;
 }
 
@@ -21,21 +18,20 @@ const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
 const DATABASE_URL = requiredEnv('DATABASE_URL');
 
 async function main() {
-  logger.info('Starting WellBOT...', { version: '2.1.1', priceDropDedup: 'unique(external_id, old_price, new_price)' });
-
+  logger.info('Starting WellBOT...', { version: '2.2.0', miniAppApi: 'telegram-init-data' });
   const db = new DatabaseService(DATABASE_URL);
   await db.initialize();
   logger.info('Database initialized');
 
   const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
-
   const scheduler = new ParserScheduler(db, bot);
   bot.setScheduler(scheduler);
-
   installWebAppBridge(bot);
 
   const webPort = Number(process.env.HUNT_WEB_PORT || 0);
-  const webServer = webPort > 0 && webPort < 65536 ? startWebAppServer(webPort) : null;
+  const webServer = webPort > 0 && webPort < 65536
+    ? startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN)
+    : null;
   if (!webServer) logger.info('HUNT WebApp server disabled; set HUNT_WEB_PORT to enable it');
 
   scheduler.start();
@@ -48,14 +44,14 @@ async function main() {
     await db.close();
     process.exit(0);
   };
-
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
-
   logger.info('WellBOT is running!');
 }
 
-main().catch((error) => {
-  logger.error('Fatal error', { error: error.message, stack: error.stack });
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  const stack = error instanceof Error ? error.stack : undefined;
+  logger.error('Fatal error', { error: message, stack });
   process.exit(1);
 });
