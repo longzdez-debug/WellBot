@@ -139,6 +139,7 @@ export class BotHandler {
       url = this.normalizeUrl(url);
       const assessment = LinkAcceptance.assess(url);
       if (!assessment.ok || !assessment.platform) { await this.bot.sendMessage(chatId, `❌ ${assessment.reason || 'Некорректная ссылка'}\n\nПоддерживаются страницы поиска Kufar, Onliner и av.by.`); return; }
+      await this.db.createUser(userId, null);
       const user = await this.db.getUser(userId);
       if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; }
       const existingLinks = await this.db.getUserLinks(user.id);
@@ -172,6 +173,7 @@ export class BotHandler {
       if (!assessment.ok || !assessment.platform) { await this.bot.sendMessage(chatId, `❌ ${assessment.reason || 'Эта ссылка не поддерживается.'}`); return; }
       const parser = ParserFactory.getParser(assessment.platform);
       if (!parser) { await this.bot.sendMessage(chatId, '❌ Парсер не найден.'); return; }
+      await this.db.createUser(userId, null);
       const user = await this.db.getUser(userId);
       if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; }
       if (await this.db.getUserLinksCount(user.id) >= 10) { await this.bot.sendMessage(chatId, '⚠️ Достигнут лимит в 10 ссылок. Удалите старые ссылки.'); return; }
@@ -201,6 +203,7 @@ export class BotHandler {
       url = this.normalizeUrl(url);
       const assessment = LinkAcceptance.assess(url);
       if (!assessment.ok || !assessment.platform) { await this.bot.sendMessage(chatId, '❌ Ошибка валидации ссылки.'); this.pendingLinks.delete(userId); return; }
+      await this.db.createUser(userId, null);
       const user = await this.db.getUser(userId);
       if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); this.pendingLinks.delete(userId); return; }
       if (await this.db.getUserLinksCount(user.id) >= 10) { await this.bot.sendMessage(chatId, '⚠️ Достигнут лимит в 10 ссылок.'); this.pendingLinks.delete(userId); return; }
@@ -313,7 +316,7 @@ export class BotHandler {
   }
 
   async handleAddChannelCommand(chatId: number, userId: number, text: string): Promise<void> {
-    try { const match = text.match(/^\/addchannel\s+(-?\d+)/); if (!match) { await this.bot.sendMessage(chatId, '❌ Неверный формат.\n\nИспользуйте: /addchannel -1001234567890', { reply_markup: this.getMainKeyboard() }); return; } const channelId = parseInt(match[1], 10); const user = await this.db.getUser(userId); if (!user) await this.db.createUser(userId, null); const dbUser = await this.db.getUser(userId); if (!dbUser) { await this.bot.sendMessage(chatId, '❌ Ошибка создания пользователя.', { reply_markup: this.getMainKeyboard() }); return; } await this.db.createChannelSubscription(dbUser.id, channelId, null, null); this.userStates.delete(userId); await this.bot.sendMessage(chatId, `✅ Канал ${channelId} привязан!\n\nТеперь уведомления будут приходить в канал и в личку.`, { reply_markup: this.getMainKeyboard() }); }
+    try { const match = text.match(/^\/addchannel\s+(-?\d+)/); if (!match) { await this.bot.sendMessage(chatId, '❌ Неверный формат.\n\nИспользуйте: /addchannel -1001234567890', { reply_markup: this.getMainKeyboard() }); return; } const channelId = parseInt(match[1], 10); await this.db.createUser(userId, null); const dbUser = await this.db.getUser(userId); if (!dbUser) { await this.bot.sendMessage(chatId, '❌ Ошибка создания пользователя.', { reply_markup: this.getMainKeyboard() }); return; } await this.db.createChannelSubscription(dbUser.id, channelId, null, null); this.userStates.delete(userId); await this.bot.sendMessage(chatId, `✅ Канал ${channelId} привязан!\n\nТеперь уведомления будут приходить в канал и в личку.`, { reply_markup: this.getMainKeyboard() }); }
     catch (error: any) { logger.error('Failed to handle add channel command', { userId, error: error.message, stack: error.stack }); await this.bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`, { reply_markup: this.getMainKeyboard() }); }
   }
 
