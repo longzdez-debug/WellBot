@@ -15,7 +15,10 @@ export function installWebAppBridge(handler: BotHandler): void {
   }
 
   bot.on('message', async (msg: Message) => {
-    const webAppData = (msg as Message & { web_app_data?: { data?: string } }).web_app_data;
+    const webAppData = (msg as Message & {
+      web_app_data?: { data?: string };
+    }).web_app_data;
+
     if (!msg.from || !webAppData?.data) return;
 
     const chatId = msg.chat.id;
@@ -23,7 +26,11 @@ export function installWebAppBridge(handler: BotHandler): void {
 
     try {
       let payload: unknown;
-      try { payload = JSON.parse(webAppData.data); } catch { payload = webAppData.data; }
+      try {
+        payload = JSON.parse(webAppData.data);
+      } catch {
+        payload = webAppData.data;
+      }
 
       const url = typeof payload === 'string'
         ? payload.trim()
@@ -40,14 +47,17 @@ export function installWebAppBridge(handler: BotHandler): void {
       await handler.handleAddLink(chatId, userId, url);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error('HUNT Mini App bridge failed', { userId, error: message });
+      logger.error('HUNT Mini App bridge failed', {
+        userId,
+        error: message,
+      });
       await bot.sendMessage(chatId, '❌ Не удалось добавить мониторинг. Попробуйте ещё раз.');
     }
   });
 
   const webAppUrl = process.env.HUNT_WEBAPP_URL?.trim();
   if (!webAppUrl) {
-    logger.info('HUNT Mini App URL is not configured; web_app button is disabled');
+    logger.info('HUNT Mini App URL is not configured; menu button is disabled');
     return;
   }
 
@@ -70,34 +80,18 @@ export function installWebAppBridge(handler: BotHandler): void {
     web_app: { url: webAppUrl },
   };
 
-  // Primary entry point: Telegram's persistent bot menu button.
+  // Configure the Telegram chat menu as the single primary entry point.
+  // This avoids sending a second /start message and works even when the
+  // user's reply keyboard is stale.
   void bot.setChatMenuButton({ menu_button: menuButton })
     .then(() => logger.info('HUNT Mini App menu button configured', { webAppUrl }))
     .catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to configure HUNT Mini App menu button', { webAppUrl, error: message });
+      logger.error('Failed to configure HUNT Mini App menu button', {
+        webAppUrl,
+        error: message,
+      });
     });
-
-  // Fallback: persistent reply keyboard, refreshed on /start.
-  bot.on('message', async (msg: Message) => {
-    if (!msg.from || msg.text !== '/start' || msg.chat.type !== 'private') return;
-
-    try {
-      const replyMarkup = {
-        keyboard: [[{
-          text: '⚡ Открыть HUNT',
-          web_app: { url: webAppUrl },
-        }]],
-        resize_keyboard: true,
-        persistent: true,
-      } as any;
-
-      await bot.sendMessage(msg.chat.id, '⚡ Открыть HUNT терминал:', { reply_markup: replyMarkup });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to send HUNT WebApp button', { userId: msg.from.id, error: message });
-    }
-  });
 
   logger.info('HUNT Mini App bridge installed', { webAppUrl });
 }
