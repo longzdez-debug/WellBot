@@ -96,27 +96,14 @@ export function installWebAppBridge(handler: BotHandler): void {
       });
   };
 
-  // The Telegram Menu Button is the primary HUNT launcher; it opens the Mini App
-  // without sending a message to the chat.
+  // HUNT is launched only from Telegram's Menu Button.
+  // Do not send an inline web_app button into the chat: that creates a second
+  // launcher message and is not the requested UX.
   configureMenuButton();
 
   bot.on('message', (msg: Message) => {
     if (msg.text === '/start' && msg.chat.type === 'private') {
       configureMenuButton(msg.chat.id);
-
-      // Visible fallback launcher. It uses Telegram's signed Web App launch flow,
-      // so the Mini App keeps strict server-side initData authentication.
-      void bot.sendMessage(msg.chat.id, '⚡ HUNT', {
-        reply_markup: {
-          inline_keyboard: [[{ text: 'Открыть HUNT', web_app: { url: webAppUrl } }]],
-        },
-      }).catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error('Failed to send HUNT launcher', {
-          chatId: msg.chat.id,
-          error: message,
-        });
-      });
     }
   });
 
