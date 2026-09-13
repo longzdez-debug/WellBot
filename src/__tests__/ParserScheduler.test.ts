@@ -50,15 +50,16 @@ describe('ParserScheduler', () => {
         for (const ad of input) ads.set(ad.external_id, { ...ad, id: ads.size + 1 });
         return input.length;
       }),
+      bulkCreateAdsReturning: jest.fn().mockImplementation(async (linkId: number, input: Ad[]) => {
+        const inserted = input.map((ad) => ({ ...ad, id: ads.size + 1, link_id: linkId, created_at: new Date() }));
+        for (const ad of inserted) ads.set(ad.external_id, ad);
+        return inserted;
+      }),
       updateLastParsed: jest.fn().mockResolvedValue(undefined),
       resetErrorCount: jest.fn().mockResolvedValue(undefined),
       getExistingAdExternalIdsForLink: jest.fn().mockResolvedValue(new Set(existingIds)),
       getLastPricesForAds: jest.fn().mockResolvedValue(new Map()),
-      createAd: jest.fn().mockImplementation(async (linkId: number, ad: Ad) => {
-        const created = { ...ad, id: ads.size + 1, link_id: linkId, created_at: new Date() };
-        ads.set(ad.external_id, created);
-        return created;
-      }),
+      createAd: jest.fn(),
       getLink: jest.fn().mockResolvedValue(null),
       incrementErrorCount: jest.fn().mockResolvedValue(undefined),
       markLinkInactive: jest.fn().mockResolvedValue(undefined),
@@ -67,6 +68,7 @@ describe('ParserScheduler', () => {
       createPriceDropRecord: jest.fn(),
       updateAdPrice: jest.fn(),
       enqueueNotification: jest.fn().mockResolvedValue(undefined),
+      enqueueNotifications: jest.fn().mockResolvedValue(undefined),
       claimNotificationJobs: jest.fn().mockResolvedValue([]),
       purgeNotificationOutbox: jest.fn().mockResolvedValue(0),
     };
@@ -85,7 +87,7 @@ describe('ParserScheduler', () => {
     await scheduler.runParsing();
 
     expect(db.bulkCreateAds).toHaveBeenCalledWith(1, ads);
-    expect(db.enqueueNotification).not.toHaveBeenCalled();
+    expect(db.enqueueNotifications).not.toHaveBeenCalled();
   });
 
   test('queues only genuinely new ads after baseline', async () => {
@@ -97,14 +99,16 @@ describe('ParserScheduler', () => {
 
     await scheduler.runParsing();
 
-    expect(db.createAd).toHaveBeenCalledWith(1, ad);
-    expect(db.enqueueNotification).toHaveBeenCalledTimes(1);
-    expect(db.enqueueNotification).toHaveBeenCalledWith(
-      'new_ad',
-      user.telegram_id,
-      `new_ad:user:${user.telegram_id}:new-1`,
-      { ad: expect.objectContaining({ external_id: 'new-1' }) },
-    );
+    expect(db.bulkCreateAdsReturning).toHaveBeenCalledWith(1, [ad]);
+    expect(db.enqueueNotifications).toHaveBeenCalledTimes(1);
+    expect(db.enqueueNotifications).toHaveBeenCalledWith([
+      {
+        kind: 'new_ad',
+        chatId: user.telegram_id,
+        dedupeKey: `new_ad:user:${user.telegram_id}:new-1`,
+        payload: { ad: expect.objectContaining({ external_id: 'new-1' }) },
+      },
+    ]);
     expect(bot.sendNotification).not.toHaveBeenCalled();
   });
 
@@ -117,13 +121,15 @@ describe('ParserScheduler', () => {
 
     await scheduler.runParsing();
 
-    expect(db.createAd).toHaveBeenCalledTimes(2);
-    expect(db.enqueueNotification).toHaveBeenCalledTimes(1);
-    expect(db.enqueueNotification).toHaveBeenCalledWith(
-      'new_ad',
-      user.telegram_id,
-      `new_ad:user:${user.telegram_id}:shared-1`,
-      { ad: expect.objectContaining({ external_id: 'shared-1' }) },
-    );
+    expect(db.bulkCreateAdsReturning).toHaveBeenCalledTimes(2);
+    expect(db.enqueueNotifications).toHaveBeenCalledTimes(1);
+    expect(db.enqueueNotifications).toHaveBeenCalledWith([
+      {
+        kind: 'new_ad',
+        chatId: user.telegram_id,
+        dedupeKey: `new_ad:user:${user.telegram_id}:shared-1`,
+        payload: { ad: expect.objectContaining({ external_id: 'shared-1' }) },
+      },
+    ]);
   });
 });
