@@ -80,30 +80,57 @@ export function installWebAppBridge(handler: BotHandler): void {
     web_app: { url: webAppUrl },
   };
 
-  const configureMenuButton = (chatId?: number): void => {
-    void bot.setChatMenuButton({
-      ...(chatId !== undefined ? { chat_id: chatId } : {}),
-      menu_button: menuButton,
-    })
-      .then(() => logger.info('HUNT Mini App menu button configured', { webAppUrl, chatId }))
-      .catch((error: unknown) => {
+  const configureMenuButton = async (chatId?: number): Promise<void> => {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await bot.setChatMenuButton({
+          ...(chatId !== undefined ? { chat_id: chatId } : {}),
+          menu_button: menuButton,
+        });
+
+        const current = await bot.getChatMenuButton(
+          chatId !== undefined ? { chat_id: chatId } : {},
+        );
+
+        const verified = current?.type === 'web_app'
+          && current.text === menuButton.text
+          && current.web_app?.url === webAppUrl;
+
+        if (verified) {
+          logger.info('HUNT Mini App menu button verified', { webAppUrl, chatId, attempt });
+          return;
+        }
+
+        logger.warn('HUNT Mini App menu button was set but verification did not match', {
+          webAppUrl,
+          chatId,
+          attempt,
+          current,
+        });
+      } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         logger.error('Failed to configure HUNT Mini App menu button', {
           webAppUrl,
           chatId,
+          attempt,
           error: message,
         });
-      });
+      }
+
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
+    }
   };
 
   // HUNT is launched only from Telegram's Menu Button.
   // Do not send an inline web_app button into the chat: that creates a second
   // launcher message and is not the requested UX.
-  configureMenuButton();
+  void configureMenuButton();
 
   bot.on('message', (msg: Message) => {
     if (msg.text === '/start' && msg.chat.type === 'private') {
-      configureMenuButton(msg.chat.id);
+      void configureMenuButton(msg.chat.id);
     }
   });
 
