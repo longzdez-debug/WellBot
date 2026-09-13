@@ -106,25 +106,16 @@ export function installWebAppBridge(handler: BotHandler): void {
       configureMenuButton(msg.chat.id);
 
       // HUNT is the single chat entry point. Remove the legacy reply keyboard
-      // so users do not get a second, duplicated bot interface.
-      void bot.getMe()
-        .then((me) => {
-          if (!me.username) throw new Error('Bot username is unavailable');
-          return bot.sendMessage(msg.chat.id, '⚡ Откройте HUNT кнопкой ниже:', {
-            reply_markup: {
-              remove_keyboard: true,
-            },
-            // Keep the launch control as an inline button, which opens an
-            // authenticated Telegram Mini App WebView with signed initData.
-          }).then(() => bot.sendMessage(msg.chat.id, '⚡ HUNT', {
-            reply_markup: {
-              inline_keyboard: [[{
-                text: '⚡ Открыть HUNT',
-                web_app: { url: webAppUrl },
-              }]],
-            },
-          }));
-        })
+      // and send one launch message with the inline HUNT button.
+      void bot.sendMessage(msg.chat.id, '⚡ Откройте HUNT кнопкой ниже:', {
+        reply_markup: {
+          remove_keyboard: true,
+          inline_keyboard: [[{
+            text: '⚡ Открыть HUNT',
+            web_app: { url: webAppUrl },
+          }]],
+        },
+      })
         .then(() => logger.info('HUNT launch button sent and legacy keyboard removed', { chatId: msg.chat.id }))
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
