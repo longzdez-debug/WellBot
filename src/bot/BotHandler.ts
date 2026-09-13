@@ -44,18 +44,10 @@ export class BotHandler {
     this.setupHandlers();
   }
 
+  // HUNT is the single UI entry point. Keep this as a keyboard-removal
+  // payload because several legacy flows still call getMainKeyboard().
   private getMainKeyboard() {
-    const keyboard: TelegramBot.KeyboardButton[][] = [];
-
-    keyboard.push(
-      [{ text: '➕ Добавить ссылку' }],
-      [{ text: '📋 Мои ссылки' }, { text: '🗑 Удалить все ссылки' }],
-      [{ text: '📊 Статистика' }, { text: '🗑 Очистить объявления' }],
-      [{ text: '📺 Привязать канал' }, { text: '📺 Статус канала' }],
-      [{ text: '📺 Отключить канал' }],
-    );
-
-    return { keyboard, resize_keyboard: true, persistent: true };
+    return { remove_keyboard: true } as TelegramBot.SendMessageOptions['reply_markup'];
   }
 
   private setupHandlers(): void {
@@ -113,7 +105,7 @@ export class BotHandler {
   async handleStart(chatId: number, userId: number, username?: string): Promise<void> {
     try {
       await this.db.createUser(userId, username || null);
-      await this.bot.sendMessage(chatId, '👋 Привет! Я помогу отслеживать новые объявления на Kufar, Onliner и av.by.\n\nИспользуйте кнопки снизу для управления ссылками.', { reply_markup: this.getMainKeyboard() });
+      await this.bot.sendMessage(chatId, '👋 Привет! HUNT отслеживает новые объявления на Kufar, Onliner и av.by.\n\nОткрой HUNT кнопкой ниже или через кнопку меню Telegram.', { reply_markup: this.getMainKeyboard() });
       logger.info('User started bot', { userId, username });
     } catch (error: any) {
       logger.error('Failed to handle /start', { userId, error: error.message });
@@ -274,7 +266,7 @@ export class BotHandler {
     catch (error: any) { logger.error('Failed to confirm clear ads', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Не удалось очистить объявления.'); }
   }
 
-  async handleCancelClearAds(chatId: number): Promise<void> { try { await this.bot.sendMessage(chatId, '❌ Очистка отменена.', { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to cancel clear ads', { error: error.message }); } }
+  async handleCancelClearAds(chatId: number): Promise<void> { try { await this.bot.sendMessage(chatId, '❌ Очистка отменена.', { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to cancel clear ads', { userId: 'unknown', error: 'cancelled' }); } }
 
   async handleCheckLink(chatId: number, userId: number, linkId: number): Promise<void> {
     try {
@@ -303,7 +295,7 @@ export class BotHandler {
   }
 
   async handleAddChannel(chatId: number, userId: number): Promise<void> {
-    try { await this.db.createUser(userId, null); await this.bot.sendMessage(chatId, '📺 Для привязки канала:\n\n1. Добавьте бота в канал как администратора\n2. Отправьте боту сообщение в канал\n3. Бот автоматически привяжет канал\n\nИли отправьте ID канала в формате: /addchannel -1001234567890', { reply_markup: this.getMainKeyboard() }); this.userStates.set(userId, 'awaiting_channel'); }
+    try { await this.db.createUser(userId, null); await this.bot.sendMessage(chatId, '📺 Для привязки канала:\n\n1. Добавьте бота в канал как администратора\n2. Укажите ID канала в HUNT\n3. HUNT проверит права и включит публикацию.\n\nID обычно выглядит так: -1001234567890', { reply_markup: this.getMainKeyboard() }); this.userStates.set(userId, 'awaiting_channel'); }
     catch (error: any) { logger.error('Failed to handle add channel', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); }
   }
 
@@ -313,13 +305,13 @@ export class BotHandler {
   }
 
   async handleChannelStatus(chatId: number, userId: number): Promise<void> {
-    try { let user = await this.db.getUser(userId); if (!user) { await this.db.createUser(userId, null); user = await this.db.getUser(userId); } if (!user) { await this.bot.sendMessage(chatId, '❌ Ошибка.', { reply_markup: this.getMainKeyboard() }); return; } const subscription = await this.db.getActiveChannelSubscription(user.id); if (!subscription) { await this.bot.sendMessage(chatId, '📺 Канал не привязан.\n\nИспользуйте кнопку "Привязать канал" для подключения.', { reply_markup: this.getMainKeyboard() }); return; } const channelInfo = subscription.channel_username ? `@${subscription.channel_username}` : `ID: ${subscription.channel_id}`; await this.bot.sendMessage(chatId, `📺 Привязанный канал:\n${channelInfo}\n\n${subscription.channel_title || ''}`, { reply_markup: this.getMainKeyboard() }); }
+    try { let user = await this.db.getUser(userId); if (!user) { await this.db.createUser(userId, null); user = await this.db.getUser(userId); } if (!user) { await this.bot.sendMessage(chatId, '❌ Ошибка.', { reply_markup: this.getMainKeyboard() }); return; } const subscription = await this.db.getActiveChannelSubscription(user.id); if (!subscription) { await this.bot.sendMessage(chatId, '📺 Канал не привязан.\n\nОткрой HUNT → Канал для подключения.', { reply_markup: this.getMainKeyboard() }); return; } const channelInfo = subscription.channel_username ? `@${subscription.channel_username}` : `ID: ${subscription.channel_id}`; await this.bot.sendMessage(chatId, `📺 Привязанный канал:\n${channelInfo}\n\n${subscription.channel_title || ''}`, { reply_markup: this.getMainKeyboard() }); }
     catch (error: any) { logger.error('Failed to handle channel status', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); }
   }
 
   async handleAddChannelCommand(chatId: number, userId: number, text: string): Promise<void> {
-    try { const match = text.match(/^\/addchannel\s+(-?\d+)/); if (!match) { await this.bot.sendMessage(chatId, '❌ Неверный формат.\n\nИспользуйте: /addchannel -1001234567890', { reply_markup: this.getMainKeyboard() }); return; } const channelId = parseInt(match[1], 10); await this.db.createUser(userId, null); const dbUser = await this.db.getUser(userId); if (!dbUser) { await this.bot.sendMessage(chatId, '❌ Ошибка создания пользователя.', { reply_markup: this.getMainKeyboard() }); return; } await this.db.createChannelSubscription(dbUser.id, channelId, null, null); this.userStates.delete(userId); await this.bot.sendMessage(chatId, `✅ Канал ${channelId} привязан!\n\nТеперь уведомления будут приходить в канал и в личку.`, { reply_markup: this.getMainKeyboard() }); }
-    catch (error: any) { logger.error('Failed to handle add channel command', { userId, error: error.message, stack: error.stack }); await this.bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`, { reply_markup: this.getMainKeyboard() }); }
+    try { const match = text.match(/^\/addchannel\s+(-?\d+)/); if (!match) { await this.bot.sendMessage(chatId, '❌ Неверный формат.\n\nИспользуйте HUNT → Канал.', { reply_markup: this.getMainKeyboard() }); return; } const channelId = parseInt(match[1], 10); await this.db.createUser(userId, null); const dbUser = await this.db.getUser(userId); if (!dbUser) { await this.bot.sendMessage(chatId, '❌ Ошибка создания пользователя.', { reply_markup: this.getMainKeyboard() }); return; } await this.db.createChannelSubscription(dbUser.id, channelId, null, null); this.userStates.delete(userId); await this.bot.sendMessage(chatId, `✅ Канал ${channelId} привязан!\n\nТеперь уведомления будут приходить в канал и в личку.`, { reply_markup: this.getMainKeyboard() }); }
+    catch (error: any) { logger.error('Failed to add channel', { userId, error: error.message, stack: error.stack }); await this.bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`, { reply_markup: this.getMainKeyboard() }); }
   }
 
   async handleClearAds(chatId: number, userId: number): Promise<void> {
