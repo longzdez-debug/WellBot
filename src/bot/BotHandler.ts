@@ -44,29 +44,10 @@ export class BotHandler {
     this.setupHandlers();
   }
 
-  // HUNT is the single UI entry point. A reply-keyboard button is deliberately
-  // plain text: clicking it triggers a private-chat message, and we immediately
-  // replace that interaction with the signed inline Web App launcher.
+  // HUNT is the single UI entry point. Keep this as a keyboard-removal
+  // payload because several legacy flows still call getMainKeyboard().
   private getMainKeyboard() {
-    return {
-      keyboard: [[{ text: '⚡ Открыть HUNT' }]],
-      resize_keyboard: true,
-      persistent: true,
-    };
-  }
-
-  private async sendHuntLaunch(chatId: number): Promise<void> {
-    const webAppUrl = process.env.HUNT_WEBAPP_URL?.trim();
-    if (!webAppUrl) {
-      await this.bot.sendMessage(chatId, '❌ HUNT временно недоступен.');
-      return;
-    }
-    await this.bot.sendMessage(chatId, '⚡ HUNT', {
-      reply_markup: {
-        remove_keyboard: true,
-        inline_keyboard: [[{ text: '⚡ Открыть HUNT', web_app: { url: webAppUrl } }]],
-      },
-    });
+    return { remove_keyboard: true } as TelegramBot.SendMessageOptions['reply_markup'];
   }
 
   private setupHandlers(): void {
@@ -76,7 +57,6 @@ export class BotHandler {
       const userId = msg.from.id;
       if (!this.rateLimiter.isAllowed(userId)) { await this.bot.sendMessage(chatId, '⚠️ Слишком много запросов. Подождите минуту.'); return; }
       if (msg.text === '/start') await this.handleStart(chatId, userId, msg.from.username);
-      else if (msg.text === '⚡ Открыть HUNT') await this.sendHuntLaunch(chatId);
       else if (msg.text === '/clear' || msg.text === '🗑 Очистить объявления') await this.handleClearAds(chatId, userId);
       else if (msg.text === '/stats' || msg.text === '📊 Статистика') await this.handleStats(chatId, userId);
       else if (msg.text === '➕ Добавить ссылку') await this.handleAddLinkButton(chatId, userId);
@@ -119,17 +99,14 @@ export class BotHandler {
   async handleStart(chatId: number, userId: number, username?: string): Promise<void> {
     try {
       await this.db.createUser(userId, username || null);
-      await this.bot.sendMessage(chatId, '👋 Привет! HUNT отслеживает новые объявления на Kufar, Onliner и av.by.\n\nНажми кнопку ⚡ Открыть HUNT ниже.', { reply_markup: this.getMainKeyboard() });
+      await this.bot.sendMessage(chatId, '👋 Привет! HUNT отслеживает новые объявления на Kufar, Onliner и av.by.\n\nОткрой HUNT через кнопку ⚡ HUNT в меню Telegram.', { reply_markup: this.getMainKeyboard() });
       logger.info('User started bot', { userId, username });
     } catch (error: any) { logger.error('Failed to handle /start', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка. Попробуйте позже.'); }
   }
 
   async handleAddLinkButton(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } if (await this.db.getUserLinksCount(user.id) >= 10) { await this.bot.sendMessage(chatId, '⚠️ Достигнут лимит в 10 ссылок. Удалите старые ссылки.'); return; } this.userStates.set(userId, 'awaiting_url'); await this.bot.sendMessage(chatId, '📎 Отправьте ссылку на страницу поиска с фильтрами:\n\n• Kufar.by - страница категории с фильтрами\n• Onliner.by - Барахолка, Авто, Недвижимость\n• av.by - страница поиска с фильтрами\n\n⚠️ Не отправляйте ссылки на конкретные объявления!', { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to handle add link button', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); } }
 
-  async handleAddLink(chatId: number, userId: number, url: string): Promise<void> {
-    try { this.userStates.delete(userId); if (url === '❌ Отмена') { await this.bot.sendMessage(chatId, '❌ Отменено.', { reply_markup: this.getMainKeyboard() }); return; } url = this.normalizeUrl(url); const assessment = LinkAcceptance.assess(url); if (!assessment.ok || !assessment.platform) { await this.bot.sendMessage(chatId, `❌ ${assessment.reason || 'Некорректная ссылка'}\n\nПоддерживаются страницы поиска Kufar, Onliner и av.by.`); return; } await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } const existingLinks = await this.db.getUserLinks(user.id); if (existingLinks.some(link => link.url === url)) { await this.bot.sendMessage(chatId, '⚠️ Эта ссылка уже добавлена!'); return; } await this.bot.sendMessage(chatId, '⏳ Проверяю ссылку...'); const parser = ParserFactory.getParser(assessment.platform); if (!parser) { await this.bot.sendMessage(chatId, '❌ Парсер не найден.'); return; } let testAds: Ad[] = []; try { testAds = await parser.parseUrl(url); if (!testAds.length) { await this.bot.sendMessage(chatId, '❌ По этой ссылке не найдено объявлений.\n\nПопробуйте другую ссылку.'); return; } } catch (error: any) { logger.error('Failed to test parse link', { userId, url, error: error.message }); await this.bot.sendMessage(chatId, mapError(error)); return; } await this.db.createLink(user.id, url, assessment.platform); const platformEmoji: Record<Platform, string> = { kufar: '🟢', onliner: '🔵', av: '🚗' }; await this.bot.sendMessage(chatId, `✅ Ссылка добавлена и работает!\n\n${platformEmoji[assessment.platform]} ${assessment.platform.toUpperCase()}\n${url}\n\nНайдено объявлений: ${testAds.length}\n\nВы получите уведомление о новых объявлениях.`, { reply_markup: this.getMainKeyboard() }); if (this.scheduler) { logger.info('Triggering immediate parse after link add', { userId, url }); this.scheduler.triggerParse(); } const previewAds = NewAdSelector.pick(testAds, 5).reverse(); await this.bot.sendMessage(chatId, `📋 Последние ${previewAds.length} объявлений:`); const formattedAds = await Promise.all(previewAds.map(ad => this.adPresenter.format(ad))); for (const formatted of formattedAds) await this.telegramSender.send(chatId, formatted); logger.info('Link added', { userId, platform: assessment.platform, url, adsFound: testAds.length }); }
-    catch (error: any) { logger.error('Failed to add link', { userId, url, error: error.message, stack: error.stack }); await this.bot.sendMessage(chatId, mapError(error)); }
-  }
+  async handleAddLink(chatId: number, userId: number, url: string): Promise<void> { try { this.userStates.delete(userId); if (url === '❌ Отмена') { await this.bot.sendMessage(chatId, '❌ Отменено.', { reply_markup: this.getMainKeyboard() }); return; } url = this.normalizeUrl(url); const assessment = LinkAcceptance.assess(url); if (!assessment.ok || !assessment.platform) { await this.bot.sendMessage(chatId, `❌ ${assessment.reason || 'Некорректная ссылка'}\n\nПоддерживаются страницы поиска Kufar, Onliner и av.by.`); return; } await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } const existingLinks = await this.db.getUserLinks(user.id); if (existingLinks.some(link => link.url === url)) { await this.bot.sendMessage(chatId, '⚠️ Эта ссылка уже добавлена!'); return; } await this.bot.sendMessage(chatId, '⏳ Проверяю ссылку...'); const parser = ParserFactory.getParser(assessment.platform); if (!parser) { await this.bot.sendMessage(chatId, '❌ Парсер не найден.'); return; } let testAds: Ad[] = []; try { testAds = await parser.parseUrl(url); if (!testAds.length) { await this.bot.sendMessage(chatId, '❌ По этой ссылке не найдено объявлений.\n\nПопробуйте другую ссылку.'); return; } } catch (error: any) { logger.error('Failed to test parse link', { userId, url, error: error.message }); await this.bot.sendMessage(chatId, mapError(error)); return; } await this.db.createLink(user.id, url, assessment.platform); const platformEmoji: Record<Platform, string> = { kufar: '🟢', onliner: '🔵', av: '🚗' }; await this.bot.sendMessage(chatId, `✅ Ссылка добавлена и работает!\n\n${platformEmoji[assessment.platform]} ${assessment.platform.toUpperCase()}\n${url}\n\nНайдено объявлений: ${testAds.length}\n\nВы получите уведомление о новых объявлениях.`, { reply_markup: this.getMainKeyboard() }); if (this.scheduler) { logger.info('Triggering immediate parse after link add', { userId, url }); this.scheduler.triggerParse(); } const previewAds = NewAdSelector.pick(testAds, 5).reverse(); await this.bot.sendMessage(chatId, `📋 Последние ${previewAds.length} объявлений:`); const formattedAds = await Promise.all(previewAds.map(ad => this.adPresenter.format(ad))); for (const formatted of formattedAds) await this.telegramSender.send(chatId, formatted); logger.info('Link added', { userId, platform: assessment.platform, url, adsFound: testAds.length }); } catch (error: any) { logger.error('Failed to add link', { userId, url, error: error.message, stack: error.stack }); await this.bot.sendMessage(chatId, mapError(error)); } }
 
   async handleDirectLink(chatId: number, userId: number, url: string): Promise<void> { try { url = this.normalizeUrl(url); const assessment = LinkAcceptance.assess(url); if (!assessment.ok || !assessment.platform) { await this.bot.sendMessage(chatId, `❌ ${assessment.reason || 'Эта ссылка не поддерживается.'}`); return; } const parser = ParserFactory.getParser(assessment.platform); if (!parser) { await this.bot.sendMessage(chatId, '❌ Парсер не найден.'); return; } await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } if (await this.db.getUserLinksCount(user.id) >= 10) { await this.bot.sendMessage(chatId, '⚠️ Достигнут лимит в 10 ссылок. Удалите старые ссылки.'); return; } const existingLinks = await this.db.getUserLinks(user.id); if (existingLinks.some(link => link.url === url)) { await this.bot.sendMessage(chatId, '⚠️ Эта ссылка уже добавлена в ваш список!'); return; } await this.bot.sendMessage(chatId, '⏳ Проверяю ссылку...'); const testAds = await parser.parseUrl(url); if (!testAds.length) { await this.bot.sendMessage(chatId, '❌ По этой ссылке не найдено объявлений.'); return; } this.pendingLinks.set(userId, url); const platformEmoji: Record<Platform, string> = { kufar: '🟢', onliner: '🔵', av: '🚗' }; await this.bot.sendMessage(chatId, `${platformEmoji[assessment.platform]} ${assessment.platform.toUpperCase()}\n${url}\n\nНайдено объявлений: ${testAds.length}`); const previewAds = NewAdSelector.pick(testAds, 5).reverse(); await this.bot.sendMessage(chatId, '📋 5 самых свежих объявлений:'); const formattedAds = await Promise.all(previewAds.map(ad => this.adPresenter.format(ad))); for (const formatted of formattedAds) await this.telegramSender.send(chatId, formatted); await this.bot.sendMessage(chatId, '❓ Хотите добавить эту ссылку для отслеживания новых объявлений?', { reply_markup: { inline_keyboard: [[{ text: '✅ Добавить эту ссылку', callback_data: 'confirm_add_link' }, { text: '❌ Отмена', callback_data: 'cancel_add_link' }]] } }); logger.info('Direct link preview shown', { userId, platform: assessment.platform, url, adsFound: testAds.length }); } catch (error: any) { logger.error('Failed to handle direct link', { userId, url, error: error.message, stack: error.stack }); await this.bot.sendMessage(chatId, mapError(error)); } }
 
