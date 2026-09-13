@@ -71,10 +71,15 @@
         }
         window.__HUNT_INIT_DATA__ = initData;
         var script = document.createElement('script');
-        script.src = './app.js?v=20260913-10';
+        script.src = './app.js?v=20260913-11';
         script.onload = function () {
           var channelScript = document.createElement('script');
           channelScript.src = './channel.js?v=20260913-2';
+          channelScript.onload = function () {
+            var hotfixScript = document.createElement('script');
+            hotfixScript.src = './hunt-hotfix.js?v=20260913-1';
+            document.body.appendChild(hotfixScript);
+          };
           document.body.appendChild(channelScript);
         };
         script.onerror = function () { showBootError('Не удалось загрузить HUNT. Попробуй открыть его заново из Telegram.'); };
