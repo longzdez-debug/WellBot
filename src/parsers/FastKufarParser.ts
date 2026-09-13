@@ -84,31 +84,38 @@ export class FastKufarParser extends BaseParser {
 
     let requestedBrandSlug = '';
     for (const part of parts) {
-      if (CATEGORY_MAP[part.toLocaleLowerCase('ru-RU')]) {
-        params.cat = CATEGORY_MAP[part.toLocaleLowerCase('ru-RU')];
+      const normalizedPart = part.toLocaleLowerCase('ru-RU');
+      if (CATEGORY_MAP[normalizedPart]) {
+        params.cat = CATEGORY_MAP[normalizedPart];
         continue;
       }
 
       const brandSlug = part.match(/^mt~(.+)$/i)?.[1]?.toLocaleLowerCase('ru-RU');
-      if (brandSlug && BRAND_MAP[brandSlug]) {
-        requestedBrandSlug = brandSlug;
-        params.subcat = BRAND_MAP[brandSlug];
-      }
+      if (brandSlug && BRAND_MAP[brandSlug]) requestedBrandSlug = brandSlug;
     }
 
     const requestedQuery = String(parsed.searchParams.get('query') || '').trim();
     const brandTerms = requestedBrandSlug ? (BRAND_TERMS[requestedBrandSlug] || [requestedBrandSlug]) : [];
     const normalizedBrandTerms = brandTerms.map(normalizeSearchText).filter(Boolean);
+    const normalizedRequestedQuery = normalizeSearchText(requestedQuery);
 
-    // Kufar can return a broad/relevance-ranked page even when a brand filter is present.
-    // If the user did not specify a text query, add the brand as an upstream query so the
-    // newest relevant listings are much more likely to be inside the first 100 results.
-    // The post-filter below remains authoritative and prevents false positives.
-    if (!requestedQuery && requestedBrandSlug) {
-      params.query = BRAND_MAP[requestedBrandSlug];
-    }
+    // Do not send Kufar's brand subcategory value (e.g. subcat=Apple):
+    // current API variants reject it with HTTP 422. Brand matching is enforced
+    // locally, so the monitor remains strict without breaking the request.
+    // A redundant query equal to the selected brand is also omitted; it is
+    // covered by the authoritative local brand filter.
+    const queryMatchesBrand = Boolean(
+      normalizedRequestedQuery && normalizedBrandTerms.some(term => normalizedRequestedQuery === term),
+    );
+    if (queryMatchesBrand) delete params.query;
 
-    const queryTerms = normalizeSearchText(requestedQuery || String(params.query || ''))
+    // For a pure brand URL (mt~apple without query), use a valid text query to
+    // keep the newest matching listings near the first page, while still
+    // validating every returned ad locally.
+    if (!requestedQuery && requestedBrandSlug) params.query = BRAND_MAP[requestedBrandSlug];
+
+    const effectiveQuery = String(params.query || '').trim();
+    const queryTerms = normalizeSearchText(effectiveQuery)
       .split(' ')
       .filter(term => term.length >= 2);
 
@@ -153,15 +160,8 @@ export class FastKufarParser extends BaseParser {
         const ads = rawAds.filter((ad: any) => {
           if (!ad?.ad_id) return false;
           const text = adSearchText(ad);
-
-          if (normalizedBrandTerms.length > 0 && !normalizedBrandTerms.some(term => text.includes(term))) {
-            return false;
-          }
-
-          if (queryTerms.length > 0 && !queryTerms.every(term => text.includes(term))) {
-            return false;
-          }
-
+          if (normalizedBrandTerms.length > 0 && !normalizedBrandTerms.some(term => text.includes(term))) return false;
+          if (queryTerms.length > 0 && !queryTerms.every(term => text.includes(term))) return false;
           return true;
         });
 
