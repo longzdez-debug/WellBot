@@ -30,11 +30,14 @@ async function main() {
   bot.setScheduler(scheduler);
   installWebAppBridge(bot);
 
-  const webPort = Number(process.env.HUNT_WEB_PORT || 0);
+  // The Docker image and compose stack expose port 8080 for the Mini App.
+  // Keep the WebApp enabled by default so a deployment that does not inject
+  // HUNT_WEB_PORT cannot silently publish a Telegram URL that returns 404.
+  const webPort = Number(process.env.HUNT_WEB_PORT || 8080);
   const webServer = webPort > 0 && webPort < 65536
     ? startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN)
     : null;
-  if (!webServer) logger.info('HUNT WebApp server disabled; set HUNT_WEB_PORT to enable it');
+  if (!webServer) logger.error('HUNT WebApp server disabled; HUNT_WEB_PORT must be a valid TCP port');
 
   scheduler.start();
 
