@@ -69,6 +69,11 @@
         window.__HUNT_INIT_DATA__ = initData;
         var script = document.createElement('script');
         script.src = './app.js?v=20260913-8';
+        script.onload = function () {
+          var channelScript = document.createElement('script');
+          channelScript.src = './channel.js?v=20260913-1';
+          document.body.appendChild(channelScript);
+        };
         script.onerror = function () { showBootError('Не удалось загрузить HUNT. Попробуй открыть его заново из Telegram.'); };
         document.body.appendChild(script);
         started = true;
