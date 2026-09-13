@@ -27,6 +27,12 @@ interface ParseResult {
   priceDrops: PriceDrop[];
 }
 
+interface NewAdNotification {
+  ad: Ad;
+  telegramId: number;
+  userId: number;
+}
+
 export class ParserScheduler {
   private readonly db: DatabaseService;
   private readonly bot: BotHandler;
@@ -73,7 +79,7 @@ export class ParserScheduler {
       logger.info('🔄 Parsing cycle started', { linksCount: unique.length, concurrency: this.concurrency });
 
       const results = await this.mapWithConcurrency(unique, this.concurrency, link => this.parseLink(link));
-      const allNew: Array<{ ad: Ad; telegramId: number }> = [];
+      const allNew: NewAdNotification[] = [];
       const allDrops: Array<{ drop: PriceDrop; telegramId: number; userId: number }> = [];
       const userIds = [...new Set(unique.map(link => link.user_id))];
       const entries = await Promise.all(userIds.map(async id => [id, await this.db.getUserById(id)] as const));
@@ -84,7 +90,7 @@ export class ParserScheduler {
         const result = results[i];
         const user = users.get(unique[i].user_id);
         if (!result || !user) continue;
-        for (const ad of result.newAds) allNew.push({ ad, telegramId: user.telegram_id });
+        for (const ad of result.newAds) allNew.push({ ad, telegramId: user.telegram_id, userId: user.id });
         for (const drop of result.priceDrops) allDrops.push({ drop, telegramId: user.telegram_id, userId: user.id });
       }
 
@@ -124,19 +130,35 @@ export class ParserScheduler {
     return results;
   }
 
-  private async notifyNewAds(items: Array<{ ad: Ad; telegramId: number }>): Promise<void> {
-    const groups = new Map<number, Ad[]>();
-    for (const { ad, telegramId } of items) {
-      const group = groups.get(telegramId) ?? [];
-      if (!group.some(item => item.external_id === ad.external_id)) group.push(ad);
+  private async notifyNewAds(items: NewAdNotification[]): Promise<void> {
+    const groups = new Map<number, { userId: number; ads: Ad[] }>();
+    for (const { ad, telegramId, userId } of items) {
+      const group = groups.get(telegramId) ?? { userId, ads: [] };
+      if (!group.ads.some(item => item.external_id === ad.external_id)) group.ads.push(ad);
       groups.set(telegramId, group);
     }
-    await Promise.all([...groups].map(async ([telegramId, ads]) => {
+
+    await Promise.all([...groups].map(async ([telegramId, { userId, ads }]) => {
+      const subscription = await this.db.getActiveChannelSubscription(userId);
       for (const ad of ads) {
-        try { await this.bot.sendNotification(telegramId, ad); }
-        catch (error: unknown) {
+        try {
+          await this.bot.sendNotification(telegramId, ad);
+        } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error);
           logger.error('Failed to send new-ad notification', { telegramId, externalId: ad.external_id, error: message });
+        }
+
+        if (subscription) {
+          try {
+            await this.bot.sendNotification(subscription.channel_id, ad);
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.error('Failed to send new ad to channel', {
+              channelId: subscription.channel_id,
+              externalId: ad.external_id,
+              error: message,
+            });
+          }
         }
       }
     }));
@@ -201,9 +223,6 @@ export class ParserScheduler {
         return { newAds, priceDrops };
       }
 
-      // Existence is scoped to the link: the same marketplace ad can legitimately
-      // belong to several saved searches. Notification deduplication is user-scoped
-      // later, in notifyNewAds().
       const existing = await this.db.getExistingAdExternalIdsForLink(link.id, externalIds);
       const prices = await this.db.getLastPricesForAds(link.id, externalIds);
       const processed = new Set<string>();
