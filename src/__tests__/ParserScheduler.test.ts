@@ -87,8 +87,7 @@ describe('ParserScheduler', () => {
     await scheduler.runParsing();
 
     expect(db.bulkCreateAds).toHaveBeenCalledWith(1, ads);
-    expect(db.enqueueNotifications).toHaveBeenCalledTimes(2);
-    expect(db.enqueueNotifications.mock.calls).toEqual(expect.arrayContaining([[], []]));
+    expect(db.enqueueNotifications).not.toHaveBeenCalled();
   });
 
   test('queues only genuinely new ads after baseline', async () => {
@@ -101,18 +100,15 @@ describe('ParserScheduler', () => {
     await scheduler.runParsing();
 
     expect(db.bulkCreateAdsReturning).toHaveBeenCalledWith(1, [ad]);
-    expect(db.enqueueNotifications).toHaveBeenCalledTimes(2);
-    expect(db.enqueueNotifications.mock.calls).toEqual(expect.arrayContaining([
-      [],
-      [
-        {
-          kind: 'new_ad',
-          chatId: user.telegram_id,
-          dedupeKey: `new_ad:user:${user.telegram_id}:new-1`,
-          payload: { ad: expect.objectContaining({ external_id: 'new-1' }) },
-        },
-      ],
-    ]));
+    expect(db.enqueueNotifications).toHaveBeenCalledTimes(1);
+    expect(db.enqueueNotifications).toHaveBeenCalledWith([
+      {
+        kind: 'new_ad',
+        chatId: user.telegram_id,
+        dedupeKey: `new_ad:user:${user.telegram_id}:new-1`,
+        payload: { ad: expect.objectContaining({ external_id: 'new-1' }) },
+      },
+    ]);
     expect(bot.sendNotification).not.toHaveBeenCalled();
   });
 
@@ -126,17 +122,14 @@ describe('ParserScheduler', () => {
     await scheduler.runParsing();
 
     expect(db.bulkCreateAdsReturning).toHaveBeenCalledTimes(2);
-    expect(db.enqueueNotifications).toHaveBeenCalledTimes(2);
-    expect(db.enqueueNotifications.mock.calls).toEqual(expect.arrayContaining([
-      [],
-      [
-        {
-          kind: 'new_ad',
-          chatId: user.telegram_id,
-          dedupeKey: `new_ad:user:${user.telegram_id}:shared-1`,
-          payload: { ad: expect.objectContaining({ external_id: 'shared-1' }) },
-        },
-      ],
-    ]));
+    expect(db.enqueueNotifications).toHaveBeenCalledTimes(1);
+    expect(db.enqueueNotifications).toHaveBeenCalledWith([
+      {
+        kind: 'new_ad',
+        chatId: user.telegram_id,
+        dedupeKey: `new_ad:user:${user.telegram_id}:shared-1`,
+        payload: { ad: expect.objectContaining({ external_id: 'shared-1' }) },
+      },
+    ]);
   });
 });
