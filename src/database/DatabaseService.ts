@@ -13,6 +13,7 @@ export class DatabaseService {
   private pool: Pool;
   constructor(connectionString:string){this.pool=new Pool({connectionString,max:5,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,statement_timeout:12000,query_timeout:12000,keepAlive:true,keepAliveInitialDelayMillis:10000});this.pool.on('error',(err:Error)=>logger.error('Unexpected database error',{error:err.message}));}
   async initialize():Promise<void>{try{await this.pool.query(readFileSync(join(__dirname,'schema.sql'),'utf-8'));logger.info('Database schema initialized');}catch(error){logger.error('Failed to initialize database',{error});throw error;}}
+  async healthCheck():Promise<{ok:boolean;latencyMs:number}>{const started=Date.now();await this.pool.query('SELECT 1');return{ok:true,latencyMs:Date.now()-started};}
   async close():Promise<void>{await this.pool.end();}
   async createUser(telegramId:number,username:string|null):Promise<User>{const r=await this.pool.query<User>('INSERT INTO users (telegram_id, username) VALUES ($1,$2) ON CONFLICT (telegram_id) DO UPDATE SET username=COALESCE(EXCLUDED.username, users.username) RETURNING *',[telegramId,username]);return r.rows[0];}
   async getUser(telegramId:number):Promise<User|null>{const r=await this.pool.query<User>('SELECT * FROM users WHERE telegram_id=$1',[telegramId]);return r.rows[0]||null;}
@@ -58,5 +59,5 @@ export class DatabaseService {
   async discardNotification(id:number,errorMessage:string):Promise<void>{await this.pool.query('DELETE FROM notification_outbox WHERE id=$1 AND sent_at IS NULL',[id]);logger.warn('Notification discarded after retry limit',{jobId:id,error:errorMessage.slice(0,500)});}
   async releaseNotificationLease(id:number):Promise<void>{await this.pool.query('UPDATE notification_outbox SET locked_until=NULL WHERE id=$1 AND sent_at IS NULL',[id]);}
   async getPendingNotificationCount():Promise<number>{const r=await this.pool.query<{count:string}>('SELECT COUNT(*) AS count FROM notification_outbox WHERE sent_at IS NULL',[]);return Number(r.rows[0]?.count||0);}
-  async purgeNotificationOutbox(retentionDays=14):Promise<number>{const days=Math.min(Math.max(Math.floor(retentionDays),1),365);const r=await this.pool.query('DELETE FROM notification_outbox WHERE sent_at IS NOT NULL AND created_at < CURRENT_TIMESTAMP - ($1::int * INTERVAL \'1 day\')',[days]);return r.rowCount||0;}
+  async purgeNotificationOutbox(retentionDays=14):Promise<number>{const safeDays=Math.min(Math.max(Math.floor(retentionDays),1),365);const r=await this.pool.query('DELETE FROM notification_outbox WHERE sent_at IS NOT NULL AND sent_at < CURRENT_TIMESTAMP - ($1::int * INTERVAL \'1 day\')',[safeDays]);return r.rowCount||0;}
 }
