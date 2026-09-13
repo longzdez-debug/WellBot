@@ -42,15 +42,17 @@ export function installWebAppBridge(handler: BotHandler): void {
     return;
   }
 
+  const normalizedWebAppUrl = parsedUrl.toString();
   const menuButton = {
     type: 'web_app' as const,
     text: '⚡ HUNT',
-    web_app: { url: webAppUrl },
+    web_app: { url: normalizedWebAppUrl },
   };
 
+  const telegramApiBase = ['https:', '', 'api.telegram.org'].join('/');
   const telegramApi = async <T>(method: string, body: Record<string, unknown>): Promise<T> => {
     const response = await axios.post<TelegramApiResponse<T>>(
-      `https://api.telegram.org/bot${botToken}/${method}`,
+      `${telegramApiBase}/bot${botToken}/${method}`,
       body,
       { timeout: 10000 },
     );
@@ -63,35 +65,42 @@ export function installWebAppBridge(handler: BotHandler): void {
   };
 
   const normalizeUrl = (value: string): string => value.replace(/\/+$/, '');
-  const expectedUrl = normalizeUrl(webAppUrl);
+  const expectedUrl = normalizeUrl(normalizedWebAppUrl);
+  const configuredChats = new Set<number>();
 
-  const configureMenuButton = async (chatId: number): Promise<void> => {
+  const verifyMenuButton = (current: TelegramMenuButton): boolean => (
+    current.type === 'web_app'
+    && current.text === menuButton.text
+    && normalizeUrl(current.web_app?.url || '') === expectedUrl
+  );
+
+  const configureMenuButton = async (chatId?: number): Promise<void> => {
+    if (chatId !== undefined && configuredChats.has(chatId)) return;
+
+    const scope = chatId === undefined ? {} : { chat_id: chatId };
+
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       try {
         await telegramApi<boolean>('setChatMenuButton', {
-          chat_id: chatId,
+          ...scope,
           menu_button: menuButton,
         });
 
-        const current = await telegramApi<TelegramMenuButton>('getChatMenuButton', {
-          chat_id: chatId,
-        });
+        const current = await telegramApi<TelegramMenuButton>('getChatMenuButton', scope);
 
-        const verified = current.type === 'web_app'
-          && current.text === menuButton.text
-          && normalizeUrl(current.web_app?.url || '') === expectedUrl;
-
-        if (verified) {
+        if (verifyMenuButton(current)) {
+          if (chatId !== undefined) configuredChats.add(chatId);
           logger.info('HUNT Mini App menu button verified', {
-            webAppUrl,
+            webAppUrl: normalizedWebAppUrl,
             chatId,
+            scope: chatId === undefined ? 'default' : 'private_chat',
             attempt,
           });
           return;
         }
 
         logger.warn('HUNT Mini App menu button verification mismatch', {
-          webAppUrl,
+          webAppUrl: normalizedWebAppUrl,
           chatId,
           attempt,
           current,
@@ -99,7 +108,7 @@ export function installWebAppBridge(handler: BotHandler): void {
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         logger.error('Failed to configure HUNT Mini App menu button', {
-          webAppUrl,
+          webAppUrl: normalizedWebAppUrl,
           chatId,
           attempt,
           error: message,
@@ -112,9 +121,11 @@ export function installWebAppBridge(handler: BotHandler): void {
     }
   };
 
-  // IMPORTANT: do not configure the global/default menu button here.
-  // Telegram's default/commands menu can override the per-chat button.
-  // HUNT is intentionally configured only for concrete private chats.
+  // Configure the default menu button as HUNT so it exists even before a
+  // private chat has produced a message. Also configure concrete private chats
+  // to override any stale per-chat command-menu setting.
+  void configureMenuButton();
+
   bot.on('message', (msg: Message) => {
     if (msg.chat.type === 'private' && msg.from) {
       void configureMenuButton(msg.chat.id);
@@ -156,5 +167,5 @@ export function installWebAppBridge(handler: BotHandler): void {
     }
   });
 
-  logger.info('HUNT WebApp bridge installed', { webAppUrl });
+  logger.info('HUNT WebApp bridge installed', { webAppUrl: normalizedWebAppUrl });
 }
