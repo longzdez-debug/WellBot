@@ -1,15 +1,16 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" style="background:#07090b!important;background-color:#07090b!important;color-scheme:dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07090b" />
   <meta name="color-scheme" content="dark" />
   <meta name="mobile-web-app-capable" content="yes" />
+  <style>html,body{margin:0!important;background:#07090b!important;background-color:#07090b!important;color:#f4f7f5!important;color-scheme:dark!important}html{min-height:100%;overscroll-behavior:none}body{min-height:100vh}</style>
   <title>HUNT — Reseller Radar</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20260913-10" />
+  <link rel="stylesheet" href="./styles.css?v=20260913-11" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -30,6 +31,14 @@
     (function bootHunt() {
       var started = false;
       var deadline = Date.now() + 15000;
+      function forceTelegramTheme(webApp) {
+        try {
+          if (!webApp) return;
+          if (typeof webApp.setBackgroundColor === 'function') webApp.setBackgroundColor('#07090b');
+          if (typeof webApp.setHeaderColor === 'function') webApp.setHeaderColor('#07090b');
+          if (typeof webApp.setBottomBarColor === 'function') webApp.setBottomBarColor('#07090b');
+        } catch (_) {}
+      }
       function showBootError(message) {
         if (started) return;
         started = true;
@@ -59,7 +68,9 @@
           if (Date.now() < deadline) return setTimeout(start, 50);
           return showBootError('Telegram WebApp SDK не загрузился. Закрой HUNT и открой его кнопкой ⚡ HUNT в Telegram.');
         }
+        forceTelegramTheme(webApp);
         try { webApp.ready(); webApp.expand(); } catch (_) {}
+        forceTelegramTheme(webApp);
         var initData = readInitData(webApp);
         if (!initData) {
           if (Date.now() < deadline) return setTimeout(start, 100);
