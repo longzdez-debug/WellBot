@@ -129,9 +129,20 @@ export class TelegramSender {
   }
 
   async send(chatId: number, formatted: FormattedAd): Promise<void> {
-    for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt += 1) {
+    const startedAt = Date.now();
+    let attempt = 0;
+    for (; attempt <= this.MAX_RETRIES; attempt += 1) {
       try {
+        const attemptStartedAt = Date.now();
         await this.sendOnce(chatId, formatted);
+        const completedAt = Date.now();
+        logger.info('⚡ TELEGRAM DELIVERY', {
+          chatId,
+          durationMs: completedAt - startedAt,
+          attempt: attempt + 1,
+          attemptDurationMs: completedAt - attemptStartedAt,
+          completedAt: new Date(completedAt).toISOString(),
+        });
         return;
       } catch (error: any) {
         const statusCode = this.getStatusCode(error);
@@ -145,7 +156,7 @@ export class TelegramSender {
           logger.warn('User blocked the bot', { chatId });
           return;
         }
-        logger.error('Failed to send Telegram message', { chatId, error: error.message, statusCode });
+        logger.error('Failed to send Telegram message', { chatId, error: error.message, statusCode, durationMs: Date.now() - startedAt, attempts: attempt + 1 });
         throw error;
       }
     }
