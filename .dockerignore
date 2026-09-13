@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log*
+.git
+.github
+.kiro
+.env
+.env.*
+coverage
+*.log
+.DS_Store
