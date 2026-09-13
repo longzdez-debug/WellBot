@@ -8,69 +8,77 @@ class FakeBot {
   sendVenue = jest.fn(async () => ({}));
 }
 
-function makeAd(media: string[] = []): FormattedAd {
-  return { text: 'test ad', media };
+const adUrl = ['https:', '', 'example.test', 'ad', '1'].join('/');
+const imageOne = ['https:', '', 'img.test', '1'].join('/');
+const imageTwo = ['https:', '', 'img.test', '2'].join('/');
+
+function makeAd(media: string[] = [], url = adUrl): FormattedAd {
+  return { text: `test ad\n🔗 ${url}`, media };
 }
 
 describe('TelegramSender', () => {
-  test('sends media group with HTML caption for a single image', async () => {
+  test('sends a single photo with an open-ad button', async () => {
     const bot = new FakeBot();
     const sender = new TelegramSender(bot as any);
-
-    await sender.send(123, makeAd(['http://img/1']));
-
-    expect(bot.sendMediaGroup).toHaveBeenCalledWith(123, [
-      { type: 'photo', media: 'http://img/1', caption: 'test ad', parse_mode: 'HTML' },
-    ]);
-    expect(bot.sendPhoto).not.toHaveBeenCalled();
+    await sender.send(123, makeAd([imageOne]));
+    expect(bot.sendPhoto).toHaveBeenCalledWith(123, imageOne, {
+      caption: `test ad\n🔗 ${adUrl}`,
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[{ text: '⚡ Открыть объявление', url: adUrl }]] },
+    });
+    expect(bot.sendMediaGroup).not.toHaveBeenCalled();
     expect(bot.sendMessage).not.toHaveBeenCalled();
   });
 
-  test('sends media group when there are several photos', async () => {
+  test('sends a media group and a link button for several photos', async () => {
     const bot = new FakeBot();
     const sender = new TelegramSender(bot as any);
-
-    await sender.send(123, makeAd(['http://img/1', 'http://img/2']));
-
+    await sender.send(123, makeAd([imageOne, imageTwo]));
     expect(bot.sendMediaGroup).toHaveBeenCalledWith(123, [
-      { type: 'photo', media: 'http://img/1', caption: 'test ad', parse_mode: 'HTML' },
-      { type: 'photo', media: 'http://img/2', caption: undefined, parse_mode: undefined },
+      { type: 'photo', media: imageOne, caption: `test ad\n🔗 ${adUrl}`, parse_mode: 'HTML' },
+      { type: 'photo', media: imageTwo, caption: undefined, parse_mode: undefined },
     ]);
-    expect(bot.sendPhoto).not.toHaveBeenCalled();
+    expect(bot.sendMessage).toHaveBeenCalledWith(123, '🔗 Ссылка на объявление', {
+      reply_markup: { inline_keyboard: [[{ text: '⚡ Открыть объявление', url: adUrl }]] },
+    });
   });
 
-  test('sends just text when no media', async () => {
+  test('sends text with an open-ad button when there is no media', async () => {
     const bot = new FakeBot();
     const sender = new TelegramSender(bot as any);
-
     await sender.send(123, makeAd([]));
-
-    expect(bot.sendMessage).toHaveBeenCalledWith(123, 'test ad', { parse_mode: 'HTML' });
+    expect(bot.sendMessage).toHaveBeenCalledWith(123, `test ad\n🔗 ${adUrl}`, {
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[{ text: '⚡ Открыть объявление', url: adUrl }]] },
+    });
     expect(bot.sendPhoto).not.toHaveBeenCalled();
     expect(bot.sendMediaGroup).not.toHaveBeenCalled();
   });
 
-  test('falls back to a text notification when sendMediaGroup fails with 400', async () => {
+  test('does not create a button for malformed URLs', async () => {
     const bot = new FakeBot();
-    bot.sendMediaGroup.mockRejectedValueOnce({
-      response: { statusCode: 400, body: { description: 'bad request' } },
-    });
     const sender = new TelegramSender(bot as any);
+    await sender.send(123, makeAd([], 'not-a-url'));
+    expect(bot.sendMessage).toHaveBeenCalledWith(123, 'test ad\n🔗 not-a-url', { parse_mode: 'HTML', reply_markup: undefined });
+  });
 
-    await sender.send(123, makeAd(['http://img/1', 'http://img/2']));
-
+  test('falls back to text when a media group is rejected', async () => {
+    const bot = new FakeBot();
+    bot.sendMediaGroup.mockRejectedValueOnce({ response: { statusCode: 400, body: { description: 'bad request' } } });
+    const sender = new TelegramSender(bot as any);
+    await sender.send(123, makeAd([imageOne, imageTwo]));
     expect(bot.sendMediaGroup).toHaveBeenCalledTimes(1);
-    expect(bot.sendMessage).toHaveBeenCalledWith(123, 'test ad', { parse_mode: 'HTML' });
-    expect(bot.sendPhoto).not.toHaveBeenCalled();
+    expect(bot.sendMessage).toHaveBeenCalledWith(123, `test ad\n🔗 ${adUrl}`, {
+      parse_mode: 'HTML',
+      reply_markup: { inline_keyboard: [[{ text: '⚡ Открыть объявление', url: adUrl }]] },
+    });
   });
 
   test('sendBatch sends all messages sequentially', async () => {
     const bot = new FakeBot();
     const sender = new TelegramSender(bot as any);
-
-    await sender.sendBatch(123, [makeAd(['http://img/1']), makeAd(['http://img/2'])]);
-
-    expect(bot.sendMediaGroup).toHaveBeenCalledTimes(2);
-    expect(bot.sendPhoto).not.toHaveBeenCalled();
+    await sender.sendBatch(123, [makeAd([imageOne]), makeAd([imageTwo])]);
+    expect(bot.sendPhoto).toHaveBeenCalledTimes(2);
+    expect(bot.sendMediaGroup).not.toHaveBeenCalled();
   });
 });
