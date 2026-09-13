@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS notification_outbox (
   id BIGSERIAL PRIMARY KEY,
   kind VARCHAR(32) NOT NULL,
   chat_id BIGINT NOT NULL,
-  dedupe_key TEXT NOT NULL UNIQUE,
+  dedupe_key TEXT NOT NULL,
   payload JSONB NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0,
   available_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -152,3 +152,13 @@ CREATE INDEX IF NOT EXISTS idx_notification_outbox_pending
 CREATE INDEX IF NOT EXISTS idx_notification_outbox_locked
   ON notification_outbox(locked_until, id)
   WHERE sent_at IS NULL;
+
+-- Migration for installations created before dedupe_key was enforced.
+-- Keep the oldest job for each key, then make the invariant database-level.
+DELETE FROM notification_outbox a
+USING notification_outbox b
+WHERE a.id > b.id
+  AND a.dedupe_key = b.dedupe_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_outbox_dedupe_key
+  ON notification_outbox(dedupe_key);
