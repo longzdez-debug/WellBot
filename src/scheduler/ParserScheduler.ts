@@ -192,43 +192,93 @@ export class ParserScheduler {
     }));
   }
 
+  private isValidAd(ad: Ad | null | undefined): ad is Ad {
+    if (!ad) return false;
+    const externalId = typeof ad.external_id === 'string' ? ad.external_id.trim() : '';
+    const title = typeof ad.title === 'string' ? ad.title.trim() : '';
+    const adUrl = typeof ad.ad_url === 'string' ? ad.ad_url.trim() : '';
+    if (!externalId || !title || !adUrl) return false;
+    try {
+      const parsed = new URL(adUrl);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  private normalizeAds(rawAds: Ad[]): Ad[] {
+    const valid: Ad[] = [];
+    const seen = new Set<string>();
+    for (const ad of rawAds) {
+      if (!this.isValidAd(ad)) continue;
+      const externalId = ad.external_id.trim();
+      if (seen.has(externalId)) continue;
+      seen.add(externalId);
+      valid.push({ ...ad, external_id: externalId, title: ad.title.trim(), ad_url: ad.ad_url.trim() });
+    }
+    return valid;
+  }
+
   private async parseLink(link: ParseLink): Promise<ParseResult> {
     const newAds: Ad[] = [];
     const priceDrops: PriceDrop[] = [];
     try {
       const parser = ParserFactory.getParser(link.platform);
-      if (!parser) return { newAds, priceDrops };
+      if (!parser) {
+        await this.recordLinkFailure(link, `No parser configured for platform ${link.platform}`);
+        return { newAds, priceDrops };
+      }
 
-      let ads: Ad[];
+      let rawAds: Ad[];
       try {
-        ads = await this.withTimeout(parser.parseUrl(link.url), 9000, 'Parse timeout after 9 seconds');
+        rawAds = await this.withTimeout(parser.parseUrl(link.url), 9000, 'Parse timeout after 9 seconds');
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         await this.recordLinkFailure(link, message);
         return { newAds, priceDrops };
       }
-      if (!Array.isArray(ads)) {
+      if (!Array.isArray(rawAds)) {
         await this.recordLinkFailure(link, 'Parser returned a non-array result');
         return { newAds, priceDrops };
       }
 
+      const ads = this.normalizeAds(rawAds);
       const baseline = !link.last_parsed_at;
-      const externalIds = [...new Set(ads.filter(ad => ad?.external_id).map(ad => String(ad.external_id)))];
+
+      // Empty is valid for a brand-new/legitimate quiet monitor, but must not be
+      // treated as a healthy parse after the monitor has been established. Keeping
+      // last_parsed_at unchanged prevents a broken parser response from advancing
+      // the checkpoint and hiding listings on the next recovery cycle.
+      if (!baseline && rawAds.length > 0 && ads.length === 0) {
+        await this.recordLinkFailure(link, 'Parser returned only invalid/malformed ads');
+        return { newAds, priceDrops };
+      }
 
       if (baseline) {
         const created = await this.db.bulkCreateAds(link.id, ads);
         await this.db.updateLastParsed(link.id);
         if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
-        logger.info('Baseline snapshot stored; no notifications sent', { linkId: link.id, adsFound: externalIds.length, adsInserted: created });
+        logger.info('Baseline snapshot stored; no notifications sent', { linkId: link.id, adsFound: ads.length, adsInserted: created, emptyResult: ads.length === 0 });
         return { newAds, priceDrops };
       }
 
+      if (ads.length === 0) {
+        logger.warn('Established monitor returned empty result; checkpoint preserved', {
+          linkId: link.id,
+          platform: link.platform,
+          url: link.url,
+          rawAdsCount: rawAds.length,
+        });
+        return { newAds, priceDrops };
+      }
+
+      const externalIds = ads.map(ad => ad.external_id);
       const existing = await this.db.getExistingAdExternalIdsForLink(link.id, externalIds);
       const prices = await this.db.getLastPricesForAds(link.id, externalIds);
       const processed = new Set<string>();
       for (const adData of ads) {
-        const id = adData?.external_id;
-        if (!id || processed.has(id)) continue;
+        const id = adData.external_id;
+        if (processed.has(id)) continue;
         processed.add(id);
         if (existing.has(id)) {
           const last = prices.get(id);
