@@ -10,6 +10,12 @@ const CATEGORY_MAP: Record<string, string> = {
   uchastok: '1050', kommercheskaya: '1060', garazh: '1040', mebel: '15040', velosipedy: '8030',
 };
 
+const BRAND_MAP: Record<string, string> = {
+  apple: 'Apple', samsung: 'Samsung', xiaomi: 'Xiaomi', huawei: 'Huawei', honor: 'Honor',
+  nokia: 'Nokia', realme: 'Realme', oppo: 'OPPO', vivo: 'Vivo', oneplus: 'OnePlus',
+  google: 'Google', tecno: 'Tecno', infinix: 'Infinix',
+};
+
 const REGION_MAP: Record<string, string> = {
   minsk: '7', brest: '1', vitebsk: '6', gomel: '2', grodno: '3', mogilev: '4',
   'minskaya-oblast': '5', 'brestskaya-oblast': '1', 'vitebskaya-oblast': '6',
@@ -39,6 +45,8 @@ export class FastKufarParser extends BaseParser {
 
     for (const part of parts) {
       if (CATEGORY_MAP[part]) { params.cat = CATEGORY_MAP[part]; break; }
+      const brandSlug = part.match(/^mt~(.+)$/)?.[1];
+      if (brandSlug && BRAND_MAP[brandSlug]) params.subcat = BRAND_MAP[brandSlug];
     }
 
     const gtsy = parsed.searchParams.get('gtsy');
@@ -68,7 +76,7 @@ export class FastKufarParser extends BaseParser {
       try {
         const response = await this.axiosInstance.get(endpoint, {
           params,
-          timeout: 7000,
+          timeout: 6000,
           headers: {
             Host: new URL(endpoint).host,
             'User-Agent': this.getRandomUserAgent(),
@@ -78,6 +86,7 @@ export class FastKufarParser extends BaseParser {
         });
 
         const ads = Array.isArray(response.data?.ads) ? response.data.ads : [];
+        logger.debug('Kufar hot-path page received', { count: ads.length });
         return ads.filter((ad: any) => ad?.ad_id).map((ad: any) => {
           let price = 'Договорная';
           if (ad.price_byn != null) price = `${(Number(ad.price_byn) / 100).toFixed(2)} BYN`;
