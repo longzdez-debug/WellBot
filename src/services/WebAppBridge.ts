@@ -48,8 +48,6 @@ export function installWebAppBridge(handler: BotHandler): void {
     web_app: { url: webAppUrl },
   };
 
-  // Use the Bot API directly for menu configuration. This avoids depending on
-  // node-telegram-bot-api's serialization of the newer MenuButtonWebApp type.
   const telegramApi = async <T>(method: string, body: Record<string, unknown>): Promise<T> => {
     const response = await axios.post<TelegramApiResponse<T>>(
       `https://api.telegram.org/bot${botToken}/${method}`,
@@ -64,20 +62,24 @@ export function installWebAppBridge(handler: BotHandler): void {
     return response.data.result;
   };
 
-  const configureMenuButton = async (chatId?: number): Promise<void> => {
-    const scope = chatId !== undefined ? { chat_id: chatId } : {};
+  const normalizeUrl = (value: string): string => value.replace(/\/+$/, '');
+  const expectedUrl = normalizeUrl(webAppUrl);
 
+  const configureMenuButton = async (chatId: number): Promise<void> => {
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       try {
         await telegramApi<boolean>('setChatMenuButton', {
-          ...scope,
+          chat_id: chatId,
           menu_button: menuButton,
         });
 
-        const current = await telegramApi<TelegramMenuButton>('getChatMenuButton', scope);
+        const current = await telegramApi<TelegramMenuButton>('getChatMenuButton', {
+          chat_id: chatId,
+        });
+
         const verified = current.type === 'web_app'
           && current.text === menuButton.text
-          && current.web_app?.url === webAppUrl;
+          && normalizeUrl(current.web_app?.url || '') === expectedUrl;
 
         if (verified) {
           logger.info('HUNT Mini App menu button verified', {
@@ -110,10 +112,9 @@ export function installWebAppBridge(handler: BotHandler): void {
     }
   };
 
-  // Configure the bot-wide default and then override the concrete private chat
-  // as soon as Telegram gives us a message from that chat.
-  void configureMenuButton();
-
+  // IMPORTANT: do not configure the global/default menu button here.
+  // Telegram's default/commands menu can override the per-chat button.
+  // HUNT is intentionally configured only for concrete private chats.
   bot.on('message', (msg: Message) => {
     if (msg.chat.type === 'private' && msg.from) {
       void configureMenuButton(msg.chat.id);
