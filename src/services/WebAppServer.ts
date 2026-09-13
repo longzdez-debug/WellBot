@@ -89,15 +89,16 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
         }
         const initData = req.headers['x-telegram-init-data'];
         const auth = parseTelegramInitData(typeof initData === 'string' ? initData : '', botToken);
-        if (!auth) { json(res, 401, { error: 'unauthorized' }); return; }
+        if (!auth) { logger.warn('HUNT API unauthorized request'); json(res, 401, { error: 'unauthorized' }); return; }
         const user = await db.getUser(auth.user.id);
-        if (!user) { json(res, 403, { error: 'user_not_registered' }); return; }
+        if (!user) { logger.warn('HUNT API user not registered', { telegramId: auth.user.id }); json(res, 403, { error: 'user_not_registered' }); return; }
 
         if (requestPath === '/api/bootstrap' && req.method === 'GET') {
           const [links, ads, priceDrops, stats, statsByLink] = await Promise.all([
             db.getUserLinks(user.id), db.getDashboardAds(user.id, 50), db.getDashboardPriceDrops(user.id, 30),
             db.getDashboardStats(user.id), db.getUserAdsCount(user.id),
           ]);
+          logger.info('HUNT bootstrap', { telegramId: auth.user.id, dbUserId: user.id, links: links.length, ads: ads.length, priceDrops: priceDrops.length, totalLinks: stats.totalLinks, activeLinks: stats.activeLinks });
           json(res, 200, { user: { id: user.id, telegramId: user.telegram_id, username: user.username }, links, ads, priceDrops, stats, statsByLink, serverTime: new Date().toISOString() });
           return;
         }
@@ -134,7 +135,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (message === 'body_too_large') { json(res, 413, { error: 'body_too_large' }); return; }
-      if (requestPath.startsWith('/api/')) { json(res, 500, { error: 'internal_error' }); return; }
+      if (requestPath.startsWith('/api/')) { logger.error('HUNT API request failed', { requestPath, error: message }); json(res, 500, { error: 'internal_error' }); return; }
       res.statusCode = 404;
       applySecurityHeaders(res);
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
