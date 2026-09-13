@@ -4,9 +4,11 @@ import { BotHandler } from './bot/BotHandler';
 import { installWebAppBridge } from './services/WebAppBridge';
 import { ParserScheduler } from './scheduler/ParserScheduler';
 import { startWebAppServer } from './services/WebAppServer';
+import { installRuntimeGuards } from './services/RuntimeGuards';
 import { logger } from './utils/logger';
 
 dotenv.config();
+installRuntimeGuards();
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
