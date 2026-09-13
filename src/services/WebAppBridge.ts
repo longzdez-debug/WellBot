@@ -81,7 +81,7 @@ export function installWebAppBridge(handler: BotHandler): void {
   };
 
   const configureMenuButton = async (chatId?: number): Promise<void> => {
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
       try {
         await bot.setChatMenuButton({
           ...(chatId !== undefined ? { chat_id: chatId } : {}),
@@ -101,7 +101,7 @@ export function installWebAppBridge(handler: BotHandler): void {
           return;
         }
 
-        logger.warn('HUNT Mini App menu button was set but verification did not match', {
+        logger.warn('HUNT Mini App menu button verification mismatch', {
           webAppUrl,
           chatId,
           attempt,
@@ -117,16 +117,21 @@ export function installWebAppBridge(handler: BotHandler): void {
         });
       }
 
-      if (attempt < 3) {
-        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      if (attempt < 5) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
       }
     }
   };
 
-  // HUNT is launched only from Telegram's Menu Button.
-  // Do not send an inline web_app button into the chat: that creates a second
-  // launcher message and is not the requested UX.
+  // Telegram's Menu Button is the ONLY launcher for HUNT.
+  // Do not add a reply-keyboard or inline launcher.
   void configureMenuButton();
+
+  // Re-apply the default and the concrete private-chat override after startup.
+  // This also handles bots where Telegram/client state was initialized before
+  // the polling connection became ready.
+  setTimeout(() => void configureMenuButton(), 3000);
+  setTimeout(() => void configureMenuButton(), 10000);
 
   bot.on('message', (msg: Message) => {
     if (msg.text === '/start' && msg.chat.type === 'private') {
