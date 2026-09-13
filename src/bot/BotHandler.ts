@@ -44,10 +44,33 @@ export class BotHandler {
     this.setupHandlers();
   }
 
-  // HUNT is the single UI entry point. Keep this as a keyboard-removal
-  // payload because several legacy flows still call getMainKeyboard().
+  // HUNT is the single UI entry point. The reply keyboard contains only the
+  // HUNT launcher; it never embeds the Web App itself because Telegram's
+  // reply-keyboard WebView does not provide the signed initData we require.
   private getMainKeyboard() {
-    return { remove_keyboard: true } as TelegramBot.SendMessageOptions['reply_markup'];
+    return {
+      keyboard: [[{ text: '⚡ Открыть HUNT' }]],
+      resize_keyboard: true,
+      persistent: true,
+    };
+  }
+
+  private async sendHuntLaunch(chatId: number): Promise<void> {
+    const webAppUrl = process.env.HUNT_WEBAPP_URL?.trim();
+    if (!webAppUrl) {
+      await this.bot.sendMessage(chatId, '❌ HUNT временно недоступен.');
+      return;
+    }
+
+    await this.bot.sendMessage(chatId, '⚡ HUNT', {
+      reply_markup: {
+        remove_keyboard: true,
+        inline_keyboard: [[{
+          text: '⚡ Открыть HUNT',
+          web_app: { url: webAppUrl },
+        }]],
+      },
+    });
   }
 
   private setupHandlers(): void {
@@ -59,6 +82,7 @@ export class BotHandler {
         await this.bot.sendMessage(chatId, '⚠️ Слишком много запросов. Подождите минуту.'); return;
       }
       if (msg.text === '/start') await this.handleStart(chatId, userId, msg.from.username);
+      else if (msg.text === '⚡ Открыть HUNT') await this.sendHuntLaunch(chatId);
       else if (msg.text === '/clear' || msg.text === '🗑 Очистить объявления') await this.handleClearAds(chatId, userId);
       else if (msg.text === '/stats' || msg.text === '📊 Статистика') await this.handleStats(chatId, userId);
       else if (msg.text === '➕ Добавить ссылку') await this.handleAddLinkButton(chatId, userId);
@@ -105,7 +129,7 @@ export class BotHandler {
   async handleStart(chatId: number, userId: number, username?: string): Promise<void> {
     try {
       await this.db.createUser(userId, username || null);
-      await this.bot.sendMessage(chatId, '👋 Привет! HUNT отслеживает новые объявления на Kufar, Onliner и av.by.\n\nОткрой HUNT кнопкой ниже или через кнопку меню Telegram.', { reply_markup: this.getMainKeyboard() });
+      await this.bot.sendMessage(chatId, '👋 Привет! HUNT отслеживает новые объявления на Kufar, Onliner и av.by.\n\nНажми кнопку ⚡ Открыть HUNT ниже.', { reply_markup: this.getMainKeyboard() });
       logger.info('User started bot', { userId, username });
     } catch (error: any) {
       logger.error('Failed to handle /start', { userId, error: error.message });
