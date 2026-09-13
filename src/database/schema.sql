@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS links (
 CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id);
 CREATE INDEX IF NOT EXISTS idx_links_active ON links(is_active) WHERE is_active = true;
 
--- Remove duplicate legacy rows before enforcing user+URL uniqueness.
 DELETE FROM links a
 USING links b
 WHERE a.id > b.id
@@ -53,7 +52,6 @@ CREATE INDEX IF NOT EXISTS idx_ads_external_id ON ads(external_id);
 CREATE INDEX IF NOT EXISTS idx_ads_created_at ON ads(created_at);
 CREATE INDEX IF NOT EXISTS idx_ads_link_created_at ON ads(link_id, created_at DESC);
 
--- Migration for old databases.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ads_external_id_key') THEN
@@ -125,3 +123,25 @@ CREATE TABLE IF NOT EXISTS channel_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_channel_subscriptions_user_id ON channel_subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_channel_subscriptions_active ON channel_subscriptions(is_active) WHERE is_active = true;
+
+-- Durable Telegram notification outbox. Jobs survive process restarts and are retried by the scheduler.
+CREATE TABLE IF NOT EXISTS notification_outbox (
+  id BIGSERIAL PRIMARY KEY,
+  kind VARCHAR(32) NOT NULL,
+  chat_id BIGINT NOT NULL,
+  dedupe_key TEXT NOT NULL UNIQUE,
+  payload JSONB NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  available_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  locked_until TIMESTAMP,
+  sent_at TIMESTAMP,
+  last_error TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_pending
+  ON notification_outbox(available_at, id)
+  WHERE sent_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_locked
+  ON notification_outbox(locked_until, id)
+  WHERE sent_at IS NULL;
