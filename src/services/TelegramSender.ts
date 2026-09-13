@@ -14,132 +14,14 @@ export class TelegramSender {
   private readonly MAX_CAPTION_LENGTH = 1024;
   private readonly MAX_RETRIES = 3;
 
-  constructor(bot: TelegramBot) {
-    this.bot = bot;
-  }
-
-  private async waitForRateLimit(chatId: number): Promise<void> {
-    let release!: () => void;
-    const previous = this.rateLimitQueue;
-    this.rateLimitQueue = new Promise<void>(resolve => { release = resolve; });
-    await previous;
-    try {
-      const now = Date.now();
-      const retryUntil = this.retryAfterByChat.get(chatId) ?? 0;
-      const chatUntil = (this.lastSendByChat.get(chatId) ?? 0) + this.MIN_CHAT_INTERVAL_MS;
-      const globalUntil = this.lastGlobalSendTime + this.GLOBAL_MIN_INTERVAL_MS;
-      const waitUntil = Math.max(now, retryUntil, chatUntil, globalUntil);
-      if (waitUntil > now) await new Promise(resolve => setTimeout(resolve, waitUntil - now));
-      const sentAt = Date.now();
-      this.lastSendByChat.set(chatId, sentAt);
-      this.lastGlobalSendTime = sentAt;
-    } finally {
-      release();
-    }
-  }
-
-  private truncateCaption(text: string): string {
-    if (text.length <= this.MAX_CAPTION_LENGTH) return text;
-    logger.warn('Caption too long, truncating', { originalLength: text.length, maxLength: this.MAX_CAPTION_LENGTH });
-    return text.slice(0, this.MAX_CAPTION_LENGTH);
-  }
-
+  constructor(bot: TelegramBot) { this.bot = bot; }
+  private async waitForRateLimit(chatId: number): Promise<void> { let release!: () => void; const previous = this.rateLimitQueue; this.rateLimitQueue = new Promise<void>(resolve => { release = resolve; }); await previous; try { const now = Date.now(); const retryUntil = this.retryAfterByChat.get(chatId) ?? 0; const chatUntil = (this.lastSendByChat.get(chatId) ?? 0) + this.MIN_CHAT_INTERVAL_MS; const globalUntil = this.lastGlobalSendTime + this.GLOBAL_MIN_INTERVAL_MS; const waitUntil = Math.max(now, retryUntil, chatUntil, globalUntil); if (waitUntil > now) await new Promise(resolve => setTimeout(resolve, waitUntil - now)); const sentAt = Date.now(); this.lastSendByChat.set(chatId, sentAt); this.lastGlobalSendTime = sentAt; } finally { release(); } }
+  private truncateCaption(text: string): string { if (text.length <= this.MAX_CAPTION_LENGTH) return text; logger.warn('Caption too long, truncating', { originalLength: text.length, maxLength: this.MAX_CAPTION_LENGTH }); return text.slice(0, this.MAX_CAPTION_LENGTH); }
   private getStatusCode(error: any): number | undefined { return error?.response?.statusCode; }
-
-  private getRetryAfter(error: any): number {
-    const value = Number(error?.response?.body?.parameters?.retry_after ?? error?.response?.body?.retry_after ?? 1);
-    return Number.isFinite(value) && value > 0 ? Math.min(value, 30) : 1;
-  }
-
-  private getButtonUrl(formatted: FormattedAd): string | null {
-    const line = formatted.text.split('\n').find(item => item.trimStart().startsWith('🔗'));
-    if (!line) return null;
-    const candidate = line.replace(/^\s*🔗\s*/, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim();
-    try {
-      const parsed = new URL(candidate);
-      if (!['http:', 'https:'].includes(parsed.protocol)) return null;
-      return parsed.toString();
-    } catch { return null; }
-  }
-
-  private getReplyMarkup(formatted: FormattedAd): TelegramBot.InlineKeyboardMarkup | undefined {
-    const url = this.getButtonUrl(formatted);
-    if (!url) return undefined;
-    return { inline_keyboard: [[{ text: '⚡ Открыть объявление', url }]] };
-  }
-
-  private async sendOnce(chatId: number, formatted: FormattedAd): Promise<void> {
-    await this.waitForRateLimit(chatId);
-    const replyMarkup = this.getReplyMarkup(formatted);
-    if (formatted.media && formatted.media.length >= 1) {
-      const mediaToSend = formatted.media.slice(0, this.MAX_MEDIA_PER_GROUP);
-      const caption = this.truncateCaption(formatted.text);
-      if (mediaToSend.length === 1) {
-        try {
-          await this.bot.sendPhoto(chatId, mediaToSend[0], { caption, parse_mode: 'HTML', reply_markup: replyMarkup });
-          return;
-        } catch (error: any) {
-          const statusCode = this.getStatusCode(error);
-          if (statusCode !== 400) throw error;
-          logger.warn('Photo notification rejected, falling back to text', { chatId, error: error?.response?.body?.description || error.message });
-          await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup });
-          return;
-        }
-      }
-      const inputMedia: TelegramBot.InputMediaPhoto[] = mediaToSend.map((url, index) => ({ type: 'photo', media: url, caption: index === 0 ? caption : undefined, parse_mode: index === 0 ? 'HTML' : undefined }));
-      try {
-        await this.bot.sendMediaGroup(chatId, inputMedia);
-        if (replyMarkup) await this.bot.sendMessage(chatId, '🔗 Ссылка на объявление', { reply_markup: replyMarkup });
-      } catch (error: any) {
-        const statusCode = this.getStatusCode(error);
-        if (statusCode === 400) {
-          logger.warn('Media group rejected, falling back to text notification', { chatId, error: error?.response?.body?.description || error.message });
-          await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup });
-          return;
-        }
-        throw error;
-      }
-      return;
-    }
-    await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup });
-  }
-
-  async send(chatId: number, formatted: FormattedAd): Promise<void> {
-    const startedAt = Date.now();
-    let attempt = 0;
-    for (; attempt <= this.MAX_RETRIES; attempt += 1) {
-      try {
-        const attemptStartedAt = Date.now();
-        await this.sendOnce(chatId, formatted);
-        const completedAt = Date.now();
-        logger.info('⚡ TELEGRAM DELIVERY', {
-          chatId,
-          externalId: formatted.externalId,
-          durationMs: completedAt - startedAt,
-          attempt: attempt + 1,
-          attemptDurationMs: completedAt - attemptStartedAt,
-          completedAt: new Date(completedAt).toISOString(),
-        });
-        return;
-      } catch (error: any) {
-        const statusCode = this.getStatusCode(error);
-        if (statusCode === 429 && attempt < this.MAX_RETRIES) {
-          const retryAfter = this.getRetryAfter(error);
-          this.retryAfterByChat.set(chatId, Date.now() + retryAfter * 1000);
-          logger.warn('Telegram rate limited, retrying', { chatId, externalId: formatted.externalId, retryAfter, attempt: attempt + 1 });
-          continue;
-        }
-        if (statusCode === 403) {
-          logger.warn('User blocked the bot', { chatId, externalId: formatted.externalId });
-          return;
-        }
-        logger.error('Failed to send Telegram message', { chatId, externalId: formatted.externalId, error: error.message, statusCode, durationMs: Date.now() - startedAt, attempts: attempt + 1 });
-        throw error;
-      }
-    }
-  }
-
-  async sendBatch(chatId: number, ads: FormattedAd[]): Promise<void> {
-    for (const ad of ads) await this.send(chatId, ad);
-  }
+  private getRetryAfter(error: any): number { const value = Number(error?.response?.body?.parameters?.retry_after ?? error?.response?.body?.retry_after ?? 1); return Number.isFinite(value) && value > 0 ? Math.min(value, 30) : 1; }
+  private getButtonUrl(formatted: FormattedAd): string | null { const line = formatted.text.split('\n').find(item => item.trimStart().startsWith('🔗')); if (!line) return null; const candidate = line.replace(/^\s*🔗\s*/, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim(); try { const parsed = new URL(candidate); if (!['http:', 'https:'].includes(parsed.protocol)) return null; return parsed.toString(); } catch { return null; } }
+  private getReplyMarkup(formatted: FormattedAd): TelegramBot.InlineKeyboardMarkup | undefined { const url = this.getButtonUrl(formatted); if (!url) return undefined; return { inline_keyboard: [[{ text: '⚡ Открыть объявление', url }]] }; }
+  private async sendOnce(chatId: number, formatted: FormattedAd): Promise<void> { await this.waitForRateLimit(chatId); const replyMarkup = this.getReplyMarkup(formatted); if (formatted.media && formatted.media.length >= 1) { const mediaToSend = formatted.media.slice(0, this.MAX_MEDIA_PER_GROUP); const caption = this.truncateCaption(formatted.text); if (mediaToSend.length === 1) { try { await this.bot.sendPhoto(chatId, mediaToSend[0], { caption, parse_mode: 'HTML', reply_markup: replyMarkup }); return; } catch (error: any) { const statusCode = this.getStatusCode(error); if (statusCode !== 400) throw error; logger.warn('Photo notification rejected, falling back to text', { chatId, error: error?.response?.body?.description || error.message }); await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup }); return; } } const inputMedia: TelegramBot.InputMediaPhoto[] = mediaToSend.map((url, index) => ({ type: 'photo', media: url, caption: index === 0 ? caption : undefined, parse_mode: index === 0 ? 'HTML' : undefined })); try { await this.bot.sendMediaGroup(chatId, inputMedia); if (replyMarkup) await this.bot.sendMessage(chatId, '🔗 Ссылка на объявление', { reply_markup: replyMarkup }); } catch (error: any) { const statusCode = this.getStatusCode(error); if (statusCode === 400) { logger.warn('Media group rejected, falling back to text notification', { chatId, error: error?.response?.body?.description || error.message }); await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup }); return; } throw error; } return; } await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup }); }
+  async send(chatId: number, formatted: FormattedAd): Promise<void> { const startedAt = Date.now(); let attempt = 0; for (; attempt <= this.MAX_RETRIES; attempt += 1) { try { const attemptStartedAt = Date.now(); await this.sendOnce(chatId, formatted); const completedAt = Date.now(); const publishedMs = formatted.publishedAt ? Date.parse(formatted.publishedAt) : NaN; const createdMs = formatted.createdAt ? Date.parse(formatted.createdAt) : NaN; const sourceToTelegramMs = Number.isFinite(publishedMs) ? Math.max(0, completedAt - publishedMs) : undefined; const dbInsertToTelegramMs = Number.isFinite(createdMs) ? Math.max(0, completedAt - createdMs) : undefined; logger.info('⚡ TELEGRAM DELIVERY', { chatId, externalId: formatted.externalId, durationMs: completedAt - startedAt, attempt: attempt + 1, attemptDurationMs: completedAt - attemptStartedAt, publishedAt: formatted.publishedAt, createdAt: formatted.createdAt, sourceToTelegramMs, dbInsertToTelegramMs, completedAt: new Date(completedAt).toISOString() }); return; } catch (error: any) { const statusCode = this.getStatusCode(error); if (statusCode === 429 && attempt < this.MAX_RETRIES) { const retryAfter = this.getRetryAfter(error); this.retryAfterByChat.set(chatId, Date.now() + retryAfter * 1000); logger.warn('Telegram rate limited, retrying', { chatId, externalId: formatted.externalId, retryAfter, attempt: attempt + 1 }); continue; } if (statusCode === 403) { logger.warn('User blocked the bot', { chatId, externalId: formatted.externalId }); return; } logger.error('Failed to send Telegram message', { chatId, externalId: formatted.externalId, error: error.message, statusCode, durationMs: Date.now() - startedAt, attempts: attempt + 1 }); throw error; } } }
+  async sendBatch(chatId: number, ads: FormattedAd[]): Promise<void> { for (const ad of ads) await this.send(chatId, ad); }
 }
