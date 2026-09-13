@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="dark" />
   <title>HUNT — Reseller Radar</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="./styles.css?v=20260913-5" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="./styles.css?v=20260913-6" />
 </head>
 <body>
   <div class="app-shell">
@@ -27,6 +27,23 @@
     (function bootHunt() {
       var started = false;
       var deadline = Date.now() + 5000;
+      function extractInitData(webApp) {
+        if (webApp && webApp.initData) return webApp.initData;
+        try {
+          var internal = window.Telegram && window.Telegram.WebView && window.Telegram.WebView.initParams && window.Telegram.WebView.initParams.tgWebAppData;
+          if (typeof internal === 'string' && internal) return internal;
+        } catch (e) {}
+        try {
+          var sources = [String(window.location.hash || ''), String(window.location.search || '')];
+          for (var i = 0; i < sources.length; i++) {
+            var rawSource = sources[i].replace(/^#|^\?/, '');
+            var params = new URLSearchParams(rawSource);
+            var raw = params.get('tgWebAppData');
+            if (raw) return raw;
+          }
+        } catch (e) {}
+        return '';
+      }
       function showBootError(message) {
         if (started) return;
         started = true;
@@ -42,9 +59,13 @@
           if (Date.now() < deadline) return setTimeout(start, 50);
           return showBootError('Telegram WebApp SDK не загрузился. Закрой HUNT и открой его кнопкой ⚡ HUNT в Telegram.');
         }
-        if (!webApp.initData && Date.now() < deadline) return setTimeout(start, 50);
+        var initData = extractInitData(webApp);
+        if (initData && !webApp.initData) {
+          try { webApp.initData = initData; } catch (e) {}
+        }
+        if (!initData && Date.now() < deadline) return setTimeout(start, 50);
         var script = document.createElement('script');
-        script.src = './app.js?v=20260913-5';
+        script.src = './app.js?v=20260913-6';
         script.onerror = function () { showBootError('Не удалось загрузить HUNT. Попробуй открыть его заново из Telegram.'); };
         document.body.appendChild(script);
         started = true;
