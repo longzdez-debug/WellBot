@@ -90,21 +90,28 @@ CREATE INDEX IF NOT EXISTS idx_price_history_ad_id ON price_history(ad_id);
 CREATE INDEX IF NOT EXISTS idx_price_history_user_id ON price_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_price_history_created_at ON price_history(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_price_history_notified ON price_history(notified_at) WHERE notified_at IS NULL;
+
+-- Remove the old partial index. The application uses ON CONFLICT on these
+-- four columns, so PostgreSQL needs an unconditional unique index matching
+-- that conflict target exactly.
 DROP INDEX IF EXISTS idx_price_history_unique_drop_external;
+DROP INDEX IF EXISTS idx_price_history_unique_user_drop;
 
 DELETE FROM price_history a
 USING price_history b
 WHERE a.id > b.id
   AND a.user_id IS NOT NULL
   AND b.user_id IS NOT NULL
+  AND a.external_id IS NOT NULL
+  AND b.external_id IS NOT NULL
   AND a.user_id = b.user_id
   AND a.external_id = b.external_id
   AND a.old_price IS NOT DISTINCT FROM b.old_price
   AND a.new_price IS NOT DISTINCT FROM b.new_price;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_price_history_unique_user_drop
-  ON price_history(user_id, external_id, old_price, new_price)
-  WHERE user_id IS NOT NULL AND external_id IS NOT NULL;
+  ON price_history(user_id, external_id, old_price, new_price);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_price_history_unique_ad_drop
   ON price_history(ad_id, old_price, new_price)
   WHERE ad_id IS NOT NULL;
