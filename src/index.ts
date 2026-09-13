@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv';
 import { DatabaseService } from './database/DatabaseService';
 import { BotHandler } from './bot/BotHandler';
-import { installWebAppBridge } from './bot/WebAppBridge';
+import { installWebAppBridge } from './services/WebAppBridge';
 import { ParserScheduler } from './scheduler/ParserScheduler';
 import { startWebAppServer } from './services/WebAppServer';
 import { logger } from './utils/logger';
