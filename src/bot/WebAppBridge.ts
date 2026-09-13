@@ -114,12 +114,11 @@ export function installWebAppBridge(handler: BotHandler): void {
       void bot.getMe()
         .then((me) => {
           if (!me.username) throw new Error('Bot username is unavailable');
-          const mainAppUrl = `https://t.me/${me.username}?startapp`;
           return bot.sendMessage(msg.chat.id, '⚡ Откройте HUNT кнопкой ниже:', {
             reply_markup: {
               inline_keyboard: [[{
                 text: '⚡ Открыть HUNT',
-                url: mainAppUrl,
+                web_app: { url: webAppUrl },
               }]],
             },
           });
