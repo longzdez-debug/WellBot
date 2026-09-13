@@ -19,25 +19,17 @@ export class TelegramSender {
   }
 
   private async waitForRateLimit(chatId: number): Promise<void> {
-    // Serialize only the short rate-limit reservation section. This prevents
-    // concurrent sends for different chats from racing on the global timestamp
-    // without serializing the actual Telegram network requests.
     let release!: () => void;
     const previous = this.rateLimitQueue;
     this.rateLimitQueue = new Promise<void>(resolve => { release = resolve; });
     await previous;
-
     try {
       const now = Date.now();
       const retryUntil = this.retryAfterByChat.get(chatId) ?? 0;
       const chatUntil = (this.lastSendByChat.get(chatId) ?? 0) + this.MIN_CHAT_INTERVAL_MS;
       const globalUntil = this.lastGlobalSendTime + this.GLOBAL_MIN_INTERVAL_MS;
       const waitUntil = Math.max(now, retryUntil, chatUntil, globalUntil);
-
-      if (waitUntil > now) {
-        await new Promise(resolve => setTimeout(resolve, waitUntil - now));
-      }
-
+      if (waitUntil > now) await new Promise(resolve => setTimeout(resolve, waitUntil - now));
       const sentAt = Date.now();
       this.lastSendByChat.set(chatId, sentAt);
       this.lastGlobalSendTime = sentAt;
@@ -61,12 +53,53 @@ export class TelegramSender {
     return Number.isFinite(value) && value > 0 ? Math.min(value, 30) : 1;
   }
 
+  private getButtonUrl(formatted: FormattedAd): string | null {
+    const line = formatted.text.split('\n').find(item => item.trimStart().startsWith('🔗'));
+    if (!line) return null;
+    const candidate = line.replace(/^\s*🔗\s*/, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim();
+    try {
+      const parsed = new URL(candidate);
+      if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  private getReplyMarkup(formatted: FormattedAd): TelegramBot.InlineKeyboardMarkup | undefined {
+    const url = this.getButtonUrl(formatted);
+    if (!url) return undefined;
+    return { inline_keyboard: [[{ text: '⚡ Открыть объявление', url }]] };
+  }
+
   private async sendOnce(chatId: number, formatted: FormattedAd): Promise<void> {
     await this.waitForRateLimit(chatId);
+    const replyMarkup = this.getReplyMarkup(formatted);
 
     if (formatted.media && formatted.media.length >= 1) {
       const mediaToSend = formatted.media.slice(0, this.MAX_MEDIA_PER_GROUP);
       const caption = this.truncateCaption(formatted.text);
+
+      if (mediaToSend.length === 1) {
+        try {
+          await this.bot.sendPhoto(chatId, mediaToSend[0], {
+            caption,
+            parse_mode: 'HTML',
+            reply_markup: replyMarkup,
+          });
+          return;
+        } catch (error: any) {
+          const statusCode = this.getStatusCode(error);
+          if (statusCode !== 400) throw error;
+          logger.warn('Photo notification rejected, falling back to text', {
+            chatId,
+            error: error?.response?.body?.description || error.message,
+          });
+          await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup });
+          return;
+        }
+      }
+
       const inputMedia: TelegramBot.InputMediaPhoto[] = mediaToSend.map((url, index) => ({
         type: 'photo',
         media: url,
@@ -76,6 +109,7 @@ export class TelegramSender {
 
       try {
         await this.bot.sendMediaGroup(chatId, inputMedia);
+        if (replyMarkup) await this.bot.sendMessage(chatId, '🔗 Ссылка на объявление', { reply_markup: replyMarkup });
       } catch (error: any) {
         const statusCode = this.getStatusCode(error);
         if (statusCode === 400) {
@@ -83,7 +117,7 @@ export class TelegramSender {
             chatId,
             error: error?.response?.body?.description || error.message,
           });
-          await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML' });
+          await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup });
           return;
         }
         throw error;
@@ -91,7 +125,7 @@ export class TelegramSender {
       return;
     }
 
-    await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML' });
+    await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup });
   }
 
   async send(chatId: number, formatted: FormattedAd): Promise<void> {
@@ -107,25 +141,17 @@ export class TelegramSender {
           logger.warn('Telegram rate limited, retrying', { chatId, retryAfter, attempt: attempt + 1 });
           continue;
         }
-
         if (statusCode === 403) {
           logger.warn('User blocked the bot', { chatId });
           return;
         }
-
-        logger.error('Failed to send Telegram message', {
-          chatId,
-          error: error.message,
-          statusCode,
-        });
+        logger.error('Failed to send Telegram message', { chatId, error: error.message, statusCode });
         throw error;
       }
     }
   }
 
   async sendBatch(chatId: number, ads: FormattedAd[]): Promise<void> {
-    for (const ad of ads) {
-      await this.send(chatId, ad);
-    }
+    for (const ad of ads) await this.send(chatId, ad);
   }
 }
