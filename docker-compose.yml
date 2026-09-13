@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: wellbot
       POSTGRES_USER: bot_user
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -12,28 +12,32 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   bot:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      DATABASE_URL: postgresql://bot_user:${DB_PASSWORD:-secure_password}@postgres:5432/wellbot
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN must be set}
+      DATABASE_URL: postgresql://bot_user:${DB_PASSWORD}@postgres:5432/wellbot
       YANDEX_MAPS_API_KEY: ${YANDEX_MAPS_API_KEY:-}
       YANDEX_STATIC_MAPS_API_KEY: ${YANDEX_STATIC_MAPS_API_KEY:-}
       HUNT_WEBAPP_URL: ${HUNT_WEBAPP_URL:-}
-      HUNT_WEB_PORT: 8080
+      HUNT_WEB_PORT: ${HUNT_WEB_PORT:-8080}
       PARSE_INTERVAL_SECONDS: ${PARSE_INTERVAL_SECONDS:-5}
-      PARSE_CONCURRENCY: ${PARSE_CONCURRENCY:-20}
+      PARSE_CONCURRENCY: ${PARSE_CONCURRENCY:-5}
+      PARSE_TIMEOUT_MS: ${PARSE_TIMEOUT_MS:-9000}
       NOTIFICATION_MAX_ATTEMPTS: ${NOTIFICATION_MAX_ATTEMPTS:-12}
       NOTIFICATION_RETENTION_DAYS: ${NOTIFICATION_RETENTION_DAYS:-14}
       NODE_ENV: production
     ports:
-      - "8080:8080"
+      - "${HUNT_WEB_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 15s
       timeout: 5s
       retries: 5
