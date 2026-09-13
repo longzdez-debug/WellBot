@@ -97,7 +97,18 @@ export class FastKufarParser extends BaseParser {
     }
 
     const requestedQuery = String(parsed.searchParams.get('query') || '').trim();
-    const queryTerms = normalizeSearchText(requestedQuery)
+    const brandTerms = requestedBrandSlug ? (BRAND_TERMS[requestedBrandSlug] || [requestedBrandSlug]) : [];
+    const normalizedBrandTerms = brandTerms.map(normalizeSearchText).filter(Boolean);
+
+    // Kufar can return a broad/relevance-ranked page even when a brand filter is present.
+    // If the user did not specify a text query, add the brand as an upstream query so the
+    // newest relevant listings are much more likely to be inside the first 100 results.
+    // The post-filter below remains authoritative and prevents false positives.
+    if (!requestedQuery && requestedBrandSlug) {
+      params.query = BRAND_MAP[requestedBrandSlug];
+    }
+
+    const queryTerms = normalizeSearchText(requestedQuery || String(params.query || ''))
       .split(' ')
       .filter(term => term.length >= 2);
 
@@ -126,6 +137,7 @@ export class FastKufarParser extends BaseParser {
     for (let i = 0; i < API_ENDPOINTS.length; i++) {
       const endpoint = API_ENDPOINTS[i];
       try {
+        const requestStartedAt = Date.now();
         const response = await this.axiosInstance.get(endpoint, {
           params,
           timeout: 6000,
@@ -138,11 +150,6 @@ export class FastKufarParser extends BaseParser {
         });
 
         const rawAds = Array.isArray(response.data?.ads) ? response.data.ads : [];
-        const brandTerms = requestedBrandSlug ? (BRAND_TERMS[requestedBrandSlug] || [requestedBrandSlug]) : [];
-        const normalizedBrandTerms = brandTerms.map(normalizeSearchText).filter(Boolean);
-
-        // Kufar's search endpoint can occasionally return results outside a selected
-        // brand/query filter. Enforce the user's link filters before they reach the scheduler.
         const ads = rawAds.filter((ad: any) => {
           if (!ad?.ad_id) return false;
           const text = adSearchText(ad);
@@ -158,11 +165,18 @@ export class FastKufarParser extends BaseParser {
           return true;
         });
 
+        const timestamps = rawAds
+          .map((ad: any) => Number(ad?.list_time))
+          .filter((value: number) => Number.isFinite(value) && value > 0);
         logger.debug('Kufar hot-path page received', {
           count: ads.length,
           rawCount: rawAds.length,
           requestedBrand: requestedBrandSlug || undefined,
           requestedQuery: requestedQuery || undefined,
+          upstreamQuery: params.query || undefined,
+          newestPublishedAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : undefined,
+          oldestPublishedAt: timestamps.length ? new Date(Math.min(...timestamps)).toISOString() : undefined,
+          requestMs: Date.now() - requestStartedAt,
         });
 
         return ads.map((ad: any) => {
