@@ -45,12 +45,7 @@ export class BotHandler {
   }
 
   private getMainKeyboard() {
-    const webAppUrl = process.env.HUNT_WEBAPP_URL?.trim();
     const keyboard: TelegramBot.KeyboardButton[][] = [];
-
-    if (webAppUrl) {
-      keyboard.push([{ text: '⚡ HUNT', web_app: { url: webAppUrl } }]);
-    }
 
     keyboard.push(
       [{ text: '➕ Добавить ссылку' }],
