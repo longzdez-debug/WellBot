@@ -45,9 +45,9 @@ export class ParserScheduler {
   constructor(db: DatabaseService, bot: BotHandler) {
     this.db = db;
     this.bot = bot;
-    const seconds = Number.parseInt(process.env.PARSE_INTERVAL_SECONDS || '5', 10);
+    const seconds = Number.parseInt(process.env.PARSE_INTERVAL_SECONDS || '3', 10);
     const concurrency = Number.parseInt(process.env.PARSE_CONCURRENCY || '5', 10);
-    this.intervalMs = Math.max(1000, Number.isFinite(seconds) ? seconds * 1000 : 5000);
+    this.intervalMs = Math.max(1000, Number.isFinite(seconds) ? seconds * 1000 : 3000);
     this.concurrency = Math.max(1, Math.min(20, Number.isFinite(concurrency) ? concurrency : 5));
     logger.info('Parser scheduler configured', { intervalSeconds: this.intervalMs / 1000, concurrency: this.concurrency, overlapProtection: true });
   }
@@ -141,25 +141,23 @@ export class ParserScheduler {
     await Promise.all([...groups].map(async ([telegramId, { userId, ads }]) => {
       const subscription = await this.db.getActiveChannelSubscription(userId);
       for (const ad of ads) {
-        try {
-          await this.bot.sendNotification(telegramId, ad);
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error);
-          logger.error('Failed to send new-ad notification', { telegramId, externalId: ad.external_id, error: message });
-        }
-
+        const deliveries: Promise<void>[] = [
+          this.bot.sendNotification(telegramId, ad).catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.error('Failed to send new-ad notification', { telegramId, externalId: ad.external_id, error: message });
+          }),
+        ];
         if (subscription) {
-          try {
-            await this.bot.sendNotification(subscription.channel_id, ad);
-          } catch (error: unknown) {
+          deliveries.push(this.bot.sendNotification(subscription.channel_id, ad).catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
             logger.error('Failed to send new ad to channel', {
               channelId: subscription.channel_id,
               externalId: ad.external_id,
               error: message,
             });
-          }
+          }));
         }
+        await Promise.all(deliveries);
       }
     }));
   }
@@ -176,18 +174,19 @@ export class ParserScheduler {
       if (!userId) return;
       const subscription = await this.db.getActiveChannelSubscription(userId);
       for (const { drop } of drops) {
-        try { await this.bot.sendPriceDropNotification(telegramId, drop); }
-        catch (error: unknown) {
-          const message = error instanceof Error ? error.message : String(error);
-          logger.error('Failed to send price-drop notification', { telegramId, externalId: drop.externalId, error: message });
-        }
+        const deliveries: Promise<void>[] = [
+          this.bot.sendPriceDropNotification(telegramId, drop).catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.error('Failed to send price-drop notification', { telegramId, externalId: drop.externalId, error: message });
+          }),
+        ];
         if (subscription) {
-          try { await this.bot.sendPriceDropNotification(subscription.channel_id, drop); }
-          catch (error: unknown) {
+          deliveries.push(this.bot.sendPriceDropNotification(subscription.channel_id, drop).catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
             logger.error('Failed to send price drop to channel', { channelId: subscription.channel_id, externalId: drop.externalId, error: message });
-          }
+          }));
         }
+        await Promise.all(deliveries);
       }
     }));
   }
@@ -244,11 +243,6 @@ export class ParserScheduler {
 
       const ads = this.normalizeAds(rawAds);
       const baseline = !link.last_parsed_at;
-
-      // Empty is valid for a brand-new/legitimate quiet monitor, but must not be
-      // treated as a healthy parse after the monitor has been established. Keeping
-      // last_parsed_at unchanged prevents a broken parser response from advancing
-      // the checkpoint and hiding listings on the next recovery cycle.
       if (!baseline && rawAds.length > 0 && ads.length === 0) {
         await this.recordLinkFailure(link, 'Parser returned only invalid/malformed ads');
         return { newAds, priceDrops };
