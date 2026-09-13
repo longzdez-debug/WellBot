@@ -2,11 +2,6 @@ import TelegramBot, { Message } from 'node-telegram-bot-api';
 import { BotHandler } from '../bot/BotHandler';
 import { logger } from '../utils/logger';
 
-/**
- * Connects the HUNT Mini App to the existing Telegram bot without duplicating
- * the bot's business logic. The Mini App sends a URL via web_app_data and the
- * normal BotHandler link flow performs validation, parsing and persistence.
- */
 export function installWebAppBridge(handler: BotHandler): void {
   const bot = (handler as unknown as { bot: TelegramBot }).bot;
   if (!bot) {
@@ -14,11 +9,81 @@ export function installWebAppBridge(handler: BotHandler): void {
     return;
   }
 
-  bot.on('message', async (msg: Message) => {
-    const webAppData = (msg as Message & {
-      web_app_data?: { data?: string };
-    }).web_app_data;
+  const webAppUrl = process.env.HUNT_WEBAPP_URL?.trim();
+  if (!webAppUrl) {
+    logger.info('HUNT Mini App URL is not configured; menu button is disabled');
+    return;
+  }
 
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(webAppUrl);
+  } catch {
+    logger.error('HUNT Mini App URL is invalid', { webAppUrl });
+    return;
+  }
+
+  if (parsedUrl.protocol !== 'https:') {
+    logger.error('HUNT Mini App URL must use HTTPS', { webAppUrl });
+    return;
+  }
+
+  const menuButton = {
+    type: 'web_app' as const,
+    text: '⚡ HUNT',
+    web_app: { url: webAppUrl },
+  };
+
+  const configureMenuButton = async (chatId: number): Promise<void> => {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await bot.setChatMenuButton({ chat_id: chatId, menu_button: menuButton });
+        const current = await bot.getChatMenuButton({ chat_id: chatId });
+        const verified = current?.type === 'web_app'
+          && current.text === menuButton.text
+          && current.web_app?.url === webAppUrl;
+
+        if (verified) {
+          logger.info('HUNT Mini App menu button verified', { webAppUrl, chatId, attempt });
+          return;
+        }
+
+        logger.warn('HUNT Mini App menu button verification mismatch', {
+          webAppUrl,
+          chatId,
+          attempt,
+          current,
+        });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('Failed to configure HUNT Mini App menu button', {
+          webAppUrl,
+          chatId,
+          attempt,
+          error: message,
+        });
+      }
+
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+    }
+  };
+
+  // Always configure the concrete private chat. This overrides stale per-chat
+  // Telegram menu state instead of relying only on the bot-wide default.
+  bot.on('message', (msg: Message) => {
+    if (msg.chat.type === 'private' && msg.from) {
+      void configureMenuButton(msg.chat.id);
+    }
+  });
+
+  // Keep the bot-wide default configured for users opening a new private chat.
+  void bot.setChatMenuButton({ menu_button: menuButton }).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Failed to configure default HUNT menu button', { webAppUrl, error: message });
+  });
+
+  bot.on('message', async (msg: Message) => {
+    const webAppData = (msg as Message & { web_app_data?: { data?: string } }).web_app_data;
     if (!msg.from || !webAppData?.data) return;
 
     const chatId = msg.chat.id;
@@ -47,95 +112,8 @@ export function installWebAppBridge(handler: BotHandler): void {
       await handler.handleAddLink(chatId, userId, url);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error('HUNT Mini App bridge failed', {
-        userId,
-        error: message,
-      });
+      logger.error('HUNT Mini App bridge failed', { userId, error: message });
       await bot.sendMessage(chatId, '❌ Не удалось добавить мониторинг. Попробуйте ещё раз.');
-    }
-  });
-
-  const webAppUrl = process.env.HUNT_WEBAPP_URL?.trim();
-  if (!webAppUrl) {
-    logger.info('HUNT Mini App URL is not configured; menu button is disabled');
-    return;
-  }
-
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(webAppUrl);
-  } catch {
-    logger.error('HUNT Mini App URL is invalid', { webAppUrl });
-    return;
-  }
-
-  if (parsedUrl.protocol !== 'https:') {
-    logger.error('HUNT Mini App URL must use HTTPS', { webAppUrl });
-    return;
-  }
-
-  const menuButton = {
-    type: 'web_app' as const,
-    text: '⚡ HUNT',
-    web_app: { url: webAppUrl },
-  };
-
-  const configureMenuButton = async (chatId?: number): Promise<void> => {
-    for (let attempt = 1; attempt <= 5; attempt += 1) {
-      try {
-        await bot.setChatMenuButton({
-          ...(chatId !== undefined ? { chat_id: chatId } : {}),
-          menu_button: menuButton,
-        });
-
-        const current = await bot.getChatMenuButton(
-          chatId !== undefined ? { chat_id: chatId } : {},
-        );
-
-        const verified = current?.type === 'web_app'
-          && current.text === menuButton.text
-          && current.web_app?.url === webAppUrl;
-
-        if (verified) {
-          logger.info('HUNT Mini App menu button verified', { webAppUrl, chatId, attempt });
-          return;
-        }
-
-        logger.warn('HUNT Mini App menu button verification mismatch', {
-          webAppUrl,
-          chatId,
-          attempt,
-          current,
-        });
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error('Failed to configure HUNT Mini App menu button', {
-          webAppUrl,
-          chatId,
-          attempt,
-          error: message,
-        });
-      }
-
-      if (attempt < 5) {
-        await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
-      }
-    }
-  };
-
-  // Telegram's Menu Button is the ONLY launcher for HUNT.
-  // Do not add a reply-keyboard or inline launcher.
-  void configureMenuButton();
-
-  // Re-apply the default and the concrete private-chat override after startup.
-  // This also handles bots where Telegram/client state was initialized before
-  // the polling connection became ready.
-  setTimeout(() => void configureMenuButton(), 3000);
-  setTimeout(() => void configureMenuButton(), 10000);
-
-  bot.on('message', (msg: Message) => {
-    if (msg.text === '/start' && msg.chat.type === 'private') {
-      void configureMenuButton(msg.chat.id);
     }
   });
 
