@@ -105,25 +105,33 @@ export function installWebAppBridge(handler: BotHandler): void {
     if (msg.text === '/start' && msg.chat.type === 'private') {
       configureMenuButton(msg.chat.id);
 
-      // Also provide a dedicated inline Web App launch. This is intentionally
-      // separate from the menu button because some Telegram clients can open
-      // the menu URL as a normal web page and omit Mini App initData. An inline
-      // web_app button is a native Mini App launch and carries Telegram launch
-      // data into the WebView.
-      void bot.sendMessage(msg.chat.id, '⚡ Откройте HUNT кнопкой ниже:', {
-        reply_markup: {
-          inline_keyboard: [[{
-            text: '⚡ Открыть HUNT',
-            web_app: { url: webAppUrl },
-          }]],
-        },
-      }).catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error('Failed to send HUNT inline launch button', {
-          chatId: msg.chat.id,
-          error: message,
+      // Use the Main Mini App deep link for the chat launch message. This is
+      // deliberately different from a raw https://web-app URL: Telegram
+      // recognizes the ?startapp link as a Main Mini App launch and invokes
+      // the same authenticated WebView flow as the working "Open App" button
+      // on the bot profile. This avoids clients that open a Web App URL as a
+      // plain browser page and therefore provide empty initData.
+      void bot.getMe()
+        .then((me) => {
+          if (!me.username) throw new Error('Bot username is unavailable');
+          const mainAppUrl = `https://t.me/${me.username}?startapp`;
+          return bot.sendMessage(msg.chat.id, '⚡ Откройте HUNT кнопкой ниже:', {
+            reply_markup: {
+              inline_keyboard: [[{
+                text: '⚡ Открыть HUNT',
+                url: mainAppUrl,
+              }]],
+            },
+          });
+        })
+        .then(() => logger.info('HUNT Main Mini App launch button sent', { chatId: msg.chat.id }))
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.error('Failed to send HUNT Main Mini App launch button', {
+            chatId: msg.chat.id,
+            error: message,
+          });
         });
-      });
     }
   });
 
