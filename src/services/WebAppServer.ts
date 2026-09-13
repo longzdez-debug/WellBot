@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { DatabaseService } from '../database/DatabaseService';
 import { logger } from '../utils/logger';
+import { LinkAcceptance } from '../utils/linkAcceptance';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -12,6 +13,7 @@ const MIME_TYPES: Record<string, string> = {
 };
 const MAX_BODY = 16 * 1024;
 const MAX_INIT_DATA = 16 * 1024;
+const MAX_LINKS = 10;
 const AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 type AuthUser = { id: number; username?: string; first_name?: string; last_name?: string };
@@ -69,6 +71,17 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   return parsed as Record<string, unknown>;
 }
 
+function normalizeUrl(url: string): string {
+  try {
+    const value = new URL(url);
+    value.hostname = value.hostname.toLowerCase().replace(/^www\./, '');
+    value.protocol = 'https:';
+    return value.toString();
+  } catch {
+    return url.trim().toLowerCase();
+  }
+}
+
 export function startWebAppServer(port: number, db: DatabaseService, botToken: string, webRoot = join(process.cwd(), 'web')): { close: () => Promise<void> } {
   const server = createServer(async (req, res) => {
     let requestPath = '';
@@ -82,16 +95,16 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
       }
 
       if (requestPath.startsWith('/api/')) {
-        if (req.method !== 'GET' && req.method !== 'PATCH' && req.method !== 'DELETE') {
-          res.setHeader('Allow', 'GET, PATCH, DELETE');
+        if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'PATCH' && req.method !== 'DELETE') {
+          res.setHeader('Allow', 'GET, POST, PATCH, DELETE');
           json(res, 405, { error: 'method_not_allowed' });
           return;
         }
         const initData = req.headers['x-telegram-init-data'];
         const auth = parseTelegramInitData(typeof initData === 'string' ? initData : '', botToken);
-        if (!auth) { logger.warn('HUNT API unauthorized request'); json(res, 401, { error: 'unauthorized' }); return; }
+        if (!auth) { logger.warn('HUNT API unauthorized request', { requestPath, method: req.method }); json(res, 401, { error: 'unauthorized' }); return; }
         const user = await db.getUser(auth.user.id);
-        if (!user) { logger.warn('HUNT API user not registered', { telegramId: auth.user.id }); json(res, 403, { error: 'user_not_registered' }); return; }
+        if (!user) { logger.warn('HUNT API user not registered', { telegramId: auth.user.id, requestPath }); json(res, 403, { error: 'user_not_registered' }); return; }
 
         if (requestPath === '/api/bootstrap' && req.method === 'GET') {
           const [links, ads, priceDrops, stats, statsByLink] = await Promise.all([
@@ -100,6 +113,34 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           ]);
           logger.info('HUNT bootstrap', { telegramId: auth.user.id, dbUserId: user.id, links: links.length, ads: ads.length, priceDrops: priceDrops.length, totalLinks: stats.totalLinks, activeLinks: stats.activeLinks });
           json(res, 200, { user: { id: user.id, telegramId: user.telegram_id, username: user.username }, links, ads, priceDrops, stats, statsByLink, serverTime: new Date().toISOString() });
+          return;
+        }
+
+        if (requestPath === '/api/links' && req.method === 'POST') {
+          let body: Record<string, unknown>;
+          try { body = await readJson(req); }
+          catch (error: unknown) { json(res, error instanceof Error && error.message === 'body_too_large' ? 413 : 400, { error: error instanceof Error && error.message === 'body_too_large' ? 'body_too_large' : 'invalid_json' }); return; }
+          const rawUrl = typeof body.url === 'string' ? body.url.trim() : '';
+          if (!rawUrl || rawUrl.length > 4096) { json(res, 400, { error: 'invalid_url' }); return; }
+          const url = normalizeUrl(rawUrl);
+          const assessment = LinkAcceptance.assess(url);
+          if (!assessment.ok || !assessment.platform) { json(res, 400, { error: 'unsupported_url', message: assessment.reason || 'Поддерживаются страницы поиска Kufar, Onliner и av.by.' }); return; }
+          const links = await db.getUserLinks(user.id);
+          const existing = links.find(link => link.url === url);
+          if (existing) {
+            if (!existing.is_active) {
+              await db.setLinkActive(existing.id, user.id, true);
+              logger.info('HUNT monitor reactivated', { telegramId: auth.user.id, dbUserId: user.id, linkId: existing.id, platform: existing.platform });
+              json(res, 200, { link: { ...existing, is_active: true }, reactivated: true });
+              return;
+            }
+            json(res, 409, { error: 'duplicate', message: 'Эта ссылка уже добавлена.' });
+            return;
+          }
+          if (links.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} мониторов.` }); return; }
+          const link = await db.createLink(user.id, url, assessment.platform);
+          logger.info('HUNT monitor created', { telegramId: auth.user.id, dbUserId: user.id, linkId: link.id, platform: link.platform, url: link.url });
+          json(res, 201, { link, reactivated: false });
           return;
         }
 
