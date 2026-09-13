@@ -7,15 +7,15 @@
   <meta name="color-scheme" content="dark" />
   <meta name="mobile-web-app-capable" content="yes" />
   <style>html,body{margin:0!important;background:#07090b!important;background-color:#07090b!important;color:#f4f7f5!important;color-scheme:dark!important}html{min-height:100%;overscroll-behavior:none}body{min-height:100vh}</style>
-  <title>HUNT — Reseller Radar</title>
+  <title>WellBOT — Reseller Radar</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20260913-11" />
+  <link rel="stylesheet" href="./styles.css?v=20260913-12" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
   <div class="app-shell">
-    <header class="topbar"><div class="brand"><span class="brand-mark">⌖</span><div><strong>HUNT</strong><small>RESELLER RADAR</small></div></div><div class="live-pill"><i></i> LIVE</div></header>
+    <header class="topbar"><div class="brand"><span class="brand-mark">⌖</span><div><strong>WellBOT</strong><small>RESELLER RADAR</small></div></div><div class="live-pill"><i></i> LIVE</div></header>
     <main>
       <section class="hero"><div class="eyebrow">MARKET RADAR <span>•</span> 24/7</div><h1>Лови объявления<br><em>раньше всех.</em></h1><p id="hero-copy">Твои поиски под контролем. Новая цель — сразу в Telegram.</p><button class="primary" data-action="add">+ Добавить мониторинг <span>→</span></button></section>
       <section class="stats"><article><b id="stat-active">—</b><span>активных<br>мониторов</span></article><article><b id="stat-new">—</b><span>новых<br>сегодня</span></article><article><b id="stat-drops">—</b><span>снижений<br>сегодня</span></article></section>
@@ -25,10 +25,10 @@
       <section class="section" id="monitors-section"><div class="section-head"><div><span class="label">MONITORS</span><h2>Мои поиски</h2></div><button class="link-btn" data-action="add">+ Добавить</button></div><div id="monitors"><div class="empty">Загружаю мониторы…</div></div></section>
       <section class="section" id="drops-section"><div class="section-head"><div><span class="label">PRICE ACTION</span><h2>Снижения цены</h2></div></div><div id="drops"><div class="empty">Пока нет снижений цены.</div></div></section>
     </main>
-    <nav class="bottom-nav" aria-label="Навигация HUNT"><button class="nav-item active" data-scroll="feed-section"><span>⌂</span>Главная</button><button class="nav-item" data-scroll="radar-section"><span>⌖</span>Радар</button><button class="nav-item" data-scroll="drops-section"><span>◌</span>Снижения</button><button class="nav-item" data-scroll="monitors-section"><span>○</span>Поиски</button><button class="nav-item" data-scroll="hunt-channel-section"><span>✦</span>Канал</button></nav>
+    <nav class="bottom-nav" aria-label="Навигация WellBOT"><button class="nav-item active" data-scroll="feed-section"><span>⌂</span>Главная</button><button class="nav-item" data-scroll="radar-section"><span>⌖</span>Радар</button><button class="nav-item" data-scroll="drops-section"><span>◌</span>Снижения</button><button class="nav-item" data-scroll="monitors-section"><span>○</span>Поиски</button><button class="nav-item" data-scroll="hunt-channel-section"><span>✦</span>Канал</button></nav>
   </div>
   <script>
-    (function bootHunt() {
+    (function bootWellBot() {
       var started = false;
       var deadline = Date.now() + 15000;
       function forceTelegramTheme(webApp) {
@@ -66,7 +66,7 @@
         var webApp = window.Telegram && window.Telegram.WebApp;
         if (!webApp) {
           if (Date.now() < deadline) return setTimeout(start, 50);
-          return showBootError('Telegram WebApp SDK не загрузился. Закрой HUNT и открой его кнопкой ⚡ HUNT в Telegram.');
+          return showBootError('WellBOT не получил Telegram WebApp SDK. Закрой Mini App и открой его кнопкой ⚡ WellBOT в Telegram.');
         }
         forceTelegramTheme(webApp);
         try { webApp.ready(); webApp.expand(); } catch (_) {}
@@ -78,9 +78,9 @@
           var version = webApp.version || 'unknown';
           var unsafeUser = webApp.initDataUnsafe && webApp.initDataUnsafe.user;
           var hasUnsafeUser = !!(unsafeUser && unsafeUser.id);
-          return showBootError('HUNT не получил launch data Telegram.\nSDK: OK • platform: ' + platform + ' • version: ' + version + ' • initData: EMPTY • initDataUnsafe.user: ' + (hasUnsafeUser ? 'YES' : 'NO') + '.\n\nОткрой HUNT через кнопку ⚡ HUNT внутри Telegram, а не обычной ссылкой в браузере.');
+          return showBootError('WellBOT не получил launch data Telegram.\nSDK: OK • platform: ' + platform + ' • version: ' + version + ' • initData: EMPTY • initDataUnsafe.user: ' + (hasUnsafeUser ? 'YES' : 'NO') + '.\n\nОткрой WellBOT через кнопку ⚡ WellBOT внутри Telegram, а не обычной ссылкой в браузере.');
         }
-        window.__HUNT_INIT_DATA__ = initData;
+        window.__WELLBOT_INIT_DATA__ = initData;
         var script = document.createElement('script');
         script.src = './app.js?v=20260913-11';
         script.onload = function () {
@@ -93,7 +93,7 @@
           };
           document.body.appendChild(channelScript);
         };
-        script.onerror = function () { showBootError('Не удалось загрузить HUNT. Попробуй открыть его заново из Telegram.'); };
+        script.onerror = function () { showBootError('Не удалось загрузить WellBOT. Попробуй открыть Mini App заново из Telegram.'); };
         document.body.appendChild(script);
         started = true;
       }
