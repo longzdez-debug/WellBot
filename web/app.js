@@ -1,4 +1,4 @@
-const HUNT_BUILD = '2026.09.13.3';
+const HUNT_BUILD = '2026.09.13.4';
 const tg = window.Telegram?.WebApp;
 const state = { data: null, filter: 'all', loading: false, submitting: false };
 
@@ -7,15 +7,29 @@ if (tg) {
   tg.setHeaderColor('#07090b'); tg.setBackgroundColor('#07090b');
 }
 
-const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function getTelegramInitData() {
+  if (tg?.initData) return tg.initData;
+  // Telegram's WebApp SDK normally exposes initData, but keep a safe fallback
+  // for clients where the SDK loads late or fails to populate the property.
+  try {
+    const hash = String(window.location.hash || '').replace(/^#/, '');
+    const params = new URLSearchParams(hash);
+    const raw = params.get('tgWebAppData');
+    if (raw) return raw;
+  } catch {}
+  return '';
+}
+
+const esc = (value) => String(value ?? '').replace(/[&<>\"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
 const platformLabel = (p) => ({ kufar: 'KUFAR', onliner: 'ONLINER', av: 'AV.BY' }[p] || String(p || '').toUpperCase());
 const platformIcon = (p) => ({ kufar: '▣', onliner: '◈', av: '🚗' }[p] || '⌖');
 const fmtDate = (value) => { if (!value) return '—'; const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); };
 const price = (value) => value ? esc(value) : 'Цена не указана';
 
 async function api(path, options = {}) {
-  if (!tg?.initData) throw new Error('Откройте HUNT внутри Telegram');
-  const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg.initData, ...(options.headers || {}) } });
+  const initData = getTelegramInitData();
+  if (!initData) throw new Error('HUNT нужно открыть кнопкой внутри Telegram. Открой HUNT заново из бота.');
+  const response = await fetch(path, { ...options, cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData, ...(options.headers || {}) } });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = payload.message || ({ unauthorized: 'Сессия Telegram недействительна. Закройте HUNT и откройте заново.', user_not_registered: 'Сначала нажмите /start в боте.', duplicate: 'Эта ссылка уже добавлена.', limit_reached: 'Достигнут лимит в 10 мониторов.', unsupported_url: 'Ссылка не поддерживается.' }[payload.error]) || `HTTP ${response.status}`;
@@ -79,8 +93,8 @@ async function load() {
     console.info('[HUNT]', HUNT_BUILD, 'bootstrap ok', { links: data.links?.length || 0, ads: data.ads?.length || 0, telegramId: data.user?.telegramId });
   } catch (e) {
     console.error('[HUNT]', HUNT_BUILD, 'bootstrap failed', e);
-    document.querySelector('#feed').innerHTML = `<div class="empty error">${esc(e.message)}<br><button class="link-btn" data-action="refresh">Повторить</button></div>`;
-    document.querySelector('#monitors').innerHTML = '<div class="empty">Не удалось загрузить мониторы.</div>';
+    document.querySelector('#feed').innerHTML = `<div class="empty error"><strong>HUNT ${HUNT_BUILD}</strong><br>${esc(e.message)}<br><button class="link-btn" data-action="refresh">Повторить</button></div>`;
+    document.querySelector('#monitors').innerHTML = `<div class="empty error">${esc(e.message)}</div>`;
     document.querySelector('#drops').innerHTML = '<div class="empty">Данные временно недоступны.</div>';
     document.querySelectorAll('[data-action="refresh"]').forEach(x => x.addEventListener('click', load));
   } finally {
@@ -107,11 +121,12 @@ function showMonitorForm() {
     const url = String(input.value || '').trim();
     error.textContent = '';
     if (!/^https?:\/\//i.test(url) || !/(kufar\.by|onliner\.by|av\.by)/i.test(url)) { error.textContent = 'Нужна ссылка на поиск Kufar, Onliner или av.by.'; input.focus(); return; }
-    if (!tg?.initData) { error.textContent = 'Открой HUNT из Telegram.'; return; }
+    if (!getTelegramInitData()) { error.textContent = 'Открой HUNT из Telegram.'; return; }
     state.submitting = true; submit.disabled = true; submit.textContent = 'Запускаю…';
     try {
       const result = await api('/api/links', { method:'POST', body: JSON.stringify({ url }) });
       modal.remove();
+      state.submitting = false;
       await load();
       showSuccess(result.reactivated ? 'Радар снова активен.' : 'Радар запущен. Монитор добавлен.');
     } catch (e) {
