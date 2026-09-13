@@ -1,5 +1,6 @@
+const HUNT_BUILD = '2026.09.13.3';
 const tg = window.Telegram?.WebApp;
-const state = { data: null, filter: 'all', loading: false };
+const state = { data: null, filter: 'all', loading: false, submitting: false };
 
 if (tg) {
   tg.ready(); tg.expand();
@@ -16,7 +17,10 @@ async function api(path, options = {}) {
   if (!tg?.initData) throw new Error('Откройте HUNT внутри Telegram');
   const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg.initData, ...(options.headers || {}) } });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const message = payload.message || ({ unauthorized: 'Сессия Telegram недействительна. Закройте HUNT и откройте заново.', user_not_registered: 'Сначала нажмите /start в боте.', duplicate: 'Эта ссылка уже добавлена.', limit_reached: 'Достигнут лимит в 10 мониторов.', unsupported_url: 'Ссылка не поддерживается.' }[payload.error]) || `HTTP ${response.status}`;
+    throw new Error(message);
+  }
   return payload;
 }
 
@@ -72,7 +76,9 @@ async function load() {
     state.data = data;
     renderStats(data.stats);
     renderFeed(); renderMonitors(); renderDrops();
+    console.info('[HUNT]', HUNT_BUILD, 'bootstrap ok', { links: data.links?.length || 0, ads: data.ads?.length || 0, telegramId: data.user?.telegramId });
   } catch (e) {
+    console.error('[HUNT]', HUNT_BUILD, 'bootstrap failed', e);
     document.querySelector('#feed').innerHTML = `<div class="empty error">${esc(e.message)}<br><button class="link-btn" data-action="refresh">Повторить</button></div>`;
     document.querySelector('#monitors').innerHTML = '<div class="empty">Не удалось загрузить мониторы.</div>';
     document.querySelector('#drops').innerHTML = '<div class="empty">Данные временно недоступны.</div>';
@@ -83,29 +89,41 @@ async function load() {
   }
 }
 
-function showError(message) {
-  if (tg?.showAlert) tg.showAlert(message); else alert(message);
-}
+function showError(message) { if (tg?.showAlert) tg.showAlert(message); else alert(message); }
 
 function showMonitorForm() {
+  if (state.submitting) return;
   document.querySelector('#hunt-monitor-modal')?.remove();
   const modal = document.createElement('div'); modal.id = 'hunt-monitor-modal'; modal.className = 'hunt-modal';
-  modal.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="hunt-modal-title"><button id="hunt-monitor-x" class="modal-close" type="button" aria-label="Закрыть">×</button><div class="modal-kicker">NEW MONITOR</div><h2 id="hunt-modal-title">Куда ставим радар?</h2><p>Вставь ссылку на поиск Kufar, Onliner или av.by. Проверка и первый парсинг выполняются ботом.</p><label class="modal-label" for="hunt-monitor-url">Ссылка на поиск</label><input id="hunt-monitor-url" type="url" inputmode="url" autocomplete="off" placeholder="https://www.kufar.by/l/..." maxlength="4096"><div id="hunt-monitor-error" class="modal-error" role="alert"></div><div class="modal-actions"><button id="hunt-monitor-cancel" class="modal-secondary" type="button">Отмена</button><button id="hunt-monitor-submit" class="modal-primary" type="button">Запустить радар <span>→</span></button></div></div>`;
+  modal.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="hunt-modal-title"><button id="hunt-monitor-x" class="modal-close" type="button" aria-label="Закрыть">×</button><div class="modal-kicker">NEW MONITOR</div><h2 id="hunt-modal-title">Куда ставим радар?</h2><p>Вставь ссылку на поиск Kufar, Onliner или av.by. HUNT добавит монитор напрямую — без закрытия Mini App.</p><label class="modal-label" for="hunt-monitor-url">Ссылка на поиск</label><input id="hunt-monitor-url" type="url" inputmode="url" autocomplete="off" placeholder="https://www.kufar.by/l/..." maxlength="4096"><div id="hunt-monitor-error" class="modal-error" role="alert"></div><div class="modal-actions"><button id="hunt-monitor-cancel" class="modal-secondary" type="button">Отмена</button><button id="hunt-monitor-submit" class="modal-primary" type="button">Запустить радар <span>→</span></button></div></div>`;
   document.body.appendChild(modal);
   const input = modal.querySelector('#hunt-monitor-url'); const error = modal.querySelector('#hunt-monitor-error'); const submit = modal.querySelector('#hunt-monitor-submit');
-  const close = () => modal.remove();
+  const close = () => { if (!state.submitting) modal.remove(); };
   modal.querySelector('#hunt-monitor-cancel').onclick = close;
   modal.querySelector('#hunt-monitor-x').onclick = close;
   modal.onclick = (event) => { if (event.target === modal) close(); };
-  const submitUrl = () => {
+  const submitUrl = async () => {
+    if (state.submitting) return;
     const url = String(input.value || '').trim();
     error.textContent = '';
     if (!/^https?:\/\//i.test(url) || !/(kufar\.by|onliner\.by|av\.by)/i.test(url)) { error.textContent = 'Нужна ссылка на поиск Kufar, Onliner или av.by.'; input.focus(); return; }
-    if (!tg?.sendData) { error.textContent = 'Открой HUNT из Telegram.'; return; }
-    submit.disabled = true; submit.textContent = 'Запускаю…'; tg.sendData(JSON.stringify({ action:'add_link', url })); setTimeout(() => tg.close(), 250);
+    if (!tg?.initData) { error.textContent = 'Открой HUNT из Telegram.'; return; }
+    state.submitting = true; submit.disabled = true; submit.textContent = 'Запускаю…';
+    try {
+      const result = await api('/api/links', { method:'POST', body: JSON.stringify({ url }) });
+      modal.remove();
+      await load();
+      showSuccess(result.reactivated ? 'Радар снова активен.' : 'Радар запущен. Монитор добавлен.');
+    } catch (e) {
+      error.textContent = e.message;
+      submit.disabled = false; submit.textContent = 'Запустить радар →';
+      state.submitting = false;
+    }
   };
   submit.onclick = submitUrl; input.onkeydown = (e) => { if (e.key === 'Enter') submitUrl(); if (e.key === 'Escape') close(); }; setTimeout(() => input.focus(), 50);
 }
+
+function showSuccess(message) { if (tg?.showPopup) tg.showPopup({ title: 'HUNT', message, buttons: [{ type: 'ok' }] }); else alert(message); }
 
 document.querySelectorAll('[data-action="add"]').forEach(btn => btn.addEventListener('click', showMonitorForm));
 document.querySelectorAll('[data-action="refresh"]').forEach(btn => btn.addEventListener('click', load));
