@@ -16,6 +16,10 @@ RUN cp src/database/schema.sql dist/database/
 # Remove dev dependencies after build
 RUN npm prune --omit=dev
 
+# Run the application without root privileges.
+RUN chown -R node:node /app
+USER node
+
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
