@@ -1,6 +1,19 @@
+import axios from 'axios';
 import TelegramBot, { Message } from 'node-telegram-bot-api';
 import { BotHandler } from '../bot/BotHandler';
 import { logger } from '../utils/logger';
+
+interface TelegramApiResponse<T> {
+  ok: boolean;
+  result?: T;
+  description?: string;
+}
+
+interface TelegramMenuButton {
+  type: string;
+  text?: string;
+  web_app?: { url: string };
+}
 
 export function installWebAppBridge(handler: BotHandler): void {
   const bot = (handler as unknown as { bot: TelegramBot }).bot;
@@ -10,8 +23,9 @@ export function installWebAppBridge(handler: BotHandler): void {
   }
 
   const webAppUrl = process.env.HUNT_WEBAPP_URL?.trim();
-  if (!webAppUrl) {
-    logger.info('HUNT Mini App URL is not configured; menu button is disabled');
+  const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  if (!webAppUrl || !botToken) {
+    logger.info('HUNT Mini App configuration is incomplete; menu button is disabled');
     return;
   }
 
@@ -34,17 +48,43 @@ export function installWebAppBridge(handler: BotHandler): void {
     web_app: { url: webAppUrl },
   };
 
-  const configureMenuButton = async (chatId: number): Promise<void> => {
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+  // Use the Bot API directly for menu configuration. This avoids depending on
+  // node-telegram-bot-api's serialization of the newer MenuButtonWebApp type.
+  const telegramApi = async <T>(method: string, body: Record<string, unknown>): Promise<T> => {
+    const response = await axios.post<TelegramApiResponse<T>>(
+      `https://api.telegram.org/bot${botToken}/${method}`,
+      body,
+      { timeout: 10000 },
+    );
+
+    if (!response.data.ok || response.data.result === undefined) {
+      throw new Error(response.data.description || `Telegram API ${method} failed`);
+    }
+
+    return response.data.result;
+  };
+
+  const configureMenuButton = async (chatId?: number): Promise<void> => {
+    const scope = chatId !== undefined ? { chat_id: chatId } : {};
+
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
       try {
-        await bot.setChatMenuButton({ chat_id: chatId, menu_button: menuButton });
-        const current = await bot.getChatMenuButton({ chat_id: chatId });
-        const verified = current?.type === 'web_app'
+        await telegramApi<boolean>('setChatMenuButton', {
+          ...scope,
+          menu_button: menuButton,
+        });
+
+        const current = await telegramApi<TelegramMenuButton>('getChatMenuButton', scope);
+        const verified = current.type === 'web_app'
           && current.text === menuButton.text
           && current.web_app?.url === webAppUrl;
 
         if (verified) {
-          logger.info('HUNT Mini App menu button verified', { webAppUrl, chatId, attempt });
+          logger.info('HUNT Mini App menu button verified', {
+            webAppUrl,
+            chatId,
+            attempt,
+          });
           return;
         }
 
@@ -64,22 +104,20 @@ export function installWebAppBridge(handler: BotHandler): void {
         });
       }
 
-      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      if (attempt < 5) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+      }
     }
   };
 
-  // Always configure the concrete private chat. This overrides stale per-chat
-  // Telegram menu state instead of relying only on the bot-wide default.
+  // Configure the bot-wide default and then override the concrete private chat
+  // as soon as Telegram gives us a message from that chat.
+  void configureMenuButton();
+
   bot.on('message', (msg: Message) => {
     if (msg.chat.type === 'private' && msg.from) {
       void configureMenuButton(msg.chat.id);
     }
-  });
-
-  // Keep the bot-wide default configured for users opening a new private chat.
-  void bot.setChatMenuButton({ menu_button: menuButton }).catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error('Failed to configure default HUNT menu button', { webAppUrl, error: message });
   });
 
   bot.on('message', async (msg: Message) => {
