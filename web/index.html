@@ -7,8 +7,7 @@
   <meta name="color-scheme" content="dark" />
   <title>HUNT — Reseller Radar</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="./styles.css?v=20260913-7" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="./styles.css?v=20260913-8" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -27,11 +26,28 @@
   <script>
     (function bootHunt() {
       var started = false;
-      var deadline = Date.now() + 5000;
+      var deadline = Date.now() + 15000;
       function showBootError(message) {
         if (started) return;
         started = true;
         document.querySelectorAll('.empty').forEach(function (node) { node.textContent = message; node.classList.add('error'); });
+      }
+      function readInitData(webApp) {
+        if (webApp && typeof webApp.initData === 'string' && webApp.initData) return webApp.initData;
+        try {
+          var internal = window.Telegram && window.Telegram.WebView && window.Telegram.WebView.initParams && window.Telegram.WebView.initParams.tgWebAppData;
+          if (typeof internal === 'string' && internal) return internal;
+        } catch (_) {}
+        try {
+          var sources = [String(window.location.hash || ''), String(window.location.search || '')];
+          for (var i = 0; i < sources.length; i++) {
+            var rawSource = sources[i].replace(/^#|^\?/, '');
+            var params = new URLSearchParams(rawSource);
+            var raw = params.get('tgWebAppData');
+            if (raw) return raw;
+          }
+        } catch (_) {}
+        return '';
       }
       function start() {
         if (started) return;
@@ -41,8 +57,18 @@
           return showBootError('Telegram WebApp SDK не загрузился. Закрой HUNT и открой его кнопкой ⚡ HUNT в Telegram.');
         }
         try { webApp.ready(); webApp.expand(); } catch (_) {}
+        var initData = readInitData(webApp);
+        if (!initData) {
+          if (Date.now() < deadline) return setTimeout(start, 100);
+          var platform = webApp.platform || 'unknown';
+          var version = webApp.version || 'unknown';
+          var unsafeUser = webApp.initDataUnsafe && webApp.initDataUnsafe.user;
+          var hasUnsafeUser = !!(unsafeUser && unsafeUser.id);
+          return showBootError('HUNT не получил launch data Telegram.\nSDK: OK • platform: ' + platform + ' • version: ' + version + ' • initData: EMPTY • initDataUnsafe.user: ' + (hasUnsafeUser ? 'YES' : 'NO') + '.\n\nОткрой HUNT через кнопку ⚡ HUNT внутри Telegram, а не обычной ссылкой в браузере.');
+        }
+        window.__HUNT_INIT_DATA__ = initData;
         var script = document.createElement('script');
-        script.src = './app.js?v=20260913-7';
+        script.src = './app.js?v=20260913-8';
         script.onerror = function () { showBootError('Не удалось загрузить HUNT. Попробуй открыть его заново из Telegram.'); };
         document.body.appendChild(script);
         started = true;
