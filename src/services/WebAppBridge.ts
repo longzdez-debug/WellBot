@@ -1,5 +1,5 @@
 import TelegramBot, { Message } from 'node-telegram-bot-api';
-import { BotHandler } from './BotHandler';
+import { BotHandler } from '../bot/BotHandler';
 import { logger } from '../utils/logger';
 
 /**
