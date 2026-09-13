@@ -66,6 +66,9 @@ describe('ParserScheduler', () => {
       parsePriceToNumber: jest.fn(),
       createPriceDropRecord: jest.fn(),
       updateAdPrice: jest.fn(),
+      enqueueNotification: jest.fn().mockResolvedValue(undefined),
+      claimNotificationJobs: jest.fn().mockResolvedValue([]),
+      purgeNotificationOutbox: jest.fn().mockResolvedValue(0),
     };
   }
 
@@ -82,10 +85,10 @@ describe('ParserScheduler', () => {
     await scheduler.runParsing();
 
     expect(db.bulkCreateAds).toHaveBeenCalledWith(1, ads);
-    expect(bot.sendNotification).not.toHaveBeenCalled();
+    expect(db.enqueueNotification).not.toHaveBeenCalled();
   });
 
-  test('notifies only genuinely new ads after baseline', async () => {
+  test('queues only genuinely new ads after baseline', async () => {
     const link = makeLink(1, new Date());
     const ad: Ad = { external_id: 'new-1', title: 'New', ad_url: 'https://kufar.by/new-1' };
     parser.parseUrl.mockResolvedValue([ad]);
@@ -95,8 +98,14 @@ describe('ParserScheduler', () => {
     await scheduler.runParsing();
 
     expect(db.createAd).toHaveBeenCalledWith(1, ad);
-    expect(bot.sendNotification).toHaveBeenCalledTimes(1);
-    expect(bot.sendNotification).toHaveBeenCalledWith(user.telegram_id, expect.objectContaining({ external_id: 'new-1' }));
+    expect(db.enqueueNotification).toHaveBeenCalledTimes(1);
+    expect(db.enqueueNotification).toHaveBeenCalledWith(
+      'new_ad',
+      user.telegram_id,
+      `new_ad:user:${user.telegram_id}:new-1`,
+      { ad: expect.objectContaining({ external_id: 'new-1' }) },
+    );
+    expect(bot.sendNotification).not.toHaveBeenCalled();
   });
 
   test('deduplicates the same new ad across multiple saved searches for one user', async () => {
@@ -109,7 +118,12 @@ describe('ParserScheduler', () => {
     await scheduler.runParsing();
 
     expect(db.createAd).toHaveBeenCalledTimes(2);
-    expect(bot.sendNotification).toHaveBeenCalledTimes(1);
-    expect(bot.sendNotification).toHaveBeenCalledWith(user.telegram_id, expect.objectContaining({ external_id: 'shared-1' }));
+    expect(db.enqueueNotification).toHaveBeenCalledTimes(1);
+    expect(db.enqueueNotification).toHaveBeenCalledWith(
+      'new_ad',
+      user.telegram_id,
+      `new_ad:user:${user.telegram_id}:shared-1`,
+      { ad: expect.objectContaining({ external_id: 'shared-1' }) },
+    );
   });
 });
