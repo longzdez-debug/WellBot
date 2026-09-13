@@ -99,31 +99,11 @@ export function installWebAppBridge(handler: BotHandler): void {
   // Set the default button for chats without an override.
   configureMenuButton();
 
-  // Telegram clients can retain a per-chat menu configuration. Re-apply the
-  // HUNT button after /start without sending another message to the user.
+  // Per-chat menu configuration is refreshed on /start. The visible launcher
+  // now lives in the single-button reply keyboard supplied by BotHandler.
   bot.on('message', (msg: Message) => {
     if (msg.text === '/start' && msg.chat.type === 'private') {
       configureMenuButton(msg.chat.id);
-
-      // HUNT is the single chat entry point. Remove the legacy reply keyboard
-      // and send one launch message with the inline HUNT button.
-      void bot.sendMessage(msg.chat.id, '⚡ Откройте HUNT кнопкой ниже:', {
-        reply_markup: {
-          remove_keyboard: true,
-          inline_keyboard: [[{
-            text: '⚡ Открыть HUNT',
-            web_app: { url: webAppUrl },
-          }]],
-        },
-      })
-        .then(() => logger.info('HUNT launch button sent and legacy keyboard removed', { chatId: msg.chat.id }))
-        .catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : String(error);
-          logger.error('Failed to send HUNT launch button', {
-            chatId: msg.chat.id,
-            error: message,
-          });
-        });
     }
   });
 
