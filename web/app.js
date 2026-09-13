@@ -1,4 +1,4 @@
-const HUNT_BUILD = '2026.09.13.4';
+const HUNT_BUILD = '2026.09.13.5';
 const tg = window.Telegram?.WebApp;
 const state = { data: null, filter: 'all', loading: false, submitting: false };
 
@@ -9,13 +9,20 @@ if (tg) {
 
 function getTelegramInitData() {
   if (tg?.initData) return tg.initData;
-  // Telegram's WebApp SDK normally exposes initData, but keep a safe fallback
-  // for clients where the SDK loads late or fails to populate the property.
+  // Telegram's SDK keeps the launch parameters internally on some clients.
+  // Prefer that source before falling back to the URL fragment/query string.
   try {
-    const hash = String(window.location.hash || '').replace(/^#/, '');
-    const params = new URLSearchParams(hash);
-    const raw = params.get('tgWebAppData');
-    if (raw) return raw;
+    const internal = window.Telegram?.WebView?.initParams?.tgWebAppData;
+    if (internal) return internal;
+  } catch {}
+  try {
+    const sources = [String(window.location.hash || ''), String(window.location.search || '')];
+    for (const source of sources) {
+      const rawSource = source.replace(/^#|^\?/, '');
+      const params = new URLSearchParams(rawSource);
+      const raw = params.get('tgWebAppData');
+      if (raw) return raw;
+    }
   } catch {}
   return '';
 }
