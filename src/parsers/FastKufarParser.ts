@@ -16,6 +16,22 @@ const BRAND_MAP: Record<string, string> = {
   google: 'Google', tecno: 'Tecno', infinix: 'Infinix',
 };
 
+const BRAND_TERMS: Record<string, string[]> = {
+  apple: ['apple', 'iphone', 'айфон'],
+  samsung: ['samsung', 'самсунг'],
+  xiaomi: ['xiaomi', 'ксиаоми', 'сяоми'],
+  huawei: ['huawei', 'хуавей'],
+  honor: ['honor', 'хонор'],
+  nokia: ['nokia', 'нокиа'],
+  realme: ['realme', 'рілмі', 'рилми'],
+  oppo: ['oppo'],
+  vivo: ['vivo'],
+  oneplus: ['oneplus', 'one plus'],
+  google: ['google', 'pixel'],
+  tecno: ['tecno', 'техно'],
+  infinix: ['infinix'],
+};
+
 const REGION_MAP: Record<string, string> = {
   minsk: '7', brest: '1', vitebsk: '6', gomel: '2', grodno: '3', mogilev: '4',
   'minskaya-oblast': '5', 'brestskaya-oblast': '1', 'vitebskaya-oblast': '6',
@@ -31,6 +47,29 @@ const API_ENDPOINTS = [
   'https://cre-api.kufar.by/ads-search/v1/engine/v1/search/rendered-paginated',
 ];
 
+function normalizeSearchText(value: unknown): string {
+  return String(value ?? '')
+    .toLocaleLowerCase('ru-RU')
+    .replace(/ё/g, 'е')
+    .replace(/[^a-zа-я0-9]+/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function adSearchText(ad: any): string {
+  const values: string[] = [ad?.subject, ad?.description];
+
+  for (const collection of [ad?.ad_parameters, ad?.account_parameters]) {
+    if (!Array.isArray(collection)) continue;
+    for (const item of collection) {
+      if (!item || typeof item !== 'object') continue;
+      values.push(item.p, item.v, item.vl, item.value, item.name, item.label);
+    }
+  }
+
+  return normalizeSearchText(values.filter(Boolean).join(' '));
+}
+
 export class FastKufarParser extends BaseParser {
   platform = 'kufar' as const;
 
@@ -43,11 +82,24 @@ export class FastKufarParser extends BaseParser {
       if (ALLOWED_SEARCH_PARAMS.has(key) && value) params[key] = value;
     }
 
+    let requestedBrandSlug = '';
     for (const part of parts) {
-      if (CATEGORY_MAP[part]) { params.cat = CATEGORY_MAP[part]; break; }
-      const brandSlug = part.match(/^mt~(.+)$/)?.[1];
-      if (brandSlug && BRAND_MAP[brandSlug]) params.subcat = BRAND_MAP[brandSlug];
+      if (CATEGORY_MAP[part.toLocaleLowerCase('ru-RU')]) {
+        params.cat = CATEGORY_MAP[part.toLocaleLowerCase('ru-RU')];
+        continue;
+      }
+
+      const brandSlug = part.match(/^mt~(.+)$/i)?.[1]?.toLocaleLowerCase('ru-RU');
+      if (brandSlug && BRAND_MAP[brandSlug]) {
+        requestedBrandSlug = brandSlug;
+        params.subcat = BRAND_MAP[brandSlug];
+      }
     }
+
+    const requestedQuery = String(parsed.searchParams.get('query') || '').trim();
+    const queryTerms = normalizeSearchText(requestedQuery)
+      .split(' ')
+      .filter(term => term.length >= 2);
 
     const gtsy = parsed.searchParams.get('gtsy');
     if (gtsy) {
@@ -62,7 +114,7 @@ export class FastKufarParser extends BaseParser {
 
     if (!params.rgn) {
       for (const part of parts) {
-        const region = part.match(/^r~(.+)$/)?.[1] || part;
+        const region = part.match(/^r~(.+)$/i)?.[1]?.toLocaleLowerCase('ru-RU') || part.toLocaleLowerCase('ru-RU');
         if (REGION_MAP[region]) { params.rgn = REGION_MAP[region]; break; }
       }
     }
@@ -85,9 +137,35 @@ export class FastKufarParser extends BaseParser {
           },
         });
 
-        const ads = Array.isArray(response.data?.ads) ? response.data.ads : [];
-        logger.debug('Kufar hot-path page received', { count: ads.length });
-        return ads.filter((ad: any) => ad?.ad_id).map((ad: any) => {
+        const rawAds = Array.isArray(response.data?.ads) ? response.data.ads : [];
+        const brandTerms = requestedBrandSlug ? (BRAND_TERMS[requestedBrandSlug] || [requestedBrandSlug]) : [];
+        const normalizedBrandTerms = brandTerms.map(normalizeSearchText).filter(Boolean);
+
+        // Kufar's search endpoint can occasionally return results outside a selected
+        // brand/query filter. Enforce the user's link filters before they reach the scheduler.
+        const ads = rawAds.filter((ad: any) => {
+          if (!ad?.ad_id) return false;
+          const text = adSearchText(ad);
+
+          if (normalizedBrandTerms.length > 0 && !normalizedBrandTerms.some(term => text.includes(term))) {
+            return false;
+          }
+
+          if (queryTerms.length > 0 && !queryTerms.every(term => text.includes(term))) {
+            return false;
+          }
+
+          return true;
+        });
+
+        logger.debug('Kufar hot-path page received', {
+          count: ads.length,
+          rawCount: rawAds.length,
+          requestedBrand: requestedBrandSlug || undefined,
+          requestedQuery: requestedQuery || undefined,
+        });
+
+        return ads.map((ad: any) => {
           let price = 'Договорная';
           if (ad.price_byn != null) price = `${(Number(ad.price_byn) / 100).toFixed(2)} BYN`;
           else if (ad.price_usd != null) price = `${(Number(ad.price_usd) / 100).toFixed(2)} USD`;
@@ -97,7 +175,7 @@ export class FastKufarParser extends BaseParser {
           return {
             external_id: String(ad.ad_id),
             title: ad.subject || 'Без названия',
-            description: undefined,
+            description: ad.description,
             price,
             image_url: image?.path ? `https://rms4.kufar.by/v1/gallery/${image.path}` : image?.url,
             ad_url: ad.ad_link || `https://www.kufar.by/ad/${ad.ad_id}`,
