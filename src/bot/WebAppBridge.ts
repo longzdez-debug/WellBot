@@ -105,28 +105,30 @@ export function installWebAppBridge(handler: BotHandler): void {
     if (msg.text === '/start' && msg.chat.type === 'private') {
       configureMenuButton(msg.chat.id);
 
-      // Use the Main Mini App deep link for the chat launch message. This is
-      // deliberately different from a raw https://web-app URL: Telegram
-      // recognizes the ?startapp link as a Main Mini App launch and invokes
-      // the same authenticated WebView flow as the working "Open App" button
-      // on the bot profile. This avoids clients that open a Web App URL as a
-      // plain browser page and therefore provide empty initData.
+      // HUNT is the single chat entry point. Remove the legacy reply keyboard
+      // so users do not get a second, duplicated bot interface.
       void bot.getMe()
         .then((me) => {
           if (!me.username) throw new Error('Bot username is unavailable');
           return bot.sendMessage(msg.chat.id, '⚡ Откройте HUNT кнопкой ниже:', {
+            reply_markup: {
+              remove_keyboard: true,
+            },
+            // Keep the launch control as an inline button, which opens an
+            // authenticated Telegram Mini App WebView with signed initData.
+          }).then(() => bot.sendMessage(msg.chat.id, '⚡ HUNT', {
             reply_markup: {
               inline_keyboard: [[{
                 text: '⚡ Открыть HUNT',
                 web_app: { url: webAppUrl },
               }]],
             },
-          });
+          }));
         })
-        .then(() => logger.info('HUNT Main Mini App launch button sent', { chatId: msg.chat.id }))
+        .then(() => logger.info('HUNT launch button sent and legacy keyboard removed', { chatId: msg.chat.id }))
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
-          logger.error('Failed to send HUNT Main Mini App launch button', {
+          logger.error('Failed to send HUNT launch button', {
             chatId: msg.chat.id,
             error: message,
           });
