@@ -1,7 +1,7 @@
 {
   "name": "wellbot",
-  "version": "2.2.0",
-  "description": "HUNT — Telegram listing monitor for Kufar.by, Onliner.by and Av.by",
+  "version": "2.0.2",
+  "description": "Telegram bot for tracking ads on Kufar.by, Onliner.by, Av.by",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -12,9 +12,8 @@
   },
   "keywords": [
     "telegram",
-    "hunt",
-    "reseller",
-    "listing-monitor",
+    "bot",
+    "parser",
     "kufar",
     "onliner",
     "av"
