@@ -102,6 +102,31 @@ const CITY_VARIANTS: Record<string, string[]> = {
   'borisov': ['борисов'], 'soligorsk': ['солигорск'], 'molodechno': ['молодечно'], 'zhodino': ['жодино'], 'slutsk': ['слуцк'],
 };
 
+/** Read a single Kufar ad parameter without relying on a particular field name. */
+function getAdParam(ad: any, ...names: string[]): any {
+  const params = Array.isArray(ad?.ad_parameters) ? ad.ad_parameters : [];
+  const found = params.find((p: any) => names.includes(p?.p));
+  return found?.vl ?? found?.v;
+}
+
+function normalizeText(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getNextCursor(data: any): string | null {
+  const pages = data?.pagination?.pages;
+  if (!Array.isArray(pages)) return null;
+  const next = pages.find((page: any) => page?.label === 'next' || page?.type === 'next');
+  const token = next?.token;
+  return typeof token === 'string' && token.trim() ? token.trim() : null;
+}
+
 
 export class KufarParser extends BaseParser {
   platform = 'kufar' as const;
@@ -204,89 +229,88 @@ export class KufarParser extends BaseParser {
       if (pathParts.includes('snyat')) typ = 'let';
       else if (pathParts.includes('kupit')) typ = 'sell';
 
-      // --- 2. Сборка параметров и выполнение запросов к API (с пагинацией) ---
-      const apiParams: any = { size: 100, sort: 'lst.d' };
+      // --- 2. Сборка параметров и выполнение запросов к API (с cursor-пагинацией) ---
+      const apiParams: Record<string, any> = { size: 100 };
+
+      // Preserve every search filter from the original Kufar URL instead of
+      // silently dropping filters such as ar/sort/cur.
+      urlObj.searchParams.forEach((value, key) => {
+        if (key !== 'page' && key !== 'cursor') apiParams[key] = value;
+      });
+
       if (cat) apiParams.cat = cat;
       if (rgn) apiParams.rgn = rgn;
       if (typ) apiParams.typ = typ;
+      if (pathQuery && !urlObj.searchParams.get('query')) apiParams.query = pathQuery;
+      if (!apiParams.cat && urlObj.searchParams.get('cat')) apiParams.cat = urlObj.searchParams.get('cat');
+      if (!apiParams.rgn && urlObj.searchParams.get('rgn')) apiParams.rgn = urlObj.searchParams.get('rgn');
+      if (!apiParams.sort) apiParams.sort = 'lst.d';
 
-      // Search text may be encoded in either the path (q~...) or query string.
-      // An explicit ?query= takes precedence when both are present.
-      if (pathQuery) apiParams.query = pathQuery;
-      
-      // Пробрасиваем "безопасные" параметры из исходного URL
-      urlObj.searchParams.forEach((value, key) => {
-        if (['prc', 'rms', 'gtsy', 'query'].includes(key)) {
-          apiParams[key] = value;
-        }
-      });
-      
-      logger.info('Making Kufar API requests (with pagination)', { params: apiParams, originalUrl: url });
+      const headers = {
+        'Host': 'api.kufar.by',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'ru-RU,ru;q=0.9',
+        'Referer': 'https://www.kufar.by/',
+        'Origin': 'https://www.kufar.by',
+      };
 
-      const paginatedResponse = await this.axiosInstance.get(
-        'https://api.kufar.by/search-api/v2/search/rendered-paginated',
-        {
-          params: apiParams,
-          headers: {
-            'Host': 'api.kufar.by',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          },
-        }
-      );
+      const requestPage = async (cursor?: string): Promise<any> => {
+        const params = { ...apiParams };
+        if (cursor) params.cursor = cursor;
 
-      // --- 2.1. Пагинация: собираем ВСЕ объявления по страницам (параллельно) ---
-      const allPaginatedAds: any[] = paginatedResponse.data?.ads || [];
-      const meta = paginatedResponse.data?.meta || {};
-      const totalAvailable = meta?.total || allPaginatedAds.length;
-      const fetchedOnFirstPage = allPaginatedAds.length;
-      const totalPages = meta?.totalPages || Math.ceil(totalAvailable / 100);
+        for (let attempt = 1; attempt <= 4; attempt++) {
+          try {
+            const response = await this.axiosInstance.get(
+              'https://api.kufar.by/search-api/v2/search/rendered-paginated',
+              { params, headers, timeout: 30000 }
+            );
+            return response.data;
+          } catch (error: any) {
+            const status = error?.response?.status;
+            const retryable = status === 429 || (status >= 500 && status <= 599) || !status;
+            if (!retryable || attempt === 4) throw error;
 
-      logger.info('Kufar pagination info', { 
-        totalAvailable, 
-        fetchedOnFirstPage, 
-        totalPages,
-        hasNextPage: meta?.next ? true : false 
-      });
+            const retryAfter = Number(error?.response?.headers?.['retry-after']);
+            const delay = Number.isFinite(retryAfter) && retryAfter > 0
+              ? Math.min(retryAfter * 1000, 10000)
+              : attempt * 500;
 
-      // Параллельная загрузка всех страниц (батчами по 5 для ограничения нагрузки)
-      if (meta?.next) {
-        const pageNumbers: number[] = [];
-        for (let p = 2; p <= totalPages && p <= 51; p++) {
-          pageNumbers.push(p);
-        }
-
-        // Разбиваем на батчи по 5 параллельных запросов
-        const BATCH_SIZE = 5;
-        for (let i = 0; i < pageNumbers.length; i += BATCH_SIZE) {
-          const batch = pageNumbers.slice(i, i + BATCH_SIZE);
-          const responses = await Promise.allSettled(
-            batch.map(async (page) => {
-              const resp = await this.axiosInstance.get(
-                'https://api.kufar.by/search-api/v2/search/rendered-paginated',
-                {
-                  params: { ...apiParams, page, size: 100 },
-                  headers: {
-                    'Host': 'api.kufar.by',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                  },
-                }
-              );
-              return resp.data?.ads || [];
-            })
-          );
-
-          for (const res of responses) {
-            if (res.status === 'fulfilled') {
-              const ads = res.value;
-              if (ads.length > 0) allPaginatedAds.push(...ads);
-            }
-          }
-
-          // Небольшая задержка между батчами
-          if (i + BATCH_SIZE < pageNumbers.length) {
-            await this.sleep(200 + Math.random() * 300);
+            logger.warn('Kufar API request retry', { attempt, status, delay });
+            await this.sleep(delay);
           }
         }
+        throw new Error('Kufar API request failed');
+      };
+
+      logger.info('Making Kufar API requests (cursor pagination)', {
+        params: apiParams,
+        originalUrl: url,
+      });
+
+      const allPaginatedAds: any[] = [];
+      const seenCursors = new Set<string>();
+      let cursor: string | null = null;
+
+      // Cursors must be followed sequentially; page=2/page=3 is not a reliable
+      // replacement for Kufar's cursor pagination.
+      for (let page = 1; page <= 51; page++) {
+        const data = await requestPage(cursor || undefined);
+        const ads = Array.isArray(data?.ads) ? data.ads : [];
+        allPaginatedAds.push(...ads);
+
+        const nextCursor = getNextCursor(data);
+        logger.info('Kufar page fetched', {
+          page,
+          ads: ads.length,
+          totalCollected: allPaginatedAds.length,
+          hasNext: Boolean(nextCursor),
+        });
+
+        if (!nextCursor || seenCursors.has(nextCursor) || ads.length === 0) break;
+        seenCursors.add(nextCursor);
+        cursor = nextCursor;
+        await this.sleep(100 + Math.random() * 150);
       }
 
       logger.info('Kufar pagination complete', { totalCollected: allPaginatedAds.length });
@@ -300,10 +324,7 @@ export class KufarParser extends BaseParser {
           'https://api.kufar.by/search-api/v2/search/poleposition',
           {
             params: { ...apiParams, size: 10 },
-            headers: {
-              'Host': 'api.kufar.by',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            },
+            headers,
           }
         );
         polepositionAds = poleResponse.data?.ads || [];
@@ -364,7 +385,9 @@ export class KufarParser extends BaseParser {
         
         // Извлекаем локацию из нескольких источников для надёжности
         const locationParam = ad.ad_parameters?.find((p: any) => p?.p === 'area');
+        const regionParam = ad.ad_parameters?.find((p: any) => p?.p === 'region');
         const location = locationParam?.vl;
+        const region = regionParam?.vl;
 
         // Поле ad_location (если есть) — содержит город/район
         const adLocation = ad.ad_location;
@@ -395,95 +418,53 @@ export class KufarParser extends BaseParser {
           published_at: publishedAt,
           updated_at: updatedAt,
           // Все доступные текстовые поля для фильтрации
-          _rawLocation: (location || '').toLowerCase(),
-          _rawAddress: (address || '').toLowerCase(),
-          _rawAdLocation: (adLocation || '').toLowerCase(),
-          // Бренд из параметров (для фильтрации)
-          _brand: (ad.ad_parameters?.find((p: any) => p.p === 'phones_brand')?.vl || '').toLowerCase(),
+          _rawLocation: normalizeText(location),
+          _rawRegion: normalizeText(region),
+          _rawAddress: normalizeText(address),
+          _rawAdLocation: normalizeText(adLocation),
+          _brand: normalizeText(getAdParam(ad, 'phones_brand', 'phone_brand', 'brand')),
         };
       });
 
-      // Применяем фильтрацию по городу (если город указан в path URL)
+      // Дополнительная фильтрация по городу для city-level URLs.
+      // Не используем title/description как основной источник: "доставка в Минск"
+      // не означает, что объявление находится в Минске.
       if (citySlugForFilter) {
-        const targetCityVariants = CITY_VARIANTS[citySlugForFilter] || [citySlugForFilter];
-        
-        // Слова, которые означают что это НЕ город, а район/область/примечание
-        // Но только если они НЕ идут после названия города
-        const excludePatterns = [
-          /могилевский\s+район/gi,
-          /брестский\s+район/gi,
-          /витебский\s+район/gi,
-          /гродненский\s+район/gi,
-          /гомельский\s+район/gi,
-          /минский\s+район/gi,
-          /минская\s+область/gi,
-          /могилевская\s+область/gi,
-          /брестская\s+область/gi,
-          /витебская\s+область/gi,
-          /гомельская\s+область/gi,
-          /гродненская\s+область/gi,
-          /обл\s*г\s*/gi,
-          /обл\.?\s*р-н/gi,
-        ];
-        
-        processedAds = processedAds.filter(ad => {
-          // Собираем все текстовые поля для поиска + заголовок (часто город в названии)
-          const searchText = `${ad.title} ${ad.description || ''} ${ad._rawLocation} ${ad._rawAddress} ${ad._rawAdLocation}`;
-          
-          if (!searchText) return false;
-          
-          // Сначала проверяем, что город указан в тексте
-          const hasCity = targetCityVariants.some(variant => searchText.includes(variant));
-          if (!hasCity) return false;
-          
-          // Проверяем, что это НЕ прилагательное или район — но только если город НЕ упоминается рядом
-          const hasExclude = excludePatterns.some(pattern => pattern.test(searchText));
-          if (hasExclude) {
-            // Дополнительная проверка: если город упоминается рядом с "район", это допустимо
-            // (например "Могилёв, Первомайский район" — это нормально)
-            const cityNearExclude = targetCityVariants.some(variant => {
-              const idx = searchText.indexOf(variant);
-              if (idx === -1) return false;
-              // Проверяем 100 символов после города — если там нет слова "район" или "область", то ок
-              const segment = searchText.substring(idx, Math.min(idx + 150, searchText.length));
-              return !segment.includes('район') && !segment.includes('область') && !segment.includes('обл');
-            });
-            if (cityNearExclude) return true;
-            return false;
+        const variants = (CITY_VARIANTS[citySlugForFilter] || [citySlugForFilter]).map(normalizeText);
+
+        processedAds = processedAds.filter((ad: any) => {
+          const structured = [ad._rawLocation, ad._rawAdLocation, ad._rawAddress]
+            .filter(Boolean)
+            .join(' ');
+
+          if (structured) {
+            if (citySlugForFilter === 'minsk' && structured.includes('минскии раион')) return false;
+            return variants.some(variant => structured.includes(variant));
           }
-          
-          return true;
+
+          const fallback = normalizeText(ad.title + ' ' + (ad.description || ''));
+          return variants.some(variant => fallback.includes(variant));
         });
-        logger.info(`Filtered ads by city: ${citySlugForFilter}`, { before: uniqueAds.length, after: processedAds.length });
-        
-        // Лог отфильтрованных объявлений для отладки
-        const filteredCount = uniqueAds.length - processedAds.length;
-        if (filteredCount > 0) {
-          const filteredAds = uniqueAds.filter((ad: any) => {
-            const adId = ad.ad_id;
-            return !processedAds.some(p => String(p.external_id) === String(adId));
-          });
-          logger.info(`Filtered out ${filteredCount} ads by city: ${citySlugForFilter}`, {
-            filtered: filteredAds.map(a => ({ id: a.ad_id, title: a.subject, location: a.ad_location }))
-          });
-        }
+
+        logger.info(`Filtered ads by city: ${citySlugForFilter}`, {
+          before: uniqueAds.length,
+          after: processedAds.length,
+        });
       }
 
-      // Применяем фильтрацию по бренду (например, mt~apple)
+      // Структурированный бренд имеет приоритет; title используется только
+      // если Kufar не прислал соответствующий параметр.
       if (subcat) {
-        const brandName = subcat.toLowerCase();
-        processedAds = processedAds.filter(ad => {
-          // Ищем бренд в title, description и в извлечённом бренде из параметров
-          const searchText = `${ad.title} ${ad.description || ''}`.toLowerCase();
-          return ad._brand === brandName || searchText.includes(brandName);
+        const brandName = normalizeText(subcat);
+        processedAds = processedAds.filter((ad: any) => {
+          if (ad._brand) return ad._brand === brandName;
+          const title = normalizeText(ad.title);
+          return title.split(/\s+/).some((word: string) => word.replace(/[^a-zа-я0-9]/gi, '') === brandName);
         });
-        logger.info(`Filtered ads by brand: ${subcat}`, { afterFilter: processedAds.length });
-        
-        // Лог отфильтрованных по бренду
-        const brandFilteredCount = uniqueAds.length - processedAds.length;
-        if (brandFilteredCount > 0) {
-          logger.info(`Filtered out ${brandFilteredCount} ads by brand: ${subcat}`);
-        }
+
+        logger.info(`Filtered ads by brand: ${subcat}`, {
+          afterFilter: processedAds.length,
+        });
       }
 
       // --- 4.5. Fallback: описание из параметров API (HTML-парсинг отключён — Kufar банит) ---
@@ -502,7 +483,7 @@ export class KufarParser extends BaseParser {
       });
 
       // --- 5. Финальная очистка и возврат результата ---
-      const finalAds = processedAds.map(({ _rawLocation, _rawAddress, _rawAdLocation, _brand, ...ad }) => ad);
+      const finalAds = processedAds.map(({ _rawLocation, _rawRegion, _rawAddress, _rawAdLocation, _brand, ...ad }) => ad);
       
       logger.info('Final ad summary', { 
         url, 
