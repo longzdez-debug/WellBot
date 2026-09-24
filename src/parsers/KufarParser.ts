@@ -176,9 +176,7 @@ export class KufarParser extends BaseParser {
         const subcatMatch = part.match(/^mt~(.+)$/);
         if (subcatMatch) {
           const brandSlug = subcatMatch[1];
-          if (BRAND_SLUG_TO_API[brandSlug]) {
-            subcat = BRAND_SLUG_TO_API[brandSlug];
-          }
+          subcat = BRAND_SLUG_TO_API[brandSlug] || decodeURIComponent(brandSlug);
           break;
         }
       }
