@@ -121,6 +121,22 @@ export class KufarParser extends BaseParser {
       let typ = '';
       let subcat = '';
       let citySlugForFilter = '';
+      let pathQuery = '';
+
+      // Kufar can encode the search text directly in the path as q~<query>.
+      // Example: /l/r~mogilevskaya-obl/q~apple
+      // Without this conversion the API searches the whole region and returns unrelated listings.
+      for (const part of pathParts) {
+        const queryMatch = part.match(/^q~(.+)$/);
+        if (queryMatch) {
+          try {
+            pathQuery = decodeURIComponent(queryMatch[1].replace(/\+/g, ' '));
+          } catch {
+            pathQuery = queryMatch[1].replace(/\+/g, ' ');
+          }
+          break;
+        }
+      }
 
       // Определяем категорию
       for (const part of pathParts) {
@@ -193,6 +209,10 @@ export class KufarParser extends BaseParser {
       if (cat) apiParams.cat = cat;
       if (rgn) apiParams.rgn = rgn;
       if (typ) apiParams.typ = typ;
+
+      // Search text may be encoded in either the path (q~...) or query string.
+      // An explicit ?query= takes precedence when both are present.
+      if (pathQuery) apiParams.query = pathQuery;
       
       // Пробрасиваем "безопасные" параметры из исходного URL
       urlObj.searchParams.forEach((value, key) => {
