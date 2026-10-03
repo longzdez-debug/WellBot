@@ -147,6 +147,7 @@ describe('ParserScheduler', () => {
     expect(metrics.scheduler.cycleDurationMs.p99).toBeGreaterThanOrEqual(0);
     expect(metrics.scheduler.freshnessLagMs.oldest).toBe(0);
     expect(metrics.scheduler.adsPerMinute).toBeGreaterThanOrEqual(0);
+    expect(metrics.scheduler.skippedTicks).toBe(0);
   });
 
   test('deduplicates the same new ad across multiple saved searches for one user', async () => {
