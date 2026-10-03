@@ -2,11 +2,7 @@ import { BotHandler } from '../bot/BotHandler';
 
 describe('BotHandler notification delivery', () => {
   function makeHandler(sender: { send: jest.Mock }): BotHandler {
-    const handler = Object.create(BotHandler.prototype) as BotHandler & {
-      adPresenter: { format: jest.Mock };
-      telegramSender: { send: jest.Mock };
-      db: { getAdByIdForUser: jest.Mock; getAdByExternalId: jest.Mock };
-    };
+    const handler = Object.create(BotHandler.prototype) as any;
     handler.adPresenter = { format: jest.fn().mockResolvedValue({ text: 'Ad', options: {} }) };
     handler.telegramSender = sender;
     handler.db = {
