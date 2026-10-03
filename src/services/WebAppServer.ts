@@ -158,7 +158,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           if (links.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} мониторов.` }); return; }
           const { buildKufarSearchUrl } = await import('../catalog/KufarCatalog.js');
           const url = buildKufarSearchUrl(config);
-          const existing = links.find(link => link.source_key && link.source_key === `${config.source}:${config.categoryId}:${config.subcategoryId||''}:${config.region||''}:${config.city||''}:${config.query||''}:${config.minPrice??''}:${config.maxPrice??''}:${config.condition||''}:${config.seller||''}`);
+          const existing = links.find(link => link.source_key && link.source_key === `${config.source}:${config.categoryId}:${config.subcategoryId||''}:${config.region||''}:${config.city||''}:${config.query||''}:${config.minPrice??''}:${config.maxPrice??''}:${config.condition||''}:${config.seller||''}:${config.mode||'normal'}`);
           if (existing) {
             if (!existing.is_active) { await db.setLinkActive(existing.id, user.id, true); json(res, 200, { link: { ...existing, is_active: true }, reactivated: true }); return; }
             json(res, 409, { error: 'duplicate', message: 'Такой монитор уже добавлен.' }); return;
