@@ -244,7 +244,7 @@ export class FastKufarParser extends BaseParser {
         },
       });
       const html = String(response.data || '');
-      const match = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\\s\\S]*?)<\\/script>/i);
+      const match = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
       if (!match?.[1]) throw new Error('Kufar page has no __NEXT_DATA__');
 
       const root = JSON.parse(match[1]);
