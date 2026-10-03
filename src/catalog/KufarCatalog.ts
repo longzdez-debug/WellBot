@@ -22,24 +22,24 @@ const category = (id:string,title:string,slug:string,children:CatalogNode[]=[]):
 
 export const KUFAR_CATALOG: CatalogNode[] = [
   category('real_estate','Недвижимость','nedvizhimost',[
-    {id:'apartments',title:'Квартиры'},{id:'houses',title:'Дома и коттеджи'},{id:'rooms',title:'Комнаты'},
-    {id:'land',title:'Земельные участки'},{id:'commercial',title:'Коммерческая недвижимость'},{id:'garages',title:'Гаражи'}
+    {id:'real_estate_apartments',title:'Квартиры',slug:'kvartiru'},{id:'real_estate_houses',title:'Дома и коттеджи',slug:'dom'},{id:'real_estate_rooms',title:'Комнаты',slug:'komnatu'},
+    {id:'real_estate_land',title:'Земельные участки',slug:'uchastok'},{id:'real_estate_commercial',title:'Коммерческая недвижимость',slug:'kommercheskaya'},{id:'real_estate_garages',title:'Гаражи',slug:'garazh'}
   ]),
   category('travel','Путешествия','puteshestviya'),
   category('auto','Авто и запчасти','avto-i-zapchasti',[
-    {id:'cars',title:'Легковые автомобили'},{id:'parts',title:'Запчасти'},{id:'tires',title:'Шины и диски'},{id:'accessories',title:'Автоаксессуары'}
+    {id:'auto_cars',title:'Легковые автомобили',slug:'avtomobili'},{id:'auto_parts',title:'Запчасти',slug:'avtozapchasti'},{id:'auto_tires',title:'Шины и диски',slug:'shiny-i-diski'},{id:'auto_accessories',title:'Автоаксессуары',slug:'autoaccessories'}
   ]),
   category('services','Услуги','uslugi'),
   category('home_appliances','Бытовая техника','bytovaya-tehnika'),
   category('computers','Компьютерная техника','kompyuternaya-tehnika',[
-    {id:'laptops',title:'Ноутбуки'},{id:'desktops',title:'Компьютеры'},{id:'monitors',title:'Мониторы'},{id:'components',title:'Комплектующие'}
+    {id:'computers_laptops',title:'Ноутбуки',slug:'noutbuki'},{id:'computers_desktops',title:'Компьютеры',slug:'kompyutery'},{id:'computers_monitors',title:'Мониторы',slug:'monitory'},{id:'computers_components',title:'Комплектующие',slug:'komplektuyushchie'}
   ]),
   category('phones','Телефоны и планшеты','telefony-i-planshety',[
-    {id:'phones',title:'Мобильные телефоны и смартфоны'},{id:'tablets',title:'Планшеты'},{id:'accessories',title:'Аксессуары'}
+    {id:'phones_mobile',title:'Мобильные телефоны и смартфоны',slug:'mobilnye-telefony'},{id:'phones_tablets',title:'Планшеты',slug:'planshety'},{id:'phones_accessories',title:'Аксессуары',slug:'aksessuary'}
   ]),
   category('electronics','Электроника','elektronika',[
-    {id:'audio',title:'Аудиотехника'},{id:'headphones',title:'Наушники'},{id:'tv',title:'ТВ и видеотехника'},
-    {id:'photo',title:'Фототехника и оптика'},{id:'games',title:'Игры и приставки'},{id:'smart_home',title:'Безопасность и умный дом'}
+    {id:'electronics_audio',title:'Аудиотехника',slug:'audiotehnika'},{id:'electronics_headphones',title:'Наушники',slug:'naushniki'},{id:'electronics_tv',title:'ТВ и видеотехника',slug:'tv-i-videotekhnika'},
+    {id:'electronics_photo',title:'Фототехника и оптика',slug:'fototekhnika-i-optika'},{id:'electronics_games',title:'Игры и приставки',slug:'igrovye-pristavki-i-igry'},{id:'electronics_smart_home',title:'Безопасность и умный дом',slug:'bezopasnost-i-umnyj-dom'}
   ]),
   category('women_clothes','Женский гардероб','zhenskij-garderob'),
   category('men_clothes','Мужской гардероб','muzhskoj-garderob'),
