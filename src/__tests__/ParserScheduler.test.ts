@@ -180,6 +180,31 @@ describe('ParserScheduler', () => {
     expect(metrics.duplicateNotifications).toBe(1);
   });
 
+  test('shutdown waits for an active parse and blocks new triggers', async () => {
+    const link = makeLink(1, new Date());
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    parser.parseUrl.mockImplementation(async () => { await gate; return []; });
+    const db = makeDb([link]);
+    const scheduler = new ParserScheduler(db as never, bot as never);
+
+    const parsing = scheduler.runParsing();
+    await new Promise<void>(resolve => setImmediate(resolve));
+
+    let stopped = false;
+    const stopping = scheduler.stop().then(() => { stopped = true; });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(stopped).toBe(false);
+
+    scheduler.triggerParse();
+    release();
+
+    await parsing;
+    await stopping;
+    expect(stopped).toBe(true);
+    expect(db.getActiveLinks).toHaveBeenCalledTimes(1);
+  });
+
   test('deduplicates the same new ad across multiple saved searches for one user', async () => {
     const links = [makeLink(1, new Date()), makeLink(2, new Date())];
     const ad: Ad = { external_id: 'shared-1', title: 'Shared', ad_url: 'https://kufar.by/shared-1' };
