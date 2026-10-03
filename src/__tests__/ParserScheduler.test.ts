@@ -61,6 +61,7 @@ describe('ParserScheduler', () => {
       resetErrorCount: jest.fn().mockResolvedValue(undefined),
       getExistingAdExternalIdsForLink: jest.fn().mockResolvedValue(new Set(existingIds)),
       getLastPricesForAds: jest.fn().mockResolvedValue(new Map()),
+      getExistingAdStatesForLink: jest.fn().mockResolvedValue({ existingIds: new Set(existingIds), prices: new Map() }),
       getRecentMarketPrices: jest.fn().mockResolvedValue([]),
       updateAdMarketSignals: jest.fn().mockResolvedValue(undefined),
       claimNewAdsForUser: jest.fn().mockImplementation(async (_userId: number, _linkId: number, input: Ad[]) => {
