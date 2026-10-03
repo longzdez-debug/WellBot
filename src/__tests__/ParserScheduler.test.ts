@@ -43,6 +43,7 @@ describe('ParserScheduler', () => {
 
   function makeDb(linkList: Link[], existingIds: Set<string> = new Set()) {
     const ads = new Map<string, Ad>();
+    const userSeen = new Set<string>();
     return {
       getActiveLinks: jest.fn().mockResolvedValue(linkList),
       getUserById: jest.fn().mockResolvedValue(user),
@@ -60,6 +61,12 @@ describe('ParserScheduler', () => {
       getExistingAdExternalIdsForLink: jest.fn().mockResolvedValue(new Set(existingIds)),
       getLastPricesForAds: jest.fn().mockResolvedValue(new Map()),
       getRecentMarketPrices: jest.fn().mockResolvedValue([]),
+      updateAdMarketSignals: jest.fn().mockResolvedValue(undefined),
+      claimNewAdsForUser: jest.fn().mockImplementation(async (_userId: number, _linkId: number, input: Ad[]) => {
+        const claimed = input.filter(ad => !userSeen.has(ad.external_id)).map(ad => ad.external_id);
+        claimed.forEach(id => userSeen.add(id));
+        return new Set(claimed);
+      }),
       createAd: jest.fn(),
       getLink: jest.fn().mockResolvedValue(null),
       incrementErrorCount: jest.fn().mockResolvedValue(undefined),
