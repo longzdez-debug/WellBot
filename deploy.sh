@@ -42,12 +42,12 @@ if [[ -z "${DB_PASSWORD:-}" || "$DB_PASSWORD" == "secure_password" ]]; then
   exit 1
 fi
 
-if [[ "${HUNT_WEBAPP_URL:-}" == "https://hunt.example.com/" ]]; then
+if [[ "${HUNT_WEBAPP_URL:-}" == "https://wellbot.example.com/" ]]; then
   echo "WARNING: Replace HUNT_WEBAPP_URL with your real public HTTPS URL if you want the Mini App." >&2
 fi
 
 # Ensure the database schema is initialized by the application after PostgreSQL becomes healthy.
-echo "Building and starting HUNT..."
+echo "Building and starting WellBOT..."
 docker compose pull postgres
 docker compose build --pull bot
 docker compose up -d postgres
@@ -68,10 +68,10 @@ fi
 
 docker compose up -d bot
 
-echo "Waiting for HUNT health endpoint..."
+echo "Waiting for WellBOT health endpoint..."
 for _ in {1..30}; do
   if curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then
-    echo "HUNT is healthy."
+    echo "WellBOT is healthy."
     docker compose ps
     echo
 echo "Logs: docker compose logs -f bot"
@@ -80,7 +80,7 @@ echo "Logs: docker compose logs -f bot"
   sleep 2
 done
 
-echo "ERROR: HUNT did not become healthy." >&2
+echo "ERROR: WellBOT did not become healthy." >&2
 docker compose ps >&2 || true
 docker compose logs --tail=150 bot >&2 || true
 exit 1
