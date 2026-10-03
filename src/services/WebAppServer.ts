@@ -169,6 +169,10 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           try { body = await readJson(req); }
           catch (error: unknown) { json(res, error instanceof Error && error.message === 'body_too_large' ? 413 : 400, { error: error instanceof Error && error.message === 'body_too_large' ? 'body_too_large' : 'invalid_json' }); return; }
           if (typeof body.is_active !== 'boolean') { json(res, 400, { error: 'is_active_required' }); return; }
+          if (body.is_active) {
+            const activeLinks = (await db.getUserLinks(user.id)).filter(link => link.is_active && link.id !== Number(linkMatch[1]));
+            if (activeLinks.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} активных поисков.` }); return; }
+          }
           const ok = await db.setLinkActive(Number(linkMatch[1]), user.id, body.is_active);
           json(res, ok ? 200 : 404, ok ? { ok: true } : { error: 'not_found' }); return;
         }
