@@ -99,9 +99,30 @@ export class BotHandler {
 
   async handleCheckLink(chatId: number, userId: number, linkId: number): Promise<void> { try { const link = await this.db.getLinkForUser(linkId, userId); if (!link) { await this.bot.sendMessage(chatId, '❌ Монитор не найдена или вам недоступна.'); return; } await this.bot.sendMessage(chatId, '⏳ Проверяю монитор...'); const parser = ParserFactory.getParser(link.platform as Platform); if (!parser) { await this.bot.sendMessage(chatId, `❌ Парсер для платформы "${link.platform}" не найден.`); return; } const ads = await parser.parseUrl(link.url); const previewAds = NewAdSelector.pick(ads, 5).reverse(); await this.bot.sendMessage(chatId, `📋 Найдено ${ads.length} объявлений. Показываю 5 самых свежих:`); const formattedAds = await Promise.all(previewAds.map(ad => this.adPresenter.format(ad))); for (const formatted of formattedAds) await this.telegramSender.send(chatId, formatted); logger.info('Link checked', { linkId, userId, adsFound: ads.length }); } catch (error: any) { logger.error('Failed to check link', { linkId, userId, error: error.message, stack: error.stack }); await this.bot.sendMessage(chatId, mapError(error)); } }
 
-  async sendNotification(telegramId: number, ad: Ad): Promise<void> { try { const formatted = await this.adPresenter.format(ad); const market = ad.market_status === 'below_market' ? `🟢 НИЖЕ РЫНКА${ad.market_percent != null ? ` · ${Math.abs(ad.market_percent).toFixed(1)}%` : ''}` : ad.market_status === 'above_market' ? `🔴 ВЫШЕ РЫНКА${ad.market_percent != null ? ` · +${ad.market_percent.toFixed(1)}%` : ''}` : ad.market_status === 'market' ? `⚪ В РЫНКЕ${ad.market_percent != null ? ` · ${ad.market_percent >= 0 ? '+' : ''}${ad.market_percent.toFixed(1)}%` : ''}` : ''; const marketLine = market ? `\n${market}${ad.market_median != null ? ` · медиана ${ad.market_median}` : ''}` : ''; await this.telegramSender.send(telegramId, { ...formatted, text: `📢 Новое объявление!${marketLine}\n\n${formatted.text}` }); } catch (error: any) { if (error.response?.statusCode === 403) logger.warn('User blocked bot', { telegramId }); else logger.error('Failed to send notification', { telegramId, adId: ad.id, error: error.message }); } }
+  async sendNotification(telegramId: number, ad: Ad): Promise<void> {
+    try {
+      const formatted = await this.adPresenter.format(ad);
+      const market = ad.market_status === 'below_market' ? `🟢 НИЖЕ РЫНКА${ad.market_percent != null ? ` · ${Math.abs(ad.market_percent).toFixed(1)}%` : ''}` : ad.market_status === 'above_market' ? `🔴 ВЫШЕ РЫНКА${ad.market_percent != null ? ` · +${ad.market_percent.toFixed(1)}%` : ''}` : ad.market_status === 'market' ? `⚪ В РЫНКЕ${ad.market_percent != null ? ` · ${ad.market_percent >= 0 ? '+' : ''}${ad.market_percent.toFixed(1)}%` : ''}` : '';
+      const marketLine = market ? `\n${market}${ad.market_median != null ? ` · медиана ${ad.market_median}` : ''}` : '';
+      await this.telegramSender.send(telegramId, { ...formatted, text: `📢 Новое объявление!${marketLine}\n\n${formatted.text}` });
+    } catch (error: any) {
+      if (error?.response?.statusCode === 403) { logger.warn('User blocked bot', { telegramId }); return; }
+      logger.error('Failed to send notification', { telegramId, adId: ad.id, error: error?.message || String(error) });
+      throw error;
+    }
+  }
 
-  async sendPriceDropNotification(telegramId: number, priceDrop: any, userId?: number): Promise<void> { try { const ad = userId != null ? await this.db.getAdByIdForUser(priceDrop.adId, userId) : await this.db.getAdByExternalId(priceDrop.externalId); if (!ad) return; const formatted = await this.adPresenter.format(ad); await this.telegramSender.send(telegramId, { ...formatted, text: `💰 СНИЖЕНИЕ ЦЕНЫ!\n\n${formatted.text}\n\n💸 Было: ${priceDrop.oldPrice}\n🆕 Стало: ${priceDrop.newPrice}\n📉 Изменение: ${priceDrop.changePercent}%` }); } catch (error: any) { logger.error('Failed to send price drop notification', { telegramId, adId: priceDrop.adId, error: error.message }); } }
+  async sendPriceDropNotification(telegramId: number, priceDrop: any, userId?: number): Promise<void> {
+    try {
+      const ad = userId != null ? await this.db.getAdByIdForUser(priceDrop.adId, userId) : await this.db.getAdByExternalId(priceDrop.externalId);
+      if (!ad) return;
+      const formatted = await this.adPresenter.format(ad);
+      await this.telegramSender.send(telegramId, { ...formatted, text: `💰 СНИЖЕНИЕ ЦЕНЫ!\n\n${formatted.text}\n\n💸 Было: ${priceDrop.oldPrice}\n🆕 Стало: ${priceDrop.newPrice}\n📉 Изменение: ${priceDrop.changePercent}%` });
+    } catch (error: any) {
+      logger.error('Failed to send price drop notification', { telegramId, adId: priceDrop.adId, error: error?.message || String(error) });
+      throw error;
+    }
+  }
 
   async handleAddChannel(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); await this.bot.sendMessage(chatId, '📺 Для привязки канала:\n\n1. Добавьте бота в канал как администратора\n2. Укажите ID канала в WellBOT\n3. WellBOT проверит права и включит публикацию.\n\nID обычно выглядит так: -1001234567890', { reply_markup: this.getMainKeyboard() }); this.userStates.set(userId, 'awaiting_channel'); } catch (error: any) { logger.error('Failed to handle add channel', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); } }
 
