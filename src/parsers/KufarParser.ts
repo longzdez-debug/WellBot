@@ -80,6 +80,7 @@ const CITY_TO_REGION_ID: Record<string, string> = {
   'gomelskaya-oblast': '2',
   'grodnenskaya-oblast': '3',
   'mogilevskaya-oblast': '4',
+  'mogilevskaya-obl': '4',
   'baranovichi': '1', 'pinsk': '1', 'kobrin': '1', 'bereza': '1',
   'orsha': '6', 'polotsk': '6', 'novopolotsk': '6',
   'zhlobin': '2', 'mozyr': '2', 'rechitsa': '2', 'svetlogorsk': '2',
@@ -343,27 +344,10 @@ export class KufarParser extends BaseParser {
 
       logger.info('Kufar pagination complete', { totalCollected: allPaginatedAds.length, fastMode });
 
-      // poleposition — это рекламные объявления поверх поиска, тоже добавляем
-      // Но НЕ дублируем — рекламные объявления часто те же, что и в paginated
-      let polepositionAds: any[] = [];
-      try {
-        if (fastMode) throw new Error('fast mode: skip poleposition');
-        await this.sleep(100 + Math.random() * 100);
-        const poleResponse = await this.axiosInstance.get(
-          'https://api.kufar.by/search-api/v2/search/poleposition',
-          {
-            params: { ...apiParams, size: 10 },
-            headers,
-          }
-        );
-        polepositionAds = poleResponse.data?.ads || [];
-      } catch {
-        // poleposition может не вернуть данные — не критично
-      }
-
       // --- 3. Объединение, дедупликация и обработка результатов ---
-      // poleposition может содержать дубликаты — объединяем через Map
-      const allAdsRaw = [...allPaginatedAds, ...polepositionAds];
+      // Search pages already contain the authoritative result set. Avoid a second
+      // poleposition request: it adds latency and can return a different snapshot.
+      const allAdsRaw = allPaginatedAds;
       
       const uniqueAdsMap = new Map();
       allAdsRaw.forEach(ad => {
@@ -423,6 +407,10 @@ export class KufarParser extends BaseParser {
 
         // Адрес продавца
         const addressParam = ad.account_parameters?.find((p: any) => p?.p === 'address');
+        const conditionParam = ad.ad_parameters?.find((p: any) => p?.p === 'condition');
+        const condition = conditionParam?.vl ?? conditionParam?.v;
+        const sellerType = String(ad.account_type ?? ad.seller_type ?? ad.account_parameters?.find((p: any) => p?.p === 'seller_type')?.vl ?? '').toLowerCase();
+        const isCompany = ad.company_ad === true || ad.is_company === true || sellerType.includes('company') || sellerType.includes('компан');
         const address = addressParam?.v;
 
         // Формируем описание: пока пустое, заполним позже из HTML
@@ -446,6 +434,8 @@ export class KufarParser extends BaseParser {
           address: address || undefined,
           published_at: publishedAt,
           updated_at: updatedAt,
+          condition: condition || undefined,
+          is_company: isCompany || undefined,
           // Все доступные текстовые поля для фильтрации
           _rawLocation: normalizeText(location),
           _rawRegion: normalizeText(region),
