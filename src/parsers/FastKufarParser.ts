@@ -87,6 +87,7 @@ function normalizeSearchText(value: unknown): string {
     .trim();
 }
 
+function adCondition(ad: any): string { const parameter = ad?.ad_parameters?.find((p: any) => p?.p === 'condition'); return String(parameter?.vl ?? parameter?.v ?? parameter?.value ?? '').trim(); }
 function adSearchText(ad: any): string {
   const values: string[] = [ad?.subject, ad?.description];
 
@@ -225,6 +226,8 @@ export class FastKufarParser extends BaseParser {
           address,
           published_at: ad.list_time ? new Date(ad.list_time) : undefined,
           updated_at: ad.list_time_up ? new Date(ad.list_time_up) : undefined,
+          condition: adCondition(ad) || null,
+          is_company: Boolean(ad.company_ad),
         } as Ad;
       });
     };
@@ -293,6 +296,8 @@ export class FastKufarParser extends BaseParser {
           address: ad.account_parameters?.find((p: any) => p?.p === 'address')?.v,
           published_at: ad.list_time ? new Date(ad.list_time) : undefined,
           updated_at: ad.list_time_up ? new Date(ad.list_time_up) : undefined,
+          condition: adCondition(ad) || null,
+          is_company: Boolean(ad.company_ad),
         } as Ad;
       }).filter(Boolean) as Ad[];
     };
