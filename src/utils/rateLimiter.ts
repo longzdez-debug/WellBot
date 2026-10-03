@@ -1,5 +1,7 @@
 export class RateLimiter {
   private requests: Map<number, number[]> = new Map();
+  private lastCleanupAt = 0;
+  private readonly cleanupIntervalMs = 60000;
   private readonly maxRequests: number;
   private readonly windowMs: number;
 
@@ -21,11 +23,17 @@ export class RateLimiter {
     
     validRequests.push(now);
     this.requests.set(userId, validRequests);
+    this.maybeCleanup(now);
     return true;
   }
 
-  cleanup(): void {
-    const now = Date.now();
+  private maybeCleanup(now: number): void {
+    if (now - this.lastCleanupAt < this.cleanupIntervalMs) return;
+    this.lastCleanupAt = now;
+    this.cleanup(now);
+  }
+
+  cleanup(now = Date.now()): void {
     for (const [userId, requests] of this.requests.entries()) {
       const validRequests = requests.filter(time => now - time < this.windowMs);
       if (validRequests.length === 0) {
