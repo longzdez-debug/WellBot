@@ -135,7 +135,13 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           if (config.source !== 'kufar' || typeof config.categoryId !== 'string' || !findCatalogNode(config.categoryId)) {
             json(res, 400, { error: 'invalid_category', message: 'Выберите категорию из каталога WellBOT.' }); return;
           }
-                    if (config.subcategoryId && (!findCatalogNode(config.subcategoryId) || !findCatalogCategory(config.subcategoryId) || findCatalogCategory(config.subcategoryId)?.id !== config.categoryId)) {
+                    if (config.categoryId === 'travel') {
+            json(res, 400, { error: 'unsupported_category', message: 'Куфар Путешествия работает как отдельный сервис и пока не поддерживается радаром объявлений.' }); return;
+          }
+          if ((config.categoryId === 'real_estate' || config.categoryId === 'auto') && !config.subcategoryId) {
+            json(res, 400, { error: 'subcategory_required', message: 'Для этой категории выберите подкатегорию — так поиск будет привязан к реальному разделу Kufar.' }); return;
+          }
+          if (config.subcategoryId && (!findCatalogNode(config.subcategoryId) || !findCatalogCategory(config.subcategoryId) || findCatalogCategory(config.subcategoryId)?.id !== config.categoryId)) {
             json(res, 400, { error: 'invalid_subcategory', message: 'Выберите подкатегорию из выбранной категории.' }); return;
           }
           if (config.condition && config.condition !== 'new' && config.condition !== 'used') { json(res, 400, { error: 'invalid_condition' }); return; }
