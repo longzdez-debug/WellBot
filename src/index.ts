@@ -37,7 +37,7 @@ async function main() {
   const webServer = webPort > 0 && webPort < 65536
     ? startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN)
     : null;
-  if (!webServer) logger.error('HUNT WebApp server disabled; HUNT_WEB_PORT must be a valid TCP port');
+  if (!webServer) logger.error('WellBOT WebApp server disabled; HUNT_WEB_PORT must be a valid TCP port');
 
   scheduler.start();
 
