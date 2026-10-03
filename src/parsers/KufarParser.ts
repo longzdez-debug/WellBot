@@ -13,18 +13,18 @@ import { logger } from '../utils/logger';
 const CATEGORY_MAP: Record<string, string> = {
   // Недвижимость
   'kvartiru': '1010',
-  'komnatu': '1030',
+  'komnatu': '1040',
   'dom': '1020',
   'dachu': '1020',
-  'uchastok': '1050',
-  'kommercheskaya': '1060',
-  'garazh': '1040',
+  'uchastok': '1080',
+  'kommercheskaya': '1050',
+  'garazh': '1030',
   
   // Транспорт
   'avtomobili': '2010',
-  'mototsikly': '2020',
-  'avtobusy-i-mikroavtobusy': '2030',
-  'shiny-i-diski': '2100',
+  'mototsikly': '2030',
+  'avtobusy-i-mikroavtobusy': '2060',
+  'shiny-i-diski': '2075',
   
   // Техника
   'telefony-i-planshety': '17010',
@@ -32,7 +32,7 @@ const CATEGORY_MAP: Record<string, string> = {
   'telefony': '17010',
   'noutbuki': '19020',
   'kompyutery': '19010',
-  'televizory': '12030',
+  'televizory': '5060',
   'igrovye-pristavki-i-igry': '12040',
   'stiralnye-mashiny': '14050',
 
