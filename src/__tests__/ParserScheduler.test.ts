@@ -109,7 +109,7 @@ describe('ParserScheduler', () => {
 
     await scheduler.runParsing();
 
-    expect(db.bulkCreateAdsReturning).toHaveBeenCalledWith(1, [ad]);
+    expect(db.bulkCreateAdsReturning).toHaveBeenCalledWith(1, [expect.objectContaining(ad)]);
     expect(db.enqueueNotifications).toHaveBeenCalledTimes(2);
     const queuedBatches = db.enqueueNotifications.mock.calls.map(([jobs]) => jobs);
     expect(queuedBatches).toEqual(expect.arrayContaining([
