@@ -34,7 +34,7 @@ async function main() {
   // HUNT_WEB_PORT cannot silently publish a Telegram URL that returns 404.
   const webPort = Number(process.env.WELLBOT_WEB_PORT || process.env.HUNT_WEB_PORT || 8080);
   const webServer = webPort > 0 && webPort < 65536
-    ? startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN)
+    ? startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined, () => scheduler.getMetrics())
     : null;
   if (!webServer) logger.error('WellBOT WebApp server disabled; HUNT_WEB_PORT must be a valid TCP port');
 
