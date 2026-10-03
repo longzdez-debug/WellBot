@@ -75,6 +75,19 @@ export class DatabaseService {
   async getLastPriceForAd(linkId:number,externalId:string):Promise<{price:string;adId:number}|null>{const r=await this.pool.query('SELECT a.price,a.id as ad_id FROM ads a WHERE a.link_id=$1 AND a.external_id=$2 ORDER BY a.updated_at DESC NULLS LAST,a.id DESC LIMIT 1',[linkId,externalId]);return r.rows[0]||null;}
   parsePriceToNumber(priceStr:string|null|undefined):number|null{if(!priceStr)return null;const normalized=priceStr.replace(/\s+/g,'').replace(',','.');const m=normalized.match(/(\d+(?:\.\d+)?)/);if(!m)return null;const n=Number(m[1]);return Number.isFinite(n)?n:null;}
   async createPriceDropRecord(userId:number,adId:number,externalId:string,oldPrice:string,newPrice:string,changePercent:number):Promise<boolean>{try{const r=await this.pool.query('INSERT INTO price_history (ad_id,user_id,external_id,old_price,new_price,price_change_percent,notified_at) VALUES ($1,$2,$3,$4,$5,$6,NULL) ON CONFLICT (user_id,external_id,old_price,new_price) DO NOTHING',[adId,userId,externalId,oldPrice,newPrice,changePercent]);return(r.rowCount||0)>0;}catch(error:unknown){const message=error instanceof Error?error.message:String(error);logger.warn('Price drop record insert failed',{error:message});return false;}}
+  async updateAdMarketSignals(signals:Array<{id:number;status:'below_market'|'market'|'above_market'|null;percent:number|null;median:number|null}>):Promise<void>{
+    if(!signals.length)return;
+    await this.pool.query(
+      `UPDATE ads a
+       SET market_status=x.status,
+           market_percent=x.percent,
+           market_median=x.median
+       FROM jsonb_to_recordset($1::jsonb) AS x(id int,status text,percent numeric,median numeric)
+       WHERE a.id=x.id`,
+      [JSON.stringify(signals.map(s=>({id:s.id,status:s.status,percent:s.percent,median:s.median})))],
+    );
+  }
+
   async updateAdPrice(adId:number,newPrice:string):Promise<void>{await this.pool.query('UPDATE ads SET price=$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2',[newPrice,adId]);}
   async createChannelSubscription(userId:number,channelId:number,channelUsername:string|null,channelTitle:string|null):Promise<void>{await this.pool.query('INSERT INTO channel_subscriptions (user_id,channel_id,channel_username,channel_title) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id,channel_id) DO UPDATE SET channel_username=EXCLUDED.channel_username,channel_title=EXCLUDED.channel_title,is_active=true',[userId,channelId,channelUsername,channelTitle]);}
   async deleteChannelSubscription(userId:number,channelId:number):Promise<void>{await this.pool.query('UPDATE channel_subscriptions SET is_active=false WHERE user_id=$1 AND channel_id=$2',[userId,channelId]);}
