@@ -1,6 +1,6 @@
-# HUNT
+# WellBOT
 
-**HUNT** — Telegram listing monitor for resellers. Add a marketplace search URL with filters, and the bot watches it continuously and sends new listings to Telegram as soon as they appear in the source feed.
+**WellBOT** — Telegram listing monitor for resellers. Add a marketplace search URL with filters, and the bot watches it continuously and sends new listings to Telegram as soon as they appear in the source feed.
 
 ## Production MVP
 
@@ -20,7 +20,7 @@
 - 🔄 Restart policy for the bot and database
 - 🤖 GitHub Actions build, test and Docker validation
 
-> The 5-second value is a polling target. Actual detection latency also depends on when the marketplace makes a listing visible in its search/API feed and on network/Telegram delivery time. HUNT does not claim an exact one-second guarantee.
+> The 5-second value is a polling target. Actual detection latency also depends on when the marketplace makes a listing visible in its search/API feed and on network/Telegram delivery time. WellBOT does not claim an exact one-second guarantee.
 
 ## Stack
 
@@ -54,30 +54,30 @@ PARSE_INTERVAL_SECONDS=5
 PARSE_CONCURRENCY=20
 ```
 
-`deploy.sh` validates the required secrets, starts PostgreSQL, waits for it to become healthy, builds/starts HUNT, and waits for `http://127.0.0.1:8080/health` to pass.
+`deploy.sh` validates the required secrets, starts PostgreSQL, waits for it to become healthy, builds/starts WellBOT, and waits for `http://127.0.0.1:8080/health` to pass.
 
 > Never commit `.env` or Telegram/database credentials to Git.
 
 ## HTTPS / Mini App
 
-For the Mini App, the built-in HUNT web server listens on port `8080`. Put an HTTPS reverse proxy in front of it and set `HUNT_WEBAPP_URL` to the public HTTPS URL.
+For the Mini App, the built-in WellBOT web server listens on port `8080`. Put an HTTPS reverse proxy in front of it and set `HUNT_WEBAPP_URL` to the public HTTPS URL.
 
 A minimal Caddy example is provided in `Caddyfile.example`:
 
 ```text
-hunt.example.com {
+wellbot.example.com {
     reverse_proxy 127.0.0.1:8080
 }
 ```
 
-After HTTPS is available, restart the bot so its **⚡ Открыть HUNT** button uses the configured URL.
+After HTTPS is available, restart the bot so its **⚡ Открыть WellBOT** button uses the configured URL.
 
 The Mini App sends the entered search URL back to the bot using Telegram Web App data. The bot then uses the same server-side URL validation and persistence path as normal Telegram input.
 
 ## Telegram setup
 
 1. Create a bot with `@BotFather` and copy its token to `.env`.
-2. Start HUNT with `/start`.
+2. Start WellBOT with `/start`.
 3. Use **➕ Добавить ссылку** and paste a supported marketplace search URL.
 4. The first successful parse creates a silent baseline.
 5. New listings found on later cycles are sent to Telegram.
@@ -152,7 +152,7 @@ src/
 └── index.ts          # application entry point
 
 web/
-├── index.html        # HUNT Mini App UI
+├── index.html        # WellBOT Mini App UI
 ├── styles.css
 └── app.js            # URL monitor form + Telegram WebApp bridge
 ```
