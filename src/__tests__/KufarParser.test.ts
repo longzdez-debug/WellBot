@@ -62,6 +62,98 @@ describe('KufarParser URL/filter handling', () => {
     expect(ads.map(ad => ad.external_id)).toEqual(['2', '1']);
   });
 
+
+
+  test('filters by the actual city and does not match district/region names', async () => {
+    const calls: any[] = [];
+    const axiosMock = {
+      get: jest.fn(async (_url: string, config: any) => {
+        calls.push(config);
+        if (config?.params?.size === 10) {
+          return { data: { ads: [] } };
+        }
+
+        return {
+          data: {
+            ads: [
+              {
+                ad_id: 'minsk-1',
+                subject: 'Real Minsk listing',
+                ad_parameters: [
+                  { p: 'area', vl: 'Минск' },
+                  { p: 'region', vl: 'Минская область' },
+                ],
+                ad_location: 'Минск',
+              },
+              {
+                ad_id: 'minsk-district-1',
+                subject: 'District listing',
+                ad_parameters: [
+                  { p: 'area', vl: 'Первомайский район' },
+                  { p: 'region', vl: 'Минская область' },
+                ],
+                ad_location: 'Первомайский район',
+              },
+              {
+                ad_id: 'minsk-region-1',
+                subject: 'Regional listing',
+                ad_parameters: [
+                  { p: 'area', vl: 'Минская область' },
+                  { p: 'region', vl: 'Минская область' },
+                ],
+                ad_location: 'Минская область',
+              },
+              {
+                ad_id: 'brest-district-1',
+                subject: 'Brest district listing',
+                ad_parameters: [
+                  { p: 'area', vl: 'Брестский район' },
+                  { p: 'region', vl: 'Брестская область' },
+                ],
+                ad_location: 'Брестский район',
+              },
+            ],
+            pagination: { pages: [] },
+          },
+        };
+      }),
+    } as any;
+
+    const parser = new KufarParser(axiosMock);
+    const ads = await parser.parseUrl(
+      'https://kufar.by/l/r~minsk/mobilnye-telefony?query=iphone'
+    );
+
+    expect(ads.map(ad => ad.external_id)).toEqual(['minsk-1']);
+  });
+
+  test('accepts city when Kufar returns city followed by district', async () => {
+    const axiosMock = {
+      get: jest.fn(async (_url: string, config: any) => {
+        if (config?.params?.size === 10) {
+          return { data: { ads: [] } };
+        }
+
+        return {
+          data: {
+            ads: [{
+              ad_id: 'minsk-2',
+              subject: 'Minsk listing',
+              ad_parameters: [{ p: 'area', vl: 'Минск, Центральный район' }],
+              ad_location: 'Минск, Центральный район',
+            }],
+            pagination: { pages: [] },
+          },
+        };
+      }),
+    } as any;
+
+    const parser = new KufarParser(axiosMock);
+    const ads = await parser.parseUrl('https://kufar.by/l/r~minsk/mobilnye-telefony');
+
+    expect(ads.map(ad => ad.external_id)).toEqual(['minsk-2']);
+  });
+
   test('preserves query-string filters instead of dropping them', async () => {
     const calls: any[] = [];
     const axiosMock = {
