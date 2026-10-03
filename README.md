@@ -1,26 +1,27 @@
 # WellBOT
 
-**WellBOT** — Telegram listing monitor for resellers. Add a marketplace search URL with filters, and the bot watches it continuously and sends new listings to Telegram as soon as they appear in the source feed.
+**WellBOT** — Telegram listing search for resellers. Create a marketplace search from the WellBOT catalog with category, city, price, condition, seller and mode filters. WellBOT watches it continuously and sends new listings to Telegram.
 
 ## Production MVP
 
-- 🟢 Kufar search monitoring with preserved URL filters
+- 🟢 Kufar catalog search monitoring
 - 🔵 Onliner search monitoring
 - 🚗 Av.by search monitoring
-- ⚡ Default polling interval: **5 seconds** (minimum 1 second)
-- 🚀 Concurrent parsing of up to 20 search URLs by default
+- ⚡ Default polling interval: **0.5 seconds** (minimum 0.25 seconds)
+- 🚀 Concurrent parsing of up to 16 searches by default
 - 🧠 First-run baseline — existing listings are not spammed as "new"
 - 🔁 Duplicate protection per Telegram user
 - 📉 Price-drop detection
 - 🛡️ Telegram rate limiting and retries for `429`
-- 📱 Telegram Mini App for adding a monitor
+- 📱 Telegram Mini App for creating and managing searches
+- 📊 Live scheduler and notification performance metrics
 - 🗄️ PostgreSQL persistence
 - 🐳 Docker / Docker Compose deployment
 - ❤️ `/health` endpoint and container healthcheck
 - 🔄 Restart policy for the bot and database
 - 🤖 GitHub Actions build, test and Docker validation
 
-> The 5-second value is a polling target. Actual detection latency also depends on when the marketplace makes a listing visible in its search/API feed and on network/Telegram delivery time. WellBOT does not claim an exact one-second guarantee.
+> The 0.5-second value is the scheduler target between cycles. Actual detection latency also depends on source visibility, parser/network latency and Telegram delivery. WellBOT does not claim an exact end-to-end latency guarantee.
 
 ## Stack
 
@@ -72,17 +73,17 @@ wellbot.example.com {
 
 After HTTPS is available, restart the bot so its **⚡ Открыть WellBOT** button uses the configured URL.
 
-The Mini App sends the entered search URL back to the bot using Telegram Web App data. The bot then uses the same server-side URL validation and persistence path as normal Telegram input.
+The Mini App sends the selected search configuration to the authenticated WebApp API. The server validates the catalog category and persists the search.
 
 ## Telegram setup
 
 1. Create a bot with `@BotFather` and copy its token to `.env`.
 2. Start WellBOT with `/start`.
-3. Use **➕ Добавить ссылку** and paste a supported marketplace search URL.
+3. Use **➕ Добавить поиск** and choose a category plus filters in the catalog.
 4. The first successful parse creates a silent baseline.
 5. New listings found on later cycles are sent to Telegram.
 
-For Kufar, use a search/category URL (`kufar.by/l/*`) rather than a direct listing URL. Search parameters and supported filters are preserved by the parser.
+Kufar searches are generated server-side from the verified WellBOT catalog, so users do not need to paste marketplace URLs.
 
 ## Monitoring configuration
 
@@ -98,11 +99,13 @@ For Kufar, use a search/category URL (`kufar.by/l/*`) rather than a direct listi
 
 - A running parse cycle cannot overlap another cycle.
 - A trigger arriving during a cycle is queued and executed immediately after the current cycle.
-- A newly created monitor is parsed immediately rather than waiting for the next scheduled interval.
+- A newly created search is parsed immediately rather than waiting for the next scheduled interval.
+- The authenticated `/api/metrics` endpoint exposes scheduler p50/p95 cycle latency and notification counters.
+- The Mini App displays a compact performance/health card.
 - First successful parse of a monitor creates a baseline without notifications.
 - New listings are deduplicated before Telegram delivery.
 - Telegram sender enforces per-chat/global pacing and retries rate-limit responses.
-- PostgreSQL persists monitors and ads across container restarts.
+- PostgreSQL persists searches and ads across container restarts.
 - Docker restarts the bot after a process/container failure.
 
 ## Operations
@@ -154,7 +157,7 @@ src/
 web/
 ├── index.html        # WellBOT Mini App UI
 ├── styles.css
-└── app.js            # URL monitor form + Telegram WebApp bridge
+└── app.js            # search form + Telegram WebApp bridge
 ```
 
 ## Repository
