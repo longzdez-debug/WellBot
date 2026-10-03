@@ -59,6 +59,7 @@ describe('ParserScheduler', () => {
       resetErrorCount: jest.fn().mockResolvedValue(undefined),
       getExistingAdExternalIdsForLink: jest.fn().mockResolvedValue(new Set(existingIds)),
       getLastPricesForAds: jest.fn().mockResolvedValue(new Map()),
+      getRecentMarketPrices: jest.fn().mockResolvedValue([]),
       createAd: jest.fn(),
       getLink: jest.fn().mockResolvedValue(null),
       incrementErrorCount: jest.fn().mockResolvedValue(undefined),
