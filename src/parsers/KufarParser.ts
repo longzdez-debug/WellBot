@@ -163,8 +163,9 @@ export class KufarParser extends BaseParser {
     super(axiosInstance);
   }
 
-  async parseUrl(url: string): Promise<Ad[]> {
+  async parseUrl(url: string, options?: { fast?: boolean }): Promise<Ad[]> {
     try {
+      const fastMode = options?.fast === true;
       const urlObj = new URL(url);
       const pathParts = urlObj.pathname.split('/').filter(Boolean);
 
@@ -320,7 +321,8 @@ export class KufarParser extends BaseParser {
 
       // Cursors must be followed sequentially; page=2/page=3 is not a reliable
       // replacement for Kufar's cursor pagination.
-      for (let page = 1; page <= 51; page++) {
+      const maxPages = fastMode ? 1 : 51;
+      for (let page = 1; page <= maxPages; page++) {
         const data = await requestPage(cursor || undefined);
         const ads = Array.isArray(data?.ads) ? data.ads : [];
         allPaginatedAds.push(...ads);
@@ -339,12 +341,13 @@ export class KufarParser extends BaseParser {
         await this.sleep(100 + Math.random() * 150);
       }
 
-      logger.info('Kufar pagination complete', { totalCollected: allPaginatedAds.length });
+      logger.info('Kufar pagination complete', { totalCollected: allPaginatedAds.length, fastMode });
 
       // poleposition — это рекламные объявления поверх поиска, тоже добавляем
       // Но НЕ дублируем — рекламные объявления часто те же, что и в paginated
       let polepositionAds: any[] = [];
       try {
+        if (fastMode) throw new Error('fast mode: skip poleposition');
         await this.sleep(100 + Math.random() * 100);
         const poleResponse = await this.axiosInstance.get(
           'https://api.kufar.by/search-api/v2/search/poleposition',
