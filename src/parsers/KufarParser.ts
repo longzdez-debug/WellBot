@@ -466,7 +466,7 @@ export class KufarParser extends BaseParser {
           // name without being the listing's city.
           const locationSources = [ad._rawLocation, ad._rawAdLocation].filter(Boolean);
 
-          return locationSources.some((value: string) => {
+          const matchesSources = (sources: string[]) => sources.some((value: string) => {
             if (cityMatchesStructuredValue(value, expectedCity)) return true;
 
             // Some Kufar responses use a known Cyrillic city name instead of
@@ -476,6 +476,17 @@ export class KufarParser extends BaseParser {
               cityMatchesStructuredValue(value, variant)
             );
           });
+
+          if (matchesSources(locationSources)) return true;
+
+          // Address is only a fallback when Kufar did not provide a dedicated
+          // location field. It is still parsed by structured components, so
+          // "Брестский район" cannot become "Брест".
+          if (locationSources.length === 0 && ad._rawAddress) {
+            return matchesSources([ad._rawAddress]);
+          }
+
+          return false;
         });
 
         logger.info(`Filtered ads by city: ${citySlugForFilter}`, {
