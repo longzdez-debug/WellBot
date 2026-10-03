@@ -14,47 +14,6 @@ export function installWebAppBridge(handler: BotHandler): void {
     return;
   }
 
-  bot.on('message', async (msg: Message) => {
-    const webAppData = (msg as Message & {
-      web_app_data?: { data?: string };
-    }).web_app_data;
-
-    if (!msg.from || !webAppData?.data) return;
-
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
-
-    try {
-      let payload: unknown;
-      try {
-        payload = JSON.parse(webAppData.data);
-      } catch {
-        payload = webAppData.data;
-      }
-
-      const url = typeof payload === 'string'
-        ? payload.trim()
-        : (payload && typeof payload === 'object' && 'url' in payload && typeof (payload as { url?: unknown }).url === 'string'
-          ? (payload as { url: string }).url.trim()
-          : '');
-
-      if (!url || url.length > 4096) {
-        await bot.sendMessage(chatId, '❌ Некорректная ссылка. Отправьте ссылку на страницу поиска.');
-        return;
-      }
-
-      logger.info('WellBOT Mini App submitted monitoring URL', { userId, url });
-      await handler.handleAddLink(chatId, userId, url);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error('WellBOT Mini App bridge failed', {
-        userId,
-        error: message,
-      });
-      await bot.sendMessage(chatId, '❌ Не удалось добавить мониторинг. Попробуйте ещё раз.');
-    }
-  });
-
   const webAppUrl = process.env.WellBOT_WEBAPP_URL?.trim();
   if (!webAppUrl) {
     logger.info('WellBOT Mini App URL is not configured; menu button is disabled');
