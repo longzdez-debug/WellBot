@@ -82,8 +82,11 @@ describe('ParserScheduler', () => {
       purgeNotificationOutbox: jest.fn().mockResolvedValue(0),
       getPendingNotificationStats: jest.fn().mockResolvedValue({ count: 0, oldestAgeMs: 0 }),
       getActiveLinkFreshnessStats: jest.fn().mockResolvedValue({ activeLinks: linkList.length, oldestAgeMs: 0, avgAgeMs: 0 }),
+      scheduleNextChecks: jest.fn().mockResolvedValue(undefined),
     };
   }
+
+  test('batches next-check scheduling for every parsed link', async () => { const links=[makeLink(1,new Date()),makeLink(2,new Date())]; parser.parseUrl.mockResolvedValue([]); const db=makeDb(links); const scheduler=new ParserScheduler(db as never,bot as never); await scheduler.runParsing(); expect(db.scheduleNextChecks).toHaveBeenCalledTimes(1); expect(db.scheduleNextChecks.mock.calls[0][0]).toHaveLength(2); expect(db.scheduleNextChecks.mock.calls[0][0]).toEqual(expect.arrayContaining([expect.objectContaining({linkId:1}),expect.objectContaining({linkId:2})])); });
 
   test('stores baseline ads without notifying the user', async () => {
     const link = makeLink(1);
