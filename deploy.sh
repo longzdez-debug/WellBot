@@ -42,8 +42,8 @@ if [[ -z "${DB_PASSWORD:-}" || "$DB_PASSWORD" == "secure_password" ]]; then
   exit 1
 fi
 
-if [[ "${HUNT_WEBAPP_URL:-}" == "https://wellbot.example.com/" ]]; then
-  echo "WARNING: Replace HUNT_WEBAPP_URL with your real public HTTPS URL if you want the Mini App." >&2
+if [[ "${WELLBOT_WEBAPP_URL:-}" == "https://wellbot.example.com/" ]]; then
+  echo "WARNING: Replace WELLBOT_WEBAPP_URL with your real public HTTPS URL if you want the Mini App." >&2
 fi
 
 # Ensure the database schema is initialized by the application after PostgreSQL becomes healthy.
