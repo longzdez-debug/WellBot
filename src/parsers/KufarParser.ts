@@ -236,7 +236,7 @@ export class KufarParser extends BaseParser {
             const citySlug = regionMatch[1];
             if (CITY_TO_REGION_ID[citySlug]) {
               rgn = CITY_TO_REGION_ID[citySlug];
-              if (!citySlug.includes('-oblast')) {
+              if (!citySlug.includes('-oblast') && !citySlug.endsWith('-obl')) {
                 citySlugForFilter = citySlug;
               }
               break;
