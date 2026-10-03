@@ -163,6 +163,23 @@ describe('ParserScheduler', () => {
     expect(metrics.duplicateNotifications).toBe(1);
   });
 
+  test('counts price drop notification jobs suppressed by database dedupe', async () => {
+    const link = makeLink(1, new Date());
+    const db = makeDb([link], new Set(), 0);
+    const scheduler = new ParserScheduler(db as never, bot as never);
+    const drop = {
+      externalId: 'drop-1',
+      oldPrice: 100,
+      newPrice: 90,
+      ad: { external_id: 'drop-1', title: 'Drop', ad_url: 'https://kufar.by/drop-1' },
+    };
+
+    await (scheduler as any).notifyPriceDrops([{ drop, telegramId: user.telegram_id, userId: user.id }]);
+    const metrics = await scheduler.getMetrics();
+
+    expect(metrics.duplicateNotifications).toBe(1);
+  });
+
   test('deduplicates the same new ad across multiple saved searches for one user', async () => {
     const links = [makeLink(1, new Date()), makeLink(2, new Date())];
     const ad: Ad = { external_id: 'shared-1', title: 'Shared', ad_url: 'https://kufar.by/shared-1' };
