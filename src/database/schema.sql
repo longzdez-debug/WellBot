@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS links (
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   url TEXT NOT NULL,
   platform VARCHAR(50) NOT NULL,
+  config JSONB,
+  source_key TEXT,
+  next_check_at TIMESTAMP,
   is_active BOOLEAN DEFAULT true,
   error_count INTEGER DEFAULT 0,
   last_parsed_at TIMESTAMP,
@@ -21,6 +24,10 @@ CREATE TABLE IF NOT EXISTS links (
 
 CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id);
 CREATE INDEX IF NOT EXISTS idx_links_active ON links(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_links_next_check ON links(next_check_at) WHERE is_active = true;
+ALTER TABLE links ADD COLUMN IF NOT EXISTS config JSONB;
+ALTER TABLE links ADD COLUMN IF NOT EXISTS source_key TEXT;
+ALTER TABLE links ADD COLUMN IF NOT EXISTS next_check_at TIMESTAMP;
 
 DELETE FROM links a
 USING links b
