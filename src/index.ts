@@ -27,7 +27,6 @@ async function main() {
 
   const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
   const scheduler = new ParserScheduler(db, bot);
-  bot.setScheduler(scheduler);
   installWebAppBridge(bot);
 
   // The Docker image and compose stack expose port 8080 for the Mini App.
