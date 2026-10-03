@@ -32,7 +32,7 @@ async function main() {
   // The Docker image and compose stack expose port 8080 for the Mini App.
   // Keep the WebApp enabled by default so a deployment that does not inject
   // HUNT_WEB_PORT cannot silently publish a Telegram URL that returns 404.
-  const webPort = Number(process.env.HUNT_WEB_PORT || 8080);
+  const webPort = Number(process.env.WELLBOT_WEB_PORT || process.env.HUNT_WEB_PORT || 8080);
   const webServer = webPort > 0 && webPort < 65536
     ? startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN)
     : null;
