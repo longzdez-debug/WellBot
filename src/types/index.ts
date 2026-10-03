@@ -30,6 +30,9 @@ export interface Ad {
   created_at?: Date;
   published_at?: Date | null;
   updated_at?: Date | null;
+  market_status?: 'below_market' | 'market' | 'above_market' | null;
+  market_percent?: number | null;
+  market_median?: number | null;
 }
 
 export type Platform = 'kufar' | 'onliner' | 'av';
