@@ -111,7 +111,7 @@ export class FastKufarParser extends BaseParser {
     const params: Record<string, string | number> = { size: 100, sort: 'lst.d' };
 
     for (const [key, value] of parsed.searchParams.entries()) {
-      if (key !== 'page' && key !== 'cursor' && value) params[key] = value;
+      if (key !== 'page' && key !== 'cursor' && key !== 'wb' && value) params[key] = value;
     }
 
     let requestedBrandSlug = '';
