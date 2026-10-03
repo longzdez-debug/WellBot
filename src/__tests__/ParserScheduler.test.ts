@@ -76,7 +76,7 @@ describe('ParserScheduler', () => {
       createPriceDropRecord: jest.fn(),
       updateAdPrice: jest.fn(),
       enqueueNotification: jest.fn().mockResolvedValue(undefined),
-      enqueueNotifications: jest.fn().mockResolvedValue(undefined),
+      enqueueNotifications: jest.fn().mockImplementation(async (jobs:any[]) => jobs.length),
       claimNotificationJobs: jest.fn().mockResolvedValue([]),
       purgeNotificationOutbox: jest.fn().mockResolvedValue(0),
       getPendingNotificationStats: jest.fn().mockResolvedValue({ count: 0, oldestAgeMs: 0 }),
