@@ -12,7 +12,7 @@ export interface NotificationJob { id:number; kind:NotificationKind; chat_id:num
 
 export class DatabaseService {
   private pool: Pool;
-  constructor(connectionString:string){this.pool=new Pool({connectionString,max:5,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,statement_timeout:12000,query_timeout:12000,keepAlive:true,keepAliveInitialDelayMillis:10000});this.pool.on('error',(err:Error)=>logger.error('Unexpected database error',{error:err.message}));}
+  constructor(connectionString:string){this.pool=new Pool({connectionString,max:10,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,statement_timeout:12000,query_timeout:12000,keepAlive:true,keepAliveInitialDelayMillis:10000});this.pool.on('error',(err:Error)=>logger.error('Unexpected database error',{error:err.message}));}
   async initialize():Promise<void>{try{await this.pool.query(readFileSync(join(__dirname,'schema.sql'),'utf-8'));logger.info('Database schema initialized');}catch(error){logger.error('Failed to initialize database',{error});throw error;}}
   async healthCheck():Promise<{ok:boolean;latencyMs:number}>{const started=Date.now();await this.pool.query('SELECT 1');return{ok:true,latencyMs:Date.now()-started};}
   async close():Promise<void>{await this.pool.end();}
