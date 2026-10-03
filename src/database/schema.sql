@@ -158,21 +158,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_price_history_unique_ad_drop
   ON price_history(ad_id, old_price, new_price)
   WHERE ad_id IS NOT NULL;
 
--- Telegram channel subscriptions
-CREATE TABLE IF NOT EXISTS channel_subscriptions (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  channel_id BIGINT NOT NULL,
-  channel_username VARCHAR(255),
-  channel_title VARCHAR(500),
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT unique_channel_per_user UNIQUE (user_id, channel_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_channel_subscriptions_user_id ON channel_subscriptions(user_id);
-CREATE INDEX IF NOT EXISTS idx_channel_subscriptions_active ON channel_subscriptions(is_active) WHERE is_active = true;
-
 -- Durable Telegram notification outbox. Jobs survive process restarts and are retried by the scheduler.
 CREATE TABLE IF NOT EXISTS notification_outbox (
   id BIGSERIAL PRIMARY KEY,
