@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS links (
   config JSONB,
   source_key TEXT,
   next_check_at TIMESTAMP,
+  priority SMALLINT NOT NULL DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
   error_count INTEGER DEFAULT 0,
   last_parsed_at TIMESTAMP,
@@ -29,6 +30,8 @@ CREATE INDEX IF NOT EXISTS idx_links_user_source_key ON links(user_id, source_ke
 ALTER TABLE links ADD COLUMN IF NOT EXISTS config JSONB;
 ALTER TABLE links ADD COLUMN IF NOT EXISTS source_key TEXT;
 ALTER TABLE links ADD COLUMN IF NOT EXISTS next_check_at TIMESTAMP;
+ALTER TABLE links ADD COLUMN IF NOT EXISTS priority SMALLINT NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_links_due_priority ON links(is_active, next_check_at, priority DESC, id);
 
 DELETE FROM links a
 USING links b
