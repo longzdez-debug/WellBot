@@ -234,7 +234,7 @@ async function showMonitorForm() {
   const renderCategories=(needle='')=>{
     const q=needle.trim().toLocaleLowerCase('ru-RU');
     const matches=categories.filter(c=>!q || c.title.toLocaleLowerCase('ru-RU').includes(q) || (c.children||[]).some(x=>x.title.toLocaleLowerCase('ru-RU').includes(q)));
-    category.innerHTML='<option value="">Выберите категорию</option>'+matches.map(c=>{const disabled=c.id==='travel';const suffix=disabled?' — отдельный сервис':'';return '<option value="'+esc(c.id)+'"'+(disabled?' disabled':'')+'>'+esc(c.title+suffix)+'</option>';}).join('');
+    category.innerHTML='<option value="">Выберите категорию</option>'+matches.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.title)+'</option>').join('');
     if (category.value) category.dispatchEvent(new Event('change'));
   };
   categorySearch.oninput=()=>renderCategories(categorySearch.value);
