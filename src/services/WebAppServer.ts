@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { DatabaseService } from '../database/DatabaseService';
 import { logger } from '../utils/logger';
-import { KUFAR_CATALOG, MonitorConfig, findCatalogNode } from '../catalog/KufarCatalog';
+import { KUFAR_CATALOG, MonitorConfig, findCatalogNode, findCatalogCategory } from '../catalog/KufarCatalog';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -146,9 +146,11 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           if (config.source !== 'kufar' || typeof config.categoryId !== 'string' || !findCatalogNode(config.categoryId)) {
             json(res, 400, { error: 'invalid_category', message: 'Выберите категорию из каталога WellBOT.' }); return;
           }
-          if (config.subcategoryId && !findCatalogNode(config.subcategoryId)) {
-            json(res, 400, { error: 'invalid_subcategory', message: 'Выберите подкатегорию из каталога WellBOT.' }); return;
+          if (config.subcategoryId && (!findCatalogNode(config.subcategoryId) || !findCatalogCategory(config.subcategoryId) || findCatalogCategory(config.subcategoryId)?.id !== config.categoryId)) {
+            json(res, 400, { error: 'invalid_subcategory', message: 'Выберите подкатегорию из выбранной категории.' }); return;
           }
+          if (config.condition && config.condition !== 'new' && config.condition !== 'used') { json(res, 400, { error: 'invalid_condition' }); return; }
+          if (config.seller && config.seller !== 'private' && config.seller !== 'company') { json(res, 400, { error: 'invalid_seller' }); return; }
           if (config.query && (typeof config.query !== 'string' || config.query.length > 120)) {
             json(res, 400, { error: 'invalid_query' }); return;
           }
@@ -158,6 +160,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           if (config.maxPrice != null && (!Number.isFinite(Number(config.maxPrice)) || Number(config.maxPrice) < 0)) {
             json(res, 400, { error: 'invalid_max_price' }); return;
           }
+          if (config.minPrice != null && config.maxPrice != null && Number(config.minPrice) > Number(config.maxPrice)) { json(res, 400, { error: 'invalid_price_range' }); return; }
           const links = await db.getUserLinks(user.id);
           if (links.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} мониторов.` }); return; }
           const { buildKufarSearchUrl } = await import('../catalog/KufarCatalog');
@@ -212,24 +215,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
         }
 
         if (requestPath === '/api/links' && req.method === 'POST') {
-          let body: Record<string, unknown>;
-          try { body = await readJson(req); }
-          catch (error: unknown) { json(res, error instanceof Error && error.message === 'body_too_large' ? 413 : 400, { error: error instanceof Error && error.message === 'body_too_large' ? 'body_too_large' : 'invalid_json' }); return; }
-          const rawUrl = typeof body.url === 'string' ? body.url.trim() : '';
-          if (!rawUrl || rawUrl.length > 4096) { json(res, 400, { error: 'invalid_url' }); return; }
-          const url = normalizeUrl(rawUrl);
-          const assessment = LinkAcceptance.assess(url);
-          if (!assessment.ok || !assessment.platform) { json(res, 400, { error: 'unsupported_url', message: assessment.reason || 'Поддерживаются страницы поиска Kufar, Onliner и av.by.' }); return; }
-          const links = await db.getUserLinks(user.id);
-          const existing = links.find(link => link.url === url);
-          if (existing) {
-            if (!existing.is_active) { await db.setLinkActive(existing.id, user.id, true); json(res, 200, { link: { ...existing, is_active: true }, reactivated: true }); return; }
-            json(res, 409, { error: 'duplicate', message: 'Эта ссылка уже добавлена.' }); return;
-          }
-          if (links.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} мониторов.` }); return; }
-          const link = await db.createLink(user.id, url, assessment.platform);
-          logger.info('WellBOT monitor created', { telegramId: auth.user.id, dbUserId: user.id, linkId: link.id, platform: link.platform, url: link.url });
-          json(res, 201, { link, reactivated: false });
+          json(res, 410, { error: 'url_monitors_disabled', message: 'Создание мониторинга по ссылке отключено. Используйте каталог WellBOT.' });
           return;
         }
 
