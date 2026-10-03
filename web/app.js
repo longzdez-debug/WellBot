@@ -58,6 +58,8 @@ function renderStats(stats) {
   document.querySelector('#stat-new').textContent = stats?.adsToday ?? 0;
   document.querySelector('#stat-drops').textContent = stats?.priceDropsToday ?? 0;
   document.querySelector('#radar-count').textContent = stats?.adsToday ?? 0;
+  const inlineActive = document.querySelector('#stat-active-inline');
+  if (inlineActive) inlineActive.textContent = stats?.activeLinks ?? 0;
   const username = state.data?.user?.username;
   if (username) document.querySelector('#hero-copy').textContent = `@${esc(username)} — цели под контролем. Новая цель сразу приходит в Telegram.`;
 }
