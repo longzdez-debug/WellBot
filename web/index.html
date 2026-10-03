@@ -19,7 +19,7 @@
     <main>
       <section class="hero"><div class="eyebrow">MARKET RADAR <span>•</span> 24/7</div><h1>Лови объявления<br><em>раньше всех.</em></h1><p id="hero-copy">Твои поиски под контролем. Новая цель — сразу в Telegram.</p><button class="primary" data-action="add">+ Добавить мониторинг <span>→</span></button></section>
       <section class="stats"><article><b id="stat-active">—</b><span>активных<br>мониторов</span></article><article><b id="stat-new">—</b><span>новых<br>сегодня</span></article><article><b id="stat-drops">—</b><span>снижений<br>сегодня</span></article></section>
-      <section class="radar-card" id="radar-section"><div class="section-head"><div><span class="label">RADAR</span><h2>Охота идёт</h2></div><span class="pulse">● SCANNING</span></div><div class="radar"><div class="sweep"></div><div class="cross h"></div><div class="cross v"></div><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="target t1"></div><div class="target t2"></div><div class="target t3"></div><div class="radar-core">⌖</div></div><div class="radar-footer"><strong id="radar-count">—</strong> объявлений поймано сегодня <span>•</span> мониторинг активен</div></section>
+      <section class="radar-card" id="radar-section"><div class="section-head"><div><span class="label">RADAR</span><h2>Мониторинг активен</h2></div><span class="pulse">● SCANNING</span></div><div class="radar"><div class="sweep"></div><div class="cross h"></div><div class="cross v"></div><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="target t1"></div><div class="target t2"></div><div class="target t3"></div><div class="radar-core">⌖</div></div><div class="radar-footer"><strong id="radar-count">—</strong> объявлений поймано сегодня <span>•</span> мониторинг активен</div></section>
       <section id="hot-find" class="hot-card" hidden></section>
       <section class="section" id="feed-section"><div class="section-head"><div><span class="label">FEED</span><h2>Новые объявления</h2></div><button class="icon-btn" data-action="refresh" aria-label="Обновить">↻</button></div><div class="chips"><button class="chip active" data-filter="all">Все</button><button class="chip" data-filter="kufar">KUFAR</button><button class="chip" data-filter="onliner">ONLINER</button><button class="chip" data-filter="av">AV.BY</button></div><div id="feed" class="feed"><div class="empty">Загружаю ленту…</div></div></section>
       <section class="section" id="monitors-section"><div class="section-head"><div><span class="label">MONITORS</span><h2>Мои поиски</h2></div><button class="link-btn" data-action="add">+ Добавить</button></div><div id="monitors"><div class="empty">Загружаю мониторы…</div></div></section>
@@ -82,13 +82,13 @@
         }
         window.__WELLBOT_INIT_DATA__ = initData;
         var script = document.createElement('script');
-        script.src = './app.js?v=20261003-4';
+        script.src = './app.js?v=20261004-1';
         script.onload = function () {
           var channelScript = document.createElement('script');
-          channelScript.src = './channel.js?v=20260913-2';
+          channelScript.src = './channel.js?v=20261004-1';
           channelScript.onload = function () {
             var hotfixScript = document.createElement('script');
-            hotfixScript.src = './hunt-hotfix.js?v=20260913-1';
+            hotfixScript.src = './';
             document.body.appendChild(hotfixScript);
           };
           document.body.appendChild(channelScript);
