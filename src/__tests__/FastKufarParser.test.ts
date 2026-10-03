@@ -48,6 +48,27 @@ describe('FastKufarParser catalog/search behavior', () => {
     expect(ads.map(ad => ad.external_id)).toEqual(['1']);
   });
 
+  test('falls back to the secondary Kufar API only when the primary fails', async () => {
+    const urls: string[] = [];
+    const axiosMock = {
+      get: jest.fn(async (url: string) => {
+        urls.push(url);
+        if (url.includes('search-api')) throw new Error('primary unavailable');
+        return { data: { ads: [{ ad_id: '2', subject: 'Ноутбук', price_byn: 200000, ad_link: 'https://www.kufar.by/ad/2' }] } };
+      }),
+    } as any;
+
+    const parser = new FastKufarParser(axiosMock);
+    const ads = await parser.parseUrl(
+      'https://www.kufar.by/l/kompyutery?wb=kufar%7Ccomputers%7C19020%7C%7C%7C%7C%7C%7C%7C%7Cnormal',
+    );
+
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toContain('search-api');
+    expect(urls[1]).toContain('cre-api');
+    expect(ads.map(ad => ad.external_id)).toEqual(['2']);
+  });
+
   test('applies city, price, condition and seller filters together', async () => {
     const axiosMock = {
       get: jest.fn(async () => ({
