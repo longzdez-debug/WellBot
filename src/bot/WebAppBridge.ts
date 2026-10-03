@@ -3,14 +3,14 @@ import { BotHandler } from './BotHandler';
 import { logger } from '../utils/logger';
 
 /**
- * Connects the HUNT Mini App to the existing Telegram bot without duplicating
+ * Connects the WellBOT Mini App to the existing Telegram bot without duplicating
  * the bot's business logic. The Mini App sends a URL via web_app_data and the
  * normal BotHandler link flow performs validation, parsing and persistence.
  */
 export function installWebAppBridge(handler: BotHandler): void {
   const bot = (handler as unknown as { bot: TelegramBot }).bot;
   if (!bot) {
-    logger.warn('HUNT WebApp bridge not installed: Telegram bot is unavailable');
+    logger.warn('WellBOT WebApp bridge not installed: Telegram bot is unavailable');
     return;
   }
 
@@ -43,11 +43,11 @@ export function installWebAppBridge(handler: BotHandler): void {
         return;
       }
 
-      logger.info('HUNT Mini App submitted monitoring URL', { userId, url });
+      logger.info('WellBOT Mini App submitted monitoring URL', { userId, url });
       await handler.handleAddLink(chatId, userId, url);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error('HUNT Mini App bridge failed', {
+      logger.error('WellBOT Mini App bridge failed', {
         userId,
         error: message,
       });
@@ -55,9 +55,9 @@ export function installWebAppBridge(handler: BotHandler): void {
     }
   });
 
-  const webAppUrl = process.env.HUNT_WEBAPP_URL?.trim();
+  const webAppUrl = process.env.WellBOT_WEBAPP_URL?.trim();
   if (!webAppUrl) {
-    logger.info('HUNT Mini App URL is not configured; menu button is disabled');
+    logger.info('WellBOT Mini App URL is not configured; menu button is disabled');
     return;
   }
 
@@ -65,18 +65,18 @@ export function installWebAppBridge(handler: BotHandler): void {
   try {
     parsedUrl = new URL(webAppUrl);
   } catch {
-    logger.error('HUNT Mini App URL is invalid', { webAppUrl });
+    logger.error('WellBOT Mini App URL is invalid', { webAppUrl });
     return;
   }
 
   if (parsedUrl.protocol !== 'https:') {
-    logger.error('HUNT Mini App URL must use HTTPS', { webAppUrl });
+    logger.error('WellBOT Mini App URL must use HTTPS', { webAppUrl });
     return;
   }
 
   const menuButton = {
     type: 'web_app' as const,
-    text: '⚡ HUNT',
+    text: '⚡ WellBOT',
     web_app: { url: webAppUrl },
   };
 
@@ -85,10 +85,10 @@ export function installWebAppBridge(handler: BotHandler): void {
       ...(chatId !== undefined ? { chat_id: chatId } : {}),
       menu_button: menuButton,
     })
-      .then(() => logger.info('HUNT Mini App menu button configured', { webAppUrl, chatId }))
+      .then(() => logger.info('WellBOT Mini App menu button configured', { webAppUrl, chatId }))
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
-        logger.error('Failed to configure HUNT Mini App menu button', {
+        logger.error('Failed to configure WellBOT Mini App menu button', {
           webAppUrl,
           chatId,
           error: message,
@@ -107,5 +107,5 @@ export function installWebAppBridge(handler: BotHandler): void {
     }
   });
 
-  logger.info('HUNT Mini App bridge installed', { webAppUrl });
+  logger.info('WellBOT Mini App bridge installed', { webAppUrl });
 }
