@@ -8,7 +8,6 @@ import { TelegramSender } from '../services/TelegramSender';
 import { Ad, Link, Platform } from '../types';
 import { logger } from '../utils/logger';
 import { mapError } from '../utils/errorMapper';
-import { ParserScheduler } from '../scheduler/ParserScheduler';
 
 export class BotHandler {
   private bot: TelegramBot;
@@ -17,15 +16,10 @@ export class BotHandler {
   private userStates: Map<number, string> = new Map();
   private adPresenter: AdPresenter;
   private telegramSender: TelegramSender;
-  private scheduler: ParserScheduler | null = null;
-
-  setScheduler(scheduler: ParserScheduler): void { this.scheduler = scheduler; }
-
-  constructor(token: string, db: DatabaseService, scheduler?: ParserScheduler) {
+  constructor(token: string, db: DatabaseService) {
     this.bot = new TelegramBot(token, { polling: true });
     this.db = db;
     this.rateLimiter = new RateLimiter(10, 60000);
-    this.scheduler = scheduler ?? null;
     this.adPresenter = new AdPresenter();
     this.telegramSender = new TelegramSender(this.bot);
     this.setupHandlers();
