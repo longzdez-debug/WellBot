@@ -278,6 +278,7 @@ export class FastKufarParser extends BaseParser {
       });
 
       return [...unique.values()].map((ad: any) => {
+        if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return null;
         const text = adSearchText(ad);
         if (normalizedBrandTerms.length && !normalizedBrandTerms.some(term => text.includes(term))) return null;
         if (queryTerms.length && !queryTerms.every(term => text.includes(term))) return null;
@@ -303,14 +304,18 @@ export class FastKufarParser extends BaseParser {
     };
 
     try {
-      // Race the two known search backends. This reduces tail latency when one
-      // backend is degraded while keeping the hot path independent of either one.
-      const results = await Promise.allSettled(API_ENDPOINTS.map(requestApi));
-      const nonEmpty = results.find((result): result is PromiseFulfilledResult<Ad[]> => result.status === 'fulfilled' && result.value.length > 0);
-      if (nonEmpty) return nonEmpty.value;
-      const empty = results.find((result): result is PromiseFulfilledResult<Ad[]> => result.status === 'fulfilled');
-      if (empty) return empty.value;
-      throw new Error('All Kufar API endpoints failed');
+      // API category filtering is ID-based. For catalog slugs without a verified
+      // API ID we deliberately use the rendered category page instead of risking
+      // a silent fallback to "all Kufar listings".
+      if (params.cat) {
+        const results = await Promise.allSettled(API_ENDPOINTS.map(requestApi));
+        const nonEmpty = results.find((result): result is PromiseFulfilledResult<Ad[]> => result.status === 'fulfilled' && result.value.length > 0);
+        if (nonEmpty) return nonEmpty.value;
+        const empty = results.find((result): result is PromiseFulfilledResult<Ad[]> => result.status === 'fulfilled');
+        if (empty) return empty.value;
+        throw new Error('All Kufar API endpoints failed');
+      }
+      logger.debug('Kufar category has no verified API id; using rendered page', { url });
     } catch (error: any) {
       logger.warn('Kufar API hot-path failed; trying rendered page', {
         url,
