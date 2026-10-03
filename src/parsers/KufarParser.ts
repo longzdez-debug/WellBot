@@ -145,7 +145,7 @@ function cityMatchesStructuredValue(value: unknown, expectedCity: string): boole
     .map(normalizeCityPart)
     .filter(Boolean);
 
-  return parts.some(part => part === expected);
+  return parts.some(part => part === expected || part.startsWith(`${expected} `));
 }
 
 function getNextCursor(data: any): string | null {
