@@ -40,6 +40,30 @@ export class DatabaseService {
   async isNewAdForLink(linkId:number,externalId:string):Promise<boolean>{const r=await this.pool.query('SELECT id FROM ads WHERE link_id=$1 AND external_id=$2',[linkId,externalId]);return r.rows.length===0;}
   async isNewAdForUser(userId:number,externalId:string):Promise<boolean>{const r=await this.pool.query('SELECT a.id FROM ads a JOIN links l ON a.link_id=l.id WHERE l.user_id=$1 AND a.external_id=$2',[userId,externalId]);return r.rows.length===0;}
   async getExistingAdExternalIdsForLink(linkId:number,externalIds:string[]):Promise<Set<string>>{if(!externalIds.length)return new Set();const r=await this.pool.query<{external_id:string}>('SELECT external_id FROM ads WHERE link_id=$1 AND external_id=ANY($2::text[])',[linkId,externalIds]);return new Set(r.rows.map(x=>x.external_id));}
+  async markAdsSeenForUser(userId:number,linkId:number,ads:Ad[]):Promise<void>{
+    const rows=ads.filter(ad=>ad?.external_id).map(ad=>ad.external_id);
+    if(!rows.length)return;
+    await this.pool.query(
+      `INSERT INTO user_ad_seen (user_id,external_id,first_link_id)
+       SELECT $1, x, $2 FROM unnest($3::text[]) AS x
+       ON CONFLICT (user_id,external_id) DO NOTHING`,
+      [userId,linkId,[...new Set(rows)]],
+    );
+  }
+
+  async claimNewAdsForUser(userId:number,linkId:number,ads:Ad[]):Promise<Set<string>>{
+    const rows=[...new Set(ads.filter(ad=>ad?.external_id).map(ad=>ad.external_id))];
+    if(!rows.length)return new Set();
+    const r=await this.pool.query<{external_id:string}>(
+      `INSERT INTO user_ad_seen (user_id,external_id,first_link_id)
+       SELECT $1, x, $2 FROM unnest($3::text[]) AS x
+       ON CONFLICT (user_id,external_id) DO NOTHING
+       RETURNING external_id`,
+      [userId,linkId,rows],
+    );
+    return new Set(r.rows.map(row=>row.external_id));
+  }
+
   async getExistingAdExternalIdsForUser(userId:number,externalIds:string[]):Promise<Set<string>>{if(!externalIds.length)return new Set();const r=await this.pool.query<{external_id:string}>('SELECT DISTINCT a.external_id FROM ads a JOIN links l ON a.link_id=l.id WHERE l.user_id=$1 AND a.external_id=ANY($2::text[])',[userId,externalIds]);return new Set(r.rows.map(x=>x.external_id));}
   async getLastPricesForAds(linkId:number,externalIds:string[]):Promise<Map<string,{price:string;adId:number}>>{if(!externalIds.length)return new Map();const r=await this.pool.query<{external_id:string;price:string;ad_id:number}>('SELECT DISTINCT ON (external_id) external_id,price,id as ad_id FROM ads WHERE link_id=$1 AND external_id=ANY($2::text[]) ORDER BY external_id,updated_at DESC NULLS LAST,id DESC',[linkId,externalIds]);return new Map(r.rows.filter(x=>x.price!=null).map(x=>[x.external_id,{price:x.price,adId:x.ad_id}]));}
   async getRecentMarketPrices(linkId:number,limit=250):Promise<string[]>{const safeLimit=Math.min(Math.max(Math.floor(limit),20),1000);const r=await this.pool.query<{price:string}>('SELECT price FROM ads WHERE link_id=$1 AND price IS NOT NULL AND price <> \'\' ORDER BY COALESCE(published_at,created_at) DESC,id DESC LIMIT $2',[linkId,safeLimit]);return r.rows.map(x=>x.price).filter(Boolean);}
