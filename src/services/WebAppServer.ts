@@ -136,7 +136,6 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
             json(res, 400, { error: 'invalid_category', message: 'Выберите категорию из каталога WellBOT.' }); return;
           }
           const selectedCategory = findCatalogNode(config.categoryId);
-          if (!selectedCategory?.children?.length && !/^\d+$/.test(config.categoryId)) { json(res, 400, { error: 'category_not_verified', message: 'Эта категория ещё не имеет подтверждённого Kufar ID.' }); return; }
           if (config.subcategoryId && (!findCatalogNode(config.subcategoryId) || !findCatalogCategory(config.subcategoryId) || findCatalogCategory(config.subcategoryId)?.id !== config.categoryId)) {
             json(res, 400, { error: 'invalid_subcategory', message: 'Выберите подкатегорию из выбранной категории.' }); return;
           }
