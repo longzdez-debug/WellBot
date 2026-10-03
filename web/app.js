@@ -217,6 +217,8 @@ async function showMonitorForm() {
     <input id="catalog-query" type="text" maxlength="120" placeholder="Например: iPhone 15 Pro">
     <label class="modal-label">Состояние</label>
     <select id="catalog-condition"><option value="">Любое</option><option value="new">Новое</option><option value="used">Б/у</option></select>
+    <label class="modal-label">Продавец</label>
+    <select id="catalog-seller"><option value="">Любой</option><option value="private">Частное лицо</option><option value="company">Компания</option></select>
     <div id="wellbot-monitor-error" class="modal-error" role="alert"></div>
     <div class="modal-actions"><button id="wellbot-monitor-cancel" class="modal-secondary" type="button">Отмена</button><button id="wellbot-monitor-submit" class="modal-primary" type="button">Запустить радар <span>→</span></button></div>
   </div>`;
