@@ -82,6 +82,15 @@ function normalizeSearchText(value: unknown): string {
 }
 
 function adCondition(ad: any): string { const parameter = ad?.ad_parameters?.find((p: any) => p?.p === 'condition'); return String(parameter?.vl ?? parameter?.v ?? parameter?.value ?? '').trim(); }
+function adIsCompany(ad: any): boolean {
+  if (ad?.company_ad === true || ad?.is_company === true) return true;
+  const sellerType = String(
+    ad?.account_type ?? ad?.seller_type ??
+    ad?.account_parameters?.find((p: any) => p?.p === 'seller_type')?.vl ??
+    ad?.account_parameters?.find((p: any) => p?.p === 'seller_type')?.v ?? ''
+  ).toLocaleLowerCase('ru-RU');
+  return sellerType.includes('company') || sellerType.includes('компан') || sellerType.includes('юрид');
+}
 function adSearchText(ad: any): string {
   const values: string[] = [ad?.subject, ad?.description];
 
@@ -201,8 +210,8 @@ export class FastKufarParser extends BaseParser {
         const condition = normalizeSearchText(adCondition(ad));
         if (requestedCondition === 'new' && !/(new|нов|новое|новая|новый)/.test(condition)) return false;
         if (requestedCondition === 'used' && /(new|нов|новое|новая|новый)/.test(condition)) return false;
-        if (requestedSeller === 'company' && !ad.company_ad) return false;
-        if (requestedSeller === 'private' && ad.company_ad) return false;
+        if (requestedSeller === 'company' && !adIsCompany(ad)) return false;
+        if (requestedSeller === 'private' && adIsCompany(ad)) return false;
         const rawPrice = ad.price_byn != null ? Number(ad.price_byn) / 100 : ad.price_usd != null ? Number(ad.price_usd) / 100 : undefined;
         if (requestedMinPrice != null && Number.isFinite(requestedMinPrice) && (rawPrice == null || rawPrice < requestedMinPrice)) return false;
         if (requestedMaxPrice != null && Number.isFinite(requestedMaxPrice) && (rawPrice == null || rawPrice > requestedMaxPrice)) return false;
@@ -293,8 +302,8 @@ export class FastKufarParser extends BaseParser {
         const condition = normalizeSearchText(adCondition(ad));
         if (requestedCondition === 'new' && !/(new|нов|новое|новая|новый)/.test(condition)) return null;
         if (requestedCondition === 'used' && /(new|нов|новое|новая|новый)/.test(condition)) return null;
-        if (requestedSeller === 'company' && !ad.company_ad) return null;
-        if (requestedSeller === 'private' && ad.company_ad) return null;
+        if (requestedSeller === 'company' && !adIsCompany(ad)) return null;
+        if (requestedSeller === 'private' && adIsCompany(ad)) return null;
         const rawPrice = ad.price_byn != null ? Number(ad.price_byn) / 100 : ad.price_usd != null ? Number(ad.price_usd) / 100 : undefined;
         if (requestedMinPrice != null && Number.isFinite(requestedMinPrice) && (rawPrice == null || rawPrice < requestedMinPrice)) return null;
         if (requestedMaxPrice != null && Number.isFinite(requestedMaxPrice) && (rawPrice == null || rawPrice > requestedMaxPrice)) return null;
