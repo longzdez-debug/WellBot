@@ -1,4 +1,6 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
+import http from 'node:http';
+import https from 'node:https';
 import { Ad, Platform } from '../types';
 import { logger } from '../utils/logger';
 import { IParser } from './IParser';
@@ -24,6 +26,8 @@ export abstract class BaseParser implements IParser {
           'Accept-Encoding': 'gzip, deflate, br',
           'Connection': 'keep-alive',
         },
+        httpAgent: new http.Agent({ keepAlive: true, maxSockets: 64, maxFreeSockets: 16 }),
+        httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 64, maxFreeSockets: 16 }),
       });
     }
   }
