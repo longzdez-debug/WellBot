@@ -140,12 +140,12 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           const links = await db.getUserLinks(user.id);
           const { buildKufarSearchUrl } = await import('../catalog/KufarCatalog.js');
           const url = buildKufarSearchUrl(config);
-          const existing = links.find(link => link.source_key && link.source_key === `${config.source}:${config.categoryId}:${config.subcategoryId||''}:${config.region||''}:${config.city||''}:${config.query||''}:${config.minPrice??''}:${config.maxPrice??''}:${config.condition||''}:${config.seller||''}:${config.mode||'normal'}`);
+          const existing = links.find(link => link.url === url);
           if (existing) {
             if (!existing.is_active) { await db.setLinkActive(existing.id, user.id, true); json(res, 200, { link: { ...existing, is_active: true }, reactivated: true }); return; }
-            json(res, 409, { error: 'duplicate', message: 'Такой монитор уже добавлен.' }); return;
+            json(res, 409, { error: 'duplicate', message: 'Такой поиск уже добавлен.' }); return;
           }
-          if (links.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} мониторов.` }); return; }
+          const activeLinks = links.filter(link => link.is_active); if (activeLinks.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} активных поисков.` }); return; }
           const link = await db.createLink(user.id, url, 'kufar', config);
           logger.info('WellBOT catalog monitor created', { telegramId: auth.user.id, dbUserId: user.id, linkId: link.id, categoryId: config.categoryId, subcategoryId: config.subcategoryId || null });
           json(res, 201, { link, config });
@@ -153,7 +153,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
         }
 
         if (requestPath === '/api/links' && req.method === 'POST') {
-          json(res, 410, { error: 'url_monitors_disabled', message: 'Создание мониторинга по ссылке отключено. Используйте каталог WellBOT.' });
+          json(res, 410, { error: 'url_monitors_disabled', message: 'Создание поиска по ссылке отключено. Используйте каталог WellBOT.' });
           return;
         }
 
