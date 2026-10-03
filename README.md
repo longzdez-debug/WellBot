@@ -50,8 +50,8 @@ Before running the script, set at minimum:
 TELEGRAM_BOT_TOKEN=your_bot_token
 DB_PASSWORD=use-a-long-random-password
 WELLBOT_WEBAPP_URL=https://your-domain.example/
-PARSE_INTERVAL_SECONDS=5
-PARSE_CONCURRENCY=20
+PARSE_INTERVAL_SECONDS=0.5
+PARSE_CONCURRENCY=16
 ```
 
 `deploy.sh` validates the required secrets, starts PostgreSQL, waits for it to become healthy, builds/starts WellBOT, and waits for `http://127.0.0.1:8080/health` to pass.
@@ -88,8 +88,8 @@ For Kufar, use a search/category URL (`kufar.by/l/*`) rather than a direct listi
 
 | Variable | Default | Meaning |
 |---|---:|---|
-| `PARSE_INTERVAL_SECONDS` | `5` | Polling interval; values below 1 second are clamped to 1 second |
-| `PARSE_CONCURRENCY` | `20` | Maximum search URLs parsed in parallel, clamped to 1–50 |
+| `PARSE_INTERVAL_SECONDS` | `0.5` | Polling interval; values are clamped to 250 ms minimum |
+| `PARSE_CONCURRENCY` | `16` | Maximum search URLs parsed in parallel, clamped to 1–20 |
 | `WELLBOT_WEB_PORT` | disabled | Built-in Mini App server port |
 | `WELLBOT_WEBAPP_URL` | empty | Public HTTPS Mini App URL |
 | `DB_PASSWORD` | — | PostgreSQL password used by Docker Compose |
