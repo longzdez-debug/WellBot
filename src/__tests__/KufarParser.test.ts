@@ -34,7 +34,7 @@ describe('KufarParser URL/filter handling', () => {
     const axiosMock = {
       get: jest.fn(async (_url: string, config: any) => {
         calls.push(config);
-        if (calls.length === 1) {
+        if (!config?.params?.cursor) {
           return {
             data: {
               ads: [{ ad_id: '1', subject: 'Apple iPhone' }],
