@@ -102,7 +102,7 @@ Kufar searches are generated server-side from the verified WellBOT catalog, so u
 - A newly created search is parsed immediately rather than waiting for the next scheduled interval.
 - The authenticated `/api/metrics` endpoint exposes scheduler p50/p95 cycle latency and notification counters.
 - The Mini App displays a compact performance/health card.
-- First successful parse of a monitor creates a baseline without notifications.
+- First successful parse of a search creates a baseline without notifications.
 - New listings are deduplicated before Telegram delivery.
 - Telegram sender enforces per-chat/global pacing and retries rate-limit responses.
 - PostgreSQL persists searches and ads across container restarts.
@@ -164,7 +164,7 @@ web/
 
 - GitHub: https://github.com/longzdez-debug/WellBot
 - Default branch: `main`
-- Production merge: `49ecf4a427d7d8f3ec9847a729681261aa460f5c`
+- Production deployments should be validated by CI before rollout.
 
 ## License
 
