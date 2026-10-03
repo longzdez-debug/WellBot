@@ -1,7 +1,7 @@
 export interface CatalogNode { id:string; title:string; slug:string; children?:CatalogNode[]; }
 export interface MonitorConfig {
   source:'kufar'; categoryId:string; subcategoryId?:string; region?:string; city?:string; query?:string;
-  minPrice?:number; maxPrice?:number; condition?:'new'|'used'; seller?:'private'|'company';
+  minPrice?:number; maxPrice?:number; condition?:'new'|'used'; seller?:'private'|'company'; mode?:'normal'|'sniper';
 }
 const node=(id:string,title:string,slug:string,children:CatalogNode[]=[]):CatalogNode=>({id,title,slug,...(children.length?{children}:{})});
 const child=(id:string,title:string,slug:string):CatalogNode=>({id,title,slug});
