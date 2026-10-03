@@ -13,7 +13,7 @@ const MIME_TYPES: Record<string, string> = {
 };
 const MAX_BODY = 16 * 1024;
 const MAX_INIT_DATA = 16 * 1024;
-const MAX_LINKS = 10;
+const MAX_LINKS = 50;
 const AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 type AuthUser = { id: number; username?: string; first_name?: string; last_name?: string };
