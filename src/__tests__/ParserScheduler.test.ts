@@ -88,6 +88,22 @@ describe('ParserScheduler', () => {
 
   test('batches next-check scheduling for every parsed link', async () => { const links=[makeLink(1,new Date()),makeLink(2,new Date())]; parser.parseUrl.mockResolvedValue([]); const db=makeDb(links); const scheduler=new ParserScheduler(db as never,bot as never); await scheduler.runParsing(); expect(db.scheduleNextChecks).toHaveBeenCalledTimes(1); expect(db.scheduleNextChecks.mock.calls[0][0]).toHaveLength(2); expect(db.scheduleNextChecks.mock.calls[0][0]).toEqual(expect.arrayContaining([expect.objectContaining({linkId:1}),expect.objectContaining({linkId:2})])); });
 
+
+  test('applies exponential backoff to failed links in the batch schedule', async () => {
+    const link = makeLink(1, new Date());
+    parser.parseUrl.mockRejectedValue(new Error('upstream timeout'));
+    const db = makeDb([link]);
+    const scheduler = new ParserScheduler(db as never, bot as never);
+
+    await scheduler.runParsing();
+
+    const scheduled = db.scheduleNextChecks.mock.calls[0][0] as Array<{linkId:number;delayMs:number}>;
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].linkId).toBe(1);
+    expect(scheduled[0].delayMs).toBeGreaterThanOrEqual(10000);
+    expect(scheduled[0].delayMs).toBeLessThanOrEqual(10750);
+  });
+
   test('stores baseline ads without notifying the user', async () => {
     const link = makeLink(1);
     const ads: Ad[] = [
