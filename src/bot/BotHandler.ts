@@ -5,7 +5,7 @@ import { ParserFactory } from '../parsers/ParserFactory';
 import { AdPresenter } from '../services/AdPresenter';
 import { TelegramSender } from '../services/TelegramSender';
 import { NewAdSelector } from '../services/NewAdSelector';
-import { Ad, Platform } from '../types';
+import { Ad, Link, Platform } from '../types';
 import { logger } from '../utils/logger';
 import { mapError } from '../utils/errorMapper';
 import { LinkAcceptance } from '../utils/linkAcceptance';
