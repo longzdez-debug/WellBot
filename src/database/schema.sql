@@ -66,6 +66,9 @@ CREATE INDEX IF NOT EXISTS idx_ads_link_id ON ads(link_id);
 CREATE INDEX IF NOT EXISTS idx_ads_external_id ON ads(external_id);
 CREATE INDEX IF NOT EXISTS idx_ads_created_at ON ads(created_at);
 CREATE INDEX IF NOT EXISTS idx_ads_link_created_at ON ads(link_id, created_at DESC);
+-- Parser hot-path indexes: existing-ad lookup and latest-price lookup are keyed by link first.
+CREATE INDEX IF NOT EXISTS idx_ads_link_external_updated ON ads(link_id, external_id, updated_at DESC NULLS LAST, id DESC);
+CREATE INDEX IF NOT EXISTS idx_ads_link_published_created ON ads(link_id, published_at DESC NULLS LAST, created_at DESC, id DESC);
 
 ALTER TABLE ads ADD COLUMN IF NOT EXISTS market_status VARCHAR(20);
 ALTER TABLE ads ADD COLUMN IF NOT EXISTS market_percent DECIMAL(8,2);
