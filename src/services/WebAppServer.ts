@@ -71,7 +71,7 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   return parsed as Record<string, unknown>;
 }
 
-export function startWebAppServer(port: number, db: DatabaseService, botToken: string, webRoot = join(process.cwd(), 'web')): { close: () => Promise<void> } {
+export function startWebAppServer(port: number, db: DatabaseService, botToken: string, webRoot = join(process.cwd(), 'web'), metricsProvider?: () => unknown): { close: () => Promise<void> } {
   const server = createServer(async (req, res) => {
     let requestPath = '';
     try {
@@ -94,6 +94,8 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
         if (!auth) { logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method }); json(res, 401, { error: 'unauthorized' }); return; }
         const user = await db.getUser(auth.user.id);
         if (!user) { logger.warn('WellBOT API user not registered', { telegramId: auth.user.id, requestPath }); json(res, 403, { error: 'user_not_registered' }); return; }
+
+        if (requestPath === '/api/metrics' && req.method === 'GET') { json(res, 200, metricsProvider ? metricsProvider() : { scheduler: { running: false }, notifications: {}, generatedAt: new Date().toISOString() }); return; }
 
         if (requestPath === '/api/bootstrap' && req.method === 'GET') {
           const [links, ads, priceDrops, stats, statsByLink] = await Promise.all([
