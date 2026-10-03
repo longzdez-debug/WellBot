@@ -80,6 +80,7 @@ describe('ParserScheduler', () => {
       claimNotificationJobs: jest.fn().mockResolvedValue([]),
       purgeNotificationOutbox: jest.fn().mockResolvedValue(0),
       getPendingNotificationStats: jest.fn().mockResolvedValue({ count: 0, oldestAgeMs: 0 }),
+      getActiveLinkFreshnessStats: jest.fn().mockResolvedValue({ activeLinks: linkList.length, oldestAgeMs: 0, avgAgeMs: 0 }),
     };
   }
 
@@ -142,6 +143,10 @@ describe('ParserScheduler', () => {
     expect(metrics.scheduler.cycleDurationMs.last).toBeGreaterThanOrEqual(0);
     expect(metrics.notifications.pending).toBe(3);
     expect(metrics.notifications.oldestAgeMs).toBe(4200);
+    expect(metrics.scheduler.activeLinks).toBe(1);
+    expect(metrics.scheduler.cycleDurationMs.p99).toBeGreaterThanOrEqual(0);
+    expect(metrics.scheduler.freshnessLagMs.oldest).toBe(0);
+    expect(metrics.scheduler.adsPerMinute).toBeGreaterThanOrEqual(0);
   });
 
   test('deduplicates the same new ad across multiple saved searches for one user', async () => {
