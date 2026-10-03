@@ -2,13 +2,7 @@ import { BaseParser } from './BaseParser';
 import { Ad } from '../types';
 import { logger } from '../utils/logger';
 
-const CATEGORY_MAP: Record<string, string> = {
-  avtomobili: '2010', mototsikly: '2020', 'avtobusy-i-mikroavtobusy': '2030', 'shiny-i-diski': '2100',
-  'telefony-i-planshety': '17010', 'mobilnye-telefony': '17010', telefony: '17010',
-  noutbuki: '19020', kompyutery: '19010', televizory: '12030', 'igrovye-pristavki-i-igry': '12040',
-  'stiralnye-mashiny': '14050', kvartiru: '1010', komnatu: '1030', dom: '1020', dachu: '1020',
-  uchastok: '1050', kommercheskaya: '1060', garazh: '1040', mebel: '15040', velosipedy: '8030',
-};
+const CATEGORY_MAP: Record<string, string> = {};
 
 const BRAND_MAP: Record<string, string> = {
   apple: 'Apple', samsung: 'Samsung', xiaomi: 'Xiaomi', huawei: 'Huawei', honor: 'Honor',
@@ -131,6 +125,11 @@ export class FastKufarParser extends BaseParser {
     }
 
     const requestedQuery = String(parsed.searchParams.get('query') || '').trim();
+    const monitorIdentity = String(parsed.searchParams.get('wb') || '').split('|');
+    const requestedCondition = monitorIdentity[8] === 'new' || monitorIdentity[8] === 'used' ? monitorIdentity[8] : '';
+    const requestedSeller = monitorIdentity[9] === 'private' || monitorIdentity[9] === 'company' ? monitorIdentity[9] : '';
+    const requestedMinPrice = monitorIdentity[6] ? Number(monitorIdentity[6]) : undefined;
+    const requestedMaxPrice = monitorIdentity[7] ? Number(monitorIdentity[7]) : undefined;
     const brandTerms = requestedBrandSlug ? (BRAND_TERMS[requestedBrandSlug] || [requestedBrandSlug]) : [];
     const normalizedBrandTerms = brandTerms.map(normalizeSearchText).filter(Boolean);
     const normalizedRequestedQuery = normalizeSearchText(requestedQuery);
@@ -197,7 +196,14 @@ export class FastKufarParser extends BaseParser {
         if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return false;
         const text = adSearchText(ad);
         if (normalizedBrandTerms.length > 0 && !normalizedBrandTerms.some(term => text.includes(term))) return false;
-        if (queryTerms.length > 0 && !queryTerms.every(term => text.includes(term))) return false;
+        const condition = normalizeSearchText(adCondition(ad));
+        if (requestedCondition === 'new' && !/(new|нов|новое|новая|новый)/.test(condition)) return false;
+        if (requestedCondition === 'used' && /(new|нов|новое|новая|новый)/.test(condition)) return false;
+        if (requestedSeller === 'company' && !ad.company_ad) return false;
+        if (requestedSeller === 'private' && ad.company_ad) return false;
+        const rawPrice = ad.price_byn != null ? Number(ad.price_byn) / 100 : ad.price_usd != null ? Number(ad.price_usd) / 100 : undefined;
+        if (requestedMinPrice != null && Number.isFinite(requestedMinPrice) && (rawPrice == null || rawPrice < requestedMinPrice)) return false;
+        if (requestedMaxPrice != null && Number.isFinite(requestedMaxPrice) && (rawPrice == null || rawPrice > requestedMaxPrice)) return false;
         return true;
       });
 
@@ -281,7 +287,14 @@ export class FastKufarParser extends BaseParser {
         if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return null;
         const text = adSearchText(ad);
         if (normalizedBrandTerms.length && !normalizedBrandTerms.some(term => text.includes(term))) return null;
-        if (queryTerms.length && !queryTerms.every(term => text.includes(term))) return null;
+        const condition = normalizeSearchText(adCondition(ad));
+        if (requestedCondition === 'new' && !/(new|нов|новое|новая|новый)/.test(condition)) return null;
+        if (requestedCondition === 'used' && /(new|нов|новое|новая|новый)/.test(condition)) return null;
+        if (requestedSeller === 'company' && !ad.company_ad) return null;
+        if (requestedSeller === 'private' && ad.company_ad) return null;
+        const rawPrice = ad.price_byn != null ? Number(ad.price_byn) / 100 : ad.price_usd != null ? Number(ad.price_usd) / 100 : undefined;
+        if (requestedMinPrice != null && Number.isFinite(requestedMinPrice) && (rawPrice == null || rawPrice < requestedMinPrice)) return null;
+        if (requestedMaxPrice != null && Number.isFinite(requestedMaxPrice) && (rawPrice == null || rawPrice > requestedMaxPrice)) return null;
         let price = 'Договорная';
         if (ad.price_byn != null) price = `${(Number(ad.price_byn) / 100).toFixed(2)} BYN`;
         else if (ad.price_usd != null) price = `${(Number(ad.price_usd) / 100).toFixed(2)} USD`;
