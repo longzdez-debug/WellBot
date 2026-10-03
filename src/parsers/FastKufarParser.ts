@@ -46,6 +46,38 @@ const API_ENDPOINTS = [
   'https://cre-api.kufar.by/ads-search/v1/engine/v1/search/rendered-paginated',
 ];
 
+const CITY_VARIANTS: Record<string, string[]> = {
+  minsk: ['минск','первомайский','московский','ленинский','заводской','октябрьский','фрунзенский','партизанский','советский','центральный'],
+  brest: ['брест'], baranovichi: ['барановичи'], pinsk: ['пинск'], kobrin: ['кобрин'], bereza: ['береза'],
+  vitebsk: ['витебск'], orsha: ['орша'], polotsk: ['полоцк'], novopolotsk: ['новополоцк'],
+  gomel: ['гомель'], zhlobin: ['жлобин'], mozyr: ['мозырь'], rechitsa: ['речица'], svetlogorsk: ['светлогорск'],
+  grodno: ['гродно'], lida: ['лида'], volkovysk: ['волковыск'], slonim: ['слоним'],
+  mogilev: ['могилев'], bobruisk: ['бобруйск'], borisov: ['борисов'], soligorsk: ['солигорск'],
+  molodechno: ['молодечно'], zhodino: ['жодино'], slutsk: ['слуцк'],
+};
+
+function structuredCityMatches(value: unknown, expected: string): boolean {
+  if (!value) return false;
+  const parts = String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('ru-RU')
+    .replace(/ё/g, 'е')
+    .split(/[,;|]/)
+    .map(part => part.trim().replace(/^(?:г|город)\s+/, ''))
+    .filter(Boolean);
+  return parts.some(part => part === expected);
+}
+
+function adCityMatches(ad: any, citySlug: string): boolean {
+  const variants = CITY_VARIANTS[citySlug] || [citySlug];
+  const values = [
+    ad?.ad_parameters?.find((p: any) => p?.p === 'area')?.vl,
+    ad?.ad_location,
+  ].filter(Boolean);
+  return variants.some(variant => values.some(value => structuredCityMatches(value, variant)));
+}
+
 function normalizeSearchText(value: unknown): string {
   return String(value ?? '')
     .toLocaleLowerCase('ru-RU')
@@ -82,8 +114,12 @@ export class FastKufarParser extends BaseParser {
     }
 
     let requestedBrandSlug = '';
+    let requestedCitySlug = '';
     for (const part of parts) {
       const normalizedPart = part.toLocaleLowerCase('ru-RU');
+      const cityCandidate = normalizedPart.match(/^r~(.+)$/i)?.[1] || '';
+      if (cityCandidate && CITY_VARIANTS[cityCandidate]) requestedCitySlug = cityCandidate;
+      if (CITY_VARIANTS[normalizedPart]) requestedCitySlug = normalizedPart;
       if (CATEGORY_MAP[normalizedPart]) {
         params.cat = CATEGORY_MAP[normalizedPart];
         continue;
@@ -157,6 +193,7 @@ export class FastKufarParser extends BaseParser {
       const rawAds = Array.isArray(response.data?.ads) ? response.data.ads : [];
       const ads = rawAds.filter((ad: any) => {
         if (!ad?.ad_id) return false;
+        if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return false;
         const text = adSearchText(ad);
         if (normalizedBrandTerms.length > 0 && !normalizedBrandTerms.some(term => text.includes(term))) return false;
         if (queryTerms.length > 0 && !queryTerms.every(term => text.includes(term))) return false;
