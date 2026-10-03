@@ -41,7 +41,7 @@ describe('ParserScheduler', () => {
     };
   }
 
-  function makeDb(linkList: Link[], existingIds: Set<string> = new Set()) {
+  function makeDb(linkList: Link[], existingIds: Set<string> = new Set(), notificationInsertCount?: number) {
     const ads = new Map<string, Ad>();
     const userSeen = new Set<string>();
     return {
@@ -76,7 +76,7 @@ describe('ParserScheduler', () => {
       createPriceDropRecord: jest.fn(),
       updateAdPrice: jest.fn(),
       enqueueNotification: jest.fn().mockResolvedValue(undefined),
-      enqueueNotifications: jest.fn().mockImplementation(async (jobs:any[]) => jobs.length),
+      enqueueNotifications: jest.fn().mockImplementation(async (jobs: Array<{ dedupeKey: string }>) => notificationInsertCount ?? jobs.length),
       claimNotificationJobs: jest.fn().mockResolvedValue([]),
       purgeNotificationOutbox: jest.fn().mockResolvedValue(0),
       getPendingNotificationStats: jest.fn().mockResolvedValue({ count: 0, oldestAgeMs: 0 }),
@@ -148,6 +148,19 @@ describe('ParserScheduler', () => {
     expect(metrics.scheduler.freshnessLagMs.oldest).toBe(0);
     expect(metrics.scheduler.adsPerMinute).toBeGreaterThanOrEqual(0);
     expect(metrics.scheduler.skippedTicks).toBe(0);
+  });
+
+  test('counts notification jobs suppressed by database dedupe', async () => {
+    const link = makeLink(1, new Date());
+    const ad: Ad = { external_id: 'dedupe-1', title: 'Dedupe', ad_url: 'https://kufar.by/dedupe-1' };
+    parser.parseUrl.mockResolvedValue([ad]);
+    const db = makeDb([link], new Set(), 0);
+    const scheduler = new ParserScheduler(db as never, bot as never);
+
+    await scheduler.runParsing();
+    const metrics = await scheduler.getMetrics();
+
+    expect(metrics.duplicateNotifications).toBe(1);
   });
 
   test('deduplicates the same new ad across multiple saved searches for one user', async () => {
