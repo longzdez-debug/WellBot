@@ -10,3 +10,21 @@
 
 /* Native monitor catalog */
 .catalog-modal select,.catalog-modal input{width:100%;box-sizing:border-box;border:1px solid var(--tg-hint,#3a3f46);background:rgba(255,255,255,.04);color:var(--tg-text,#fff);border-radius:14px;padding:12px 14px;font:inherit;outline:none}.catalog-modal select:focus,.catalog-modal input:focus{border-color:rgba(255,255,255,.35)}.catalog-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.catalog-modal .muted{opacity:.5;font-weight:400;font-size:.85em}
+/* WellBOT UI refresh: clean product dashboard, not a neon hunting theme. */
+:root{--bg:#0b0e12;--panel:#12171d;--panel2:#171d24;--line:#27313a;--text:#f5f7f8;--muted:#8b969f;--lime:#b7ff45;--lime2:#d4ff8a;--blue:#70b7ff;--red:#ff6670}
+body{background:linear-gradient(180deg,#10151a 0,#0b0e12 320px)!important}
+.app-shell{background:#0b0e12!important}
+.topbar{height:64px;padding:14px 18px;background:rgba(11,14,18,.94);border-bottom:1px solid #202830}
+.brand-mark{border:0;border-radius:8px;background:#b7ff45;color:#0b1005;box-shadow:none;font-size:19px}
+.brand strong{font-size:18px;letter-spacing:.02em}.brand small{letter-spacing:.12em}
+.live-pill{border-color:#2d3a2b;background:#121b11;color:#b7ff45}
+.hero{padding:30px 20px 20px}.hero:after{display:none}.eyebrow{color:#8e9aa4}.hero h1{font-size:42px;letter-spacing:-.06em}.hero h1 em{color:#b7ff45}.hero p{max-width:410px}
+.primary{border-radius:10px;background:#b7ff45;box-shadow:none}.primary:hover{background:#d4ff8a}
+.stats article{background:#11161c;border-color:#222b33}.stats b{color:#d4ff8a}
+.radar-card{background:#11161c;border-color:#242d35}.radar{height:170px;background:#0d1217}.sweep{animation-duration:4.5s}.target{animation-duration:2.2s}
+.section-head h2{font-size:17px}.chip{background:#11161c;border-color:#27313a}.chip.active{background:#b7ff45;color:#0a1005;border-color:#b7ff45}
+.monitor{background:#11161c;border-color:#252e36;padding:12px}.monitor:hover{border-color:#39454f}.monitor-icon{background:#1a2229}.monitor-status.on{color:#b7ff45}
+.catalog-modal{background:#12171d;border-color:#2b353e}.modal-card input,.modal-card select{background:#0b0f13;border-color:#303b44}.modal-primary{background:#b7ff45;color:#091005}
+.wellbot-modal .modal-kicker{color:#8e9aa4}.wellbot-modal .modal-label{color:#9ca7af}
+#wellbot-channel-section{margin:0 14px 18px}.wellbot-channel-card{padding:18px;border:1px solid #27313a;border-radius:16px;background:#11161c}.wellbot-channel-kicker{font-size:9px;letter-spacing:.14em;font-weight:800;color:#8b969f}.wellbot-channel-title{margin:5px 0 7px;font:700 20px/1.15 'Space Grotesk',sans-serif}.wellbot-channel-copy{margin:0 0 14px;color:#9aa5ad;font-size:12px;line-height:1.45}.wellbot-channel-status{padding:12px 13px;border-radius:12px;background:#0b0f13;margin-bottom:12px}.wellbot-channel-status strong{display:block}.wellbot-channel-status small{display:block;margin-top:4px;color:#7f8a93}.wellbot-channel-row{display:flex;gap:8px}.wellbot-channel-input{min-width:0;flex:1;padding:12px;border:1px solid #303b44;border-radius:10px;background:#0b0f13;color:inherit}.wellbot-channel-button{border:0;border-radius:10px;padding:12px 14px;font-weight:800;background:#b7ff45;color:#091005}.wellbot-channel-button.secondary{background:#202830;color:#d7dde1}.wellbot-channel-error{margin-top:9px;color:#ff7f87;font-size:12px;min-height:16px}.wellbot-channel-help{margin-top:12px;font-size:11px;line-height:1.5;color:#74808a}
+.bottom-nav{background:rgba(11,14,18,.97);border-top:1px solid #202830}.nav-item.active{color:#b7ff45}
