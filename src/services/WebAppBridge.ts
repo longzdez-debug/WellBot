@@ -22,7 +22,7 @@ export function installWebAppBridge(handler: BotHandler): void {
     return;
   }
 
-  const webAppUrl = process.env.HUNT_WEBAPP_URL?.trim();
+  const webAppUrl = (process.env.WELLBOT_WEBAPP_URL || process.env.HUNT_WEBAPP_URL)?.trim();
   const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
   if (!webAppUrl || !botToken) {
     logger.info('WellBOT Mini App configuration is incomplete; menu button is disabled');
