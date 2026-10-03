@@ -74,6 +74,13 @@ CREATE TABLE IF NOT EXISTS user_ad_seen (
   PRIMARY KEY (user_id, external_id)
 );
 
+INSERT INTO user_ad_seen (user_id, external_id, first_link_id)
+SELECT l.user_id, a.external_id, MIN(a.link_id)
+FROM ads a
+JOIN links l ON l.id = a.link_id
+GROUP BY l.user_id, a.external_id
+ON CONFLICT (user_id, external_id) DO NOTHING;
+
 CREATE INDEX IF NOT EXISTS idx_user_ad_seen_user_first_seen
   ON user_ad_seen(user_id, first_seen_at DESC);
 
