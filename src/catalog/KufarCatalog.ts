@@ -9,7 +9,6 @@ const child=(id:string,title:string,slug:string):CatalogNode=>({id,title,slug});
 /* WellBOT-owned UX taxonomy. Labels follow Kufar's current top-level categories. */
 export const KUFAR_CATALOG:CatalogNode[]=[
  node('real_estate','Недвижимость','nedvizhimost',[child('1010','Квартиры','kvartiru'),child('1020','Дома и коттеджи','dom'),child('1040','Комнаты','komnatu'),child('1080','Земельные участки','uchastok'),child('1050','Коммерческая недвижимость','kommercheskaya'),child('1030','Гаражи','garazh')]),
- node('travel','Путешествия','puteshestviya'),
  node('auto','Авто и запчасти','avto-i-zapchasti',[child('2010','Легковые автомобили','avtomobili'),child('2020','Прицепы','pricepy'),child('2030','Мототехника','mototekhnika'),child('2040','Запчасти, расходники','zapchasti'),child('2045','Аксессуары','aksessuary'),child('2050','Водный транспорт','vodnyj-transport'),child('2060','Грузовики и автобусы','gruzoviki-i-avtobusy'),child('2070','Инструмент и оборудование','instrument-oborudovanie'),child('2075','Шины и диски','shiny-diski'),child('2080','Сельхозтехника','selhoztekhnika'),child('2090','Спецтехника','spectekhnika'),child('2100','Услуги для авто','uslugi-dlya-avto'),child('2110','Автокресла и бустеры','avtokresla')]),
  node('services','Услуги','uslugi'),
  node('home_appliances','Бытовая техника','bytovaya-tehnika',[child('3040','Бытовая техника','bytovaya-tehnika'),child('14050','Стиральные машины','stiralnye-mashiny')]),
