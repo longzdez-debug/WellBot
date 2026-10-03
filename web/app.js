@@ -1,6 +1,6 @@
 const WELLBOT_BUILD = '2026.10.04.1';
 const tg = window.Telegram?.WebApp;
-const state = { data: null, filter: 'all', loading: false, submitting: false, lastLoadedAt: 0 };
+const state = { data: null, metrics: null, filter: 'all', loading: false, submitting: false, lastLoadedAt: 0 };
 
 function applyTelegramTheme() {
   if (!tg) return;
@@ -53,7 +53,7 @@ function haptic(type = 'light') { try { tg?.HapticFeedback?.impactOccurred(type)
 function setLiveStatus(text, active = true) { const pill = document.querySelector('.live-pill'); if (!pill) return; pill.innerHTML = `<i></i> ${esc(text)}`; pill.classList.toggle('stale', !active); }
 function updateFreshness() { if (!state.lastLoadedAt) return; const seconds = Math.max(0, Math.round((Date.now() - state.lastLoadedAt) / 1000)); setLiveStatus(seconds < 20 ? 'LIVE' : `SYNC ${seconds}s`, seconds < 90); }
 
-function renderStats(stats) {
+function renderPerformance(metrics) { const scheduler=metrics?.scheduler||{}; const notifications=metrics?.notifications||{}; const p50=document.querySelector('#metric-p50'); const p95=document.querySelector('#metric-p95'); const failures=document.querySelector('#metric-failures'); const sent=document.querySelector('#metric-sent'); if(p50)p50.textContent=`${scheduler.cycleDurationMs?.p50??0}ms`; if(p95)p95.textContent=`${scheduler.cycleDurationMs?.p95??0}ms`; if(failures)failures.textContent=String(scheduler.failures??0); if(sent)sent.textContent=String(notifications.sent??0); const health=document.querySelector('#performance-health'); if(health){const bad=(scheduler.failures??0)>0; health.textContent=bad?'DEGRADED':'HEALTHY'; health.classList.toggle('bad',bad);}}\n\nfunction renderStats(stats) {
   document.querySelector('#stat-active').textContent = stats?.activeLinks ?? 0;
   document.querySelector('#stat-new').textContent = stats?.adsToday ?? 0;
   document.querySelector('#stat-drops').textContent = stats?.priceDropsToday ?? 0;
@@ -156,12 +156,12 @@ async function load(force = false) {
   if (!state.data) renderSkeleton();
   setLiveStatus('SYNC', true);
   try {
-    const [data, catalog] = await Promise.all([api('/api/bootstrap'), state.catalog ? Promise.resolve(state.catalog) : api('/api/catalog')]);
-    state.catalog = catalog;
+    const [data, catalog, metrics] = await Promise.all([api('/api/bootstrap'), state.catalog ? Promise.resolve(state.catalog) : api('/api/catalog'), api('/api/metrics')]);
+    state.catalog = catalog; state.metrics = metrics;
     const hadData = !!state.data;
     const previousAds = new Set((state.data?.ads || []).map(a => String(a.id ?? a.ad_id ?? a.ad_url)));
     state.data = data; state.lastLoadedAt = Date.now();
-    renderStats(data.stats); renderHotFind(); renderFeed(); renderMonitors(); renderDrops();
+    renderStats(data.stats); renderPerformance(metrics); renderHotFind(); renderFeed(); renderMonitors(); renderDrops();
     const newCount = (data.ads || []).filter(a => !previousAds.has(String(a.id ?? a.ad_id ?? a.ad_url))).length;
     setLiveStatus('LIVE', true);
     if (hadData && newCount > 0) {
