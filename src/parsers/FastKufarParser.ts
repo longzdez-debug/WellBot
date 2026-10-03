@@ -150,10 +150,6 @@ export class FastKufarParser extends BaseParser {
     if (!requestedQuery && requestedBrandSlug) params.query = BRAND_MAP[requestedBrandSlug];
 
     const effectiveQuery = String(params.query || '').trim();
-    const queryTerms = normalizeSearchText(effectiveQuery)
-      .split(' ')
-      .filter(term => term.length >= 2);
-
     const gtsy = parsed.searchParams.get('gtsy');
     if (gtsy) {
       if (gtsy.includes('province-minsk_gorod')) params.rgn = '7';
