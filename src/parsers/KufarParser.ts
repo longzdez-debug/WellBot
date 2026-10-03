@@ -115,8 +115,36 @@ function normalizeText(value: unknown): string {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/ё/g, 'е')
+    .replace(/[.,]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * Extract a city from a structured Kufar location value.
+ *
+ * Important: do not search for the city as a substring in the whole address.
+ * For example, "Брестский район" contains "Брест", but it is not the city
+ * "Брест". Likewise, Minsk district names must not be treated as the city.
+ */
+function normalizeCityPart(value: unknown): string {
+  let text = normalizeText(value);
+  text = text.replace(/^(?:г|город)\s+/i, '');
+  return text.trim();
+}
+
+function cityMatchesStructuredValue(value: unknown, expectedCity: string): boolean {
+  const expected = normalizeText(expectedCity);
+  if (!value || !expected) return false;
+
+  // Kufar may return values such as "Минск, Центральный район".
+  // The first component is the city; later components are district/address data.
+  const parts = String(value)
+    .split(/[,;|]/)
+    .map(normalizeCityPart)
+    .filter(Boolean);
+
+  return parts.some(part => part === expected);
 }
 
 function getNextCursor(data: any): string | null {
@@ -428,20 +456,26 @@ export class KufarParser extends BaseParser {
       // Не используем title/description как основной источник: "доставка в Минск"
       // не означает, что объявление находится в Минске.
       if (citySlugForFilter) {
+        const expectedCity = normalizeText(citySlugForFilter);
         const variants = (CITY_VARIANTS[citySlugForFilter] || [citySlugForFilter]).map(normalizeText);
 
         processedAds = processedAds.filter((ad: any) => {
-          const structured = [ad._rawLocation, ad._rawAdLocation, ad._rawAddress]
-            .filter(Boolean)
-            .join(' ');
+          // Only use structured location fields. Never infer the city from
+          // title/description/address text such as "доставка в Минск".
+          // Address is intentionally excluded: it can contain a region/district
+          // name without being the listing's city.
+          const locationSources = [ad._rawLocation, ad._rawAdLocation].filter(Boolean);
 
-          if (structured) {
-            if (citySlugForFilter === 'minsk' && structured.includes('минскии раион')) return false;
-            return variants.some(variant => structured.includes(variant));
-          }
+          return locationSources.some((value: string) => {
+            if (cityMatchesStructuredValue(value, expectedCity)) return true;
 
-          const fallback = normalizeText(ad.title + ' ' + (ad.description || ''));
-          return variants.some(variant => fallback.includes(variant));
+            // Some Kufar responses use a known Cyrillic city name instead of
+            // the Latin URL slug. Match only a complete structured component,
+            // never an arbitrary substring.
+            return variants.some((variant: string) =>
+              cityMatchesStructuredValue(value, variant)
+            );
+          });
         });
 
         logger.info(`Filtered ads by city: ${citySlugForFilter}`, {
