@@ -51,7 +51,7 @@ export class ParserScheduler {
   private getMarketSignal(price:string|null|undefined,history:string[]):Pick<Ad,'market_status'|'market_percent'|'market_median'>{
     const parse=(value:string|null|undefined):{amount:number;currency:string}|null=>{
       if(!value)return null;
-      const text=value.replace(/\\s+/g,' ').trim().toUpperCase();
+      const text=value.replace(/\s+/g,' ').trim().toUpperCase();
       const match=text.match(/([0-9]+(?:[.,][0-9]+)?)\\s*(BYN|USD|EUR|RUB|UAH|PLN)\\b/);
       if(!match)return null;
       const amount=Number(match[1].replace(',','.'));
