@@ -63,6 +63,20 @@ BEGIN
 END
 $$;
 
+-- Per-user global ad identity. An ad can appear in several monitors;
+-- this table makes "new listing" notification ownership atomic and prevents
+-- duplicate Telegram alerts across overlapping searches.
+CREATE TABLE IF NOT EXISTS user_ad_seen (
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  external_id VARCHAR(255) NOT NULL,
+  first_link_id INTEGER REFERENCES links(id) ON DELETE SET NULL,
+  first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_ad_seen_user_first_seen
+  ON user_ad_seen(user_id, first_seen_at DESC);
+
 -- Price history tracking.
 CREATE TABLE IF NOT EXISTS price_history (
   id SERIAL PRIMARY KEY,
