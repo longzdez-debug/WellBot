@@ -40,7 +40,10 @@ async function main() {
 
   scheduler.start();
 
+  let shuttingDown = false;
   const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     logger.info('Shutting down...');
     await scheduler.stop();
     bot.stop();
