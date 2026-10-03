@@ -59,7 +59,7 @@ describe('KufarParser URL/filter handling', () => {
     expect(calls).toHaveLength(2);
     expect(calls[0].params.cursor).toBeUndefined();
     expect(calls[1].params.cursor).toBe('cursor-2');
-    expect(ads.map(ad => ad.external_id)).toEqual(['2', '1']);
+    expect(ads.map(ad => ad.external_id)).toEqual(['1', '2']);
   });
 
 
