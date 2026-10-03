@@ -1,4 +1,4 @@
-const HUNT_BUILD = '2026.09.13.7';
+const HUNT_BUILD = '2026.10.03.1';
 const tg = window.Telegram?.WebApp;
 const state = { data: null, filter: 'all', loading: false, submitting: false, lastLoadedAt: 0 };
 
@@ -67,7 +67,8 @@ function listingMarkup(a, compact = false) {
   const title = esc(a.title || 'Без названия');
   const location = esc([a.location, a.address].filter(Boolean).join(' · ')) || 'Беларусь';
   const platform = a.link_platform || '';
-  return `<article class="listing ${compact ? 'listing-compact' : ''}" data-url="${esc(a.ad_url)}" tabindex="0" role="link" aria-label="${title}"><img src="${image}" alt="" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'"><div class="listing-body"><div class="listing-top"><span class="tag ${platform === 'onliner' ? 'target' : ''}">${platformLabel(platform)}</span><time>${fmtDate(a.published_at || a.created_at)}</time></div><h3>${title}</h3><p>${location}</p><div class="listing-bottom"><span class="price">${price(a.price)}</span><span class="open-hint">Открыть ↗</span></div></div></article>`;
+  const market = a.market_status === 'below_market' ? `<span class="market-badge below">↓ НИЖЕ ${a.market_percent != null ? Math.abs(Number(a.market_percent)).toFixed(1) + '%' : ''}</span>` : a.market_status === 'above_market' ? `<span class="market-badge above">↑ ВЫШЕ ${a.market_percent != null ? Number(a.market_percent).toFixed(1) + '%' : ''}</span>` : a.market_status === 'market' ? `<span class="market-badge fair">≈ РЫНОК</span>` : '';
+  return `<article class="listing ${compact ? 'listing-compact' : ''}" data-url="${esc(a.ad_url)}" tabindex="0" role="link" aria-label="${title}"><img src="${image}" alt="" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'"><div class="listing-body"><div class="listing-top"><span class="tag ${platform === 'onliner' ? 'target' : ''}">${platformLabel(platform)}</span><time>${fmtDate(a.published_at || a.created_at)}</time></div><h3>${title}</h3><p>${location}</p><div class="listing-bottom"><span class="price">${price(a.price)}</span><span>${market}</span></div></div></article>`;
 }
 
 function bindListingLinks(root) {
@@ -207,5 +208,5 @@ window.addEventListener('scroll', () => { clearTimeout(scrollTimer); scrollTimer
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(true); });
 window.addEventListener('online', () => load(true));
 window.addEventListener('offline', () => setLiveStatus('OFFLINE', false));
-setInterval(() => { if (!document.hidden) load(); updateFreshness(); }, 10000);
+setInterval(() => { if (!document.hidden) load(); updateFreshness(); }, 2000);
 load();
