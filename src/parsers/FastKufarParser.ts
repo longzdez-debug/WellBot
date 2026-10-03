@@ -41,7 +41,6 @@ const REGION_MAP: Record<string, string> = {
   borisov: '5', soligorsk: '5', molodechno: '5', zhodino: '5', slutsk: '5', bobruisk: '4',
 };
 
-const ALLOWED_SEARCH_PARAMS = new Set(['query', 'prc', 'rms', 'gtsy']);
 const API_ENDPOINTS = [
   'https://api.kufar.by/search-api/v2/search/rendered-paginated',
   'https://cre-api.kufar.by/ads-search/v1/engine/v1/search/rendered-paginated',
@@ -79,7 +78,7 @@ export class FastKufarParser extends BaseParser {
     const params: Record<string, string | number> = { size: 100, sort: 'lst.d' };
 
     for (const [key, value] of parsed.searchParams.entries()) {
-      if (ALLOWED_SEARCH_PARAMS.has(key) && value) params[key] = value;
+      if (key !== 'page' && key !== 'cursor' && value) params[key] = value;
     }
 
     let requestedBrandSlug = '';
@@ -140,72 +139,141 @@ export class FastKufarParser extends BaseParser {
     if (parts.includes('snyat')) params.typ = 'let';
     if (parts.includes('kupit')) params.typ = 'sell';
 
-    let lastError: any = null;
-    for (let i = 0; i < API_ENDPOINTS.length; i++) {
-      const endpoint = API_ENDPOINTS[i];
-      try {
-        const requestStartedAt = Date.now();
-        const response = await this.axiosInstance.get(endpoint, {
-          params,
-          timeout: 6000,
-          headers: {
-            Host: new URL(endpoint).host,
-            'User-Agent': this.getRandomUserAgent(),
-            Accept: 'application/json',
-            Referer: 'https://www.kufar.by/',
-          },
-        });
+    const requestApi = async (endpoint: string): Promise<Ad[]> => {
+      const requestStartedAt = Date.now();
+      const response = await this.axiosInstance.get(endpoint, {
+        params,
+        timeout: 3500,
+        headers: {
+          Host: new URL(endpoint).host,
+          'User-Agent': this.getRandomUserAgent(),
+          Accept: 'application/json, text/plain, */*',
+          'Accept-Language': 'ru-RU,ru;q=0.9',
+          Referer: 'https://www.kufar.by/',
+          Origin: 'https://www.kufar.by',
+        },
+      });
 
-        const rawAds = Array.isArray(response.data?.ads) ? response.data.ads : [];
-        const ads = rawAds.filter((ad: any) => {
-          if (!ad?.ad_id) return false;
-          const text = adSearchText(ad);
-          if (normalizedBrandTerms.length > 0 && !normalizedBrandTerms.some(term => text.includes(term))) return false;
-          if (queryTerms.length > 0 && !queryTerms.every(term => text.includes(term))) return false;
-          return true;
-        });
+      const rawAds = Array.isArray(response.data?.ads) ? response.data.ads : [];
+      const ads = rawAds.filter((ad: any) => {
+        if (!ad?.ad_id) return false;
+        const text = adSearchText(ad);
+        if (normalizedBrandTerms.length > 0 && !normalizedBrandTerms.some(term => text.includes(term))) return false;
+        if (queryTerms.length > 0 && !queryTerms.every(term => text.includes(term))) return false;
+        return true;
+      });
 
-        const timestamps = rawAds
-          .map((ad: any) => Number(ad?.list_time))
-          .filter((value: number) => Number.isFinite(value) && value > 0);
-        logger.debug('Kufar hot-path page received', {
-          count: ads.length,
-          rawCount: rawAds.length,
-          requestedBrand: requestedBrandSlug || undefined,
-          requestedQuery: requestedQuery || undefined,
-          upstreamQuery: params.query || undefined,
-          newestPublishedAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : undefined,
-          oldestPublishedAt: timestamps.length ? new Date(Math.min(...timestamps)).toISOString() : undefined,
-          requestMs: Date.now() - requestStartedAt,
-        });
+      logger.debug('Kufar hot-path API page received', {
+        endpoint,
+        count: ads.length,
+        rawCount: rawAds.length,
+        requestMs: Date.now() - requestStartedAt,
+      });
 
-        return ads.map((ad: any) => {
-          let price = 'Договорная';
-          if (ad.price_byn != null) price = `${(Number(ad.price_byn) / 100).toFixed(2)} BYN`;
-          else if (ad.price_usd != null) price = `${(Number(ad.price_usd) / 100).toFixed(2)} USD`;
-          const image = ad.images?.[0];
-          const location = ad.ad_parameters?.find((p: any) => p?.p === 'area')?.vl;
-          const address = ad.account_parameters?.find((p: any) => p?.p === 'address')?.v;
-          return {
-            external_id: String(ad.ad_id),
-            title: ad.subject || 'Без названия',
-            description: ad.description,
-            price,
-            image_url: image?.path ? `https://rms4.kufar.by/v1/gallery/${image.path}` : image?.url,
-            ad_url: ad.ad_link || `https://www.kufar.by/ad/${ad.ad_id}`,
-            location,
-            address,
-            published_at: ad.list_time ? new Date(ad.list_time) : undefined,
-            updated_at: ad.list_time_up ? new Date(ad.list_time_up) : undefined,
-          } as Ad;
-        });
-      } catch (error: any) {
-        lastError = error;
-        const status = error?.response?.status;
-        logger.warn('Kufar API request failed', { endpoint, status, params, error: error?.message });
-        if (status !== 422 || i === API_ENDPOINTS.length - 1) throw error;
+      return ads.map((ad: any) => {
+        let price = 'Договорная';
+        if (ad.price_byn != null) price = `${(Number(ad.price_byn) / 100).toFixed(2)} BYN`;
+        else if (ad.price_usd != null) price = `${(Number(ad.price_usd) / 100).toFixed(2)} USD`;
+        const image = ad.images?.[0];
+        const location = ad.ad_parameters?.find((p: any) => p?.p === 'area')?.vl;
+        const address = ad.account_parameters?.find((p: any) => p?.p === 'address')?.v;
+        return {
+          external_id: String(ad.ad_id),
+          title: ad.subject || 'Без названия',
+          description: ad.description,
+          price,
+          image_url: image?.path ? `https://rms4.kufar.by/v1/gallery/${image.path}` : image?.url,
+          ad_url: ad.ad_link || `https://www.kufar.by/ad/${ad.ad_id}`,
+          location,
+          address,
+          published_at: ad.list_time ? new Date(ad.list_time) : undefined,
+          updated_at: ad.list_time_up ? new Date(ad.list_time_up) : undefined,
+        } as Ad;
+      });
+    };
+
+    const requestHtml = async (): Promise<Ad[]> => {
+      const started = Date.now();
+      const response = await this.axiosInstance.get(url, {
+        timeout: 4500,
+        headers: {
+          'User-Agent': this.getRandomUserAgent(),
+          Accept: 'text/html,application/xhtml+xml',
+          'Accept-Language': 'ru-RU,ru;q=0.9',
+          'Cache-Control': 'no-cache',
+        },
+      });
+      const html = String(response.data || '');
+      const match = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\\s\\S]*?)<\\/script>/i);
+      if (!match?.[1]) throw new Error('Kufar page has no __NEXT_DATA__');
+
+      const root = JSON.parse(match[1]);
+      const found: any[] = [];
+      const seen = new Set<any>();
+      const visit = (value: any, depth = 0): void => {
+        if (!value || depth > 8 || found.length >= 100 || seen.has(value)) return;
+        if (typeof value !== 'object') return;
+        seen.add(value);
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            if (item?.ad_id || item?.id && (item?.subject || item?.ad_link || item?.price_byn != null)) {
+              found.push(item);
+            } else visit(item, depth + 1);
+          }
+          return;
+        }
+        for (const child of Object.values(value)) visit(child, depth + 1);
+      };
+      visit(root);
+
+      const unique = new Map<string, any>();
+      for (const ad of found) {
+        const id = String(ad.ad_id ?? ad.id ?? '');
+        if (id) unique.set(id, ad);
       }
+
+      logger.debug('Kufar hot-path HTML page received', {
+        count: unique.size,
+        requestMs: Date.now() - started,
+      });
+
+      return [...unique.values()].map((ad: any) => {
+        const text = adSearchText(ad);
+        if (normalizedBrandTerms.length && !normalizedBrandTerms.some(term => text.includes(term))) return null;
+        if (queryTerms.length && !queryTerms.every(term => text.includes(term))) return null;
+        let price = 'Договорная';
+        if (ad.price_byn != null) price = `${(Number(ad.price_byn) / 100).toFixed(2)} BYN`;
+        else if (ad.price_usd != null) price = `${(Number(ad.price_usd) / 100).toFixed(2)} USD`;
+        const image = ad.images?.[0];
+        return {
+          external_id: String(ad.ad_id ?? ad.id),
+          title: ad.subject || ad.title || 'Без названия',
+          description: ad.description,
+          price,
+          image_url: image?.path ? `https://rms4.kufar.by/v1/gallery/${image.path}` : image?.url,
+          ad_url: ad.ad_link || ad.url || `https://www.kufar.by/ad/${ad.ad_id ?? ad.id}`,
+          location: ad.ad_parameters?.find((p: any) => p?.p === 'area')?.vl,
+          address: ad.account_parameters?.find((p: any) => p?.p === 'address')?.v,
+          published_at: ad.list_time ? new Date(ad.list_time) : undefined,
+          updated_at: ad.list_time_up ? new Date(ad.list_time_up) : undefined,
+        } as Ad;
+      }).filter(Boolean) as Ad[];
+    };
+
+    try {
+      // Race the two known search backends. This reduces tail latency when one
+      // backend is degraded while keeping the hot path independent of either one.
+      const apiResults = await Promise.any(API_ENDPOINTS.map(requestApi));
+      if (apiResults.length > 0) return apiResults;
+      // Empty is a valid response; do not replace it with a slower HTML request.
+      return apiResults;
+    } catch (error: any) {
+      logger.warn('Kufar API hot-path failed; trying rendered page', {
+        url,
+        errors: Array.isArray(error?.errors) ? error.errors.map((e: any) => e?.message).slice(0, 2) : [error?.message],
+      });
     }
-    throw lastError || new Error('Kufar API request failed');
+
+    return await requestHtml();
   }
 }
