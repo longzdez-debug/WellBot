@@ -142,7 +142,13 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           const url = buildKufarSearchUrl(config);
           const existing = links.find(link => link.url === url);
           if (existing) {
-            if (!existing.is_active) { await db.setLinkActive(existing.id, user.id, true); json(res, 200, { link: { ...existing, is_active: true }, reactivated: true }); return; }
+            if (!existing.is_active) {
+              const activeLinks = links.filter(link => link.is_active);
+              if (activeLinks.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} активных поисков.` }); return; }
+              const reactivated = await db.setLinkActive(existing.id, user.id, true);
+              if (!reactivated) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} активных поисков.` }); return; }
+              json(res, 200, { link: { ...existing, is_active: true }, reactivated: true }); return;
+            }
             json(res, 409, { error: 'duplicate', message: 'Такой поиск уже добавлен.' }); return;
           }
           const activeLinks = links.filter(link => link.is_active); if (activeLinks.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} активных поисков.` }); return; }
