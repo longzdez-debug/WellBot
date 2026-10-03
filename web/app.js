@@ -1,4 +1,4 @@
-const HUNT_BUILD = '2026.10.03.1';
+const WELLBOT_BUILD = '2026.10.03.2';
 const tg = window.Telegram?.WebApp;
 const state = { data: null, filter: 'all', loading: false, submitting: false, lastLoadedAt: 0 };
 
@@ -108,7 +108,7 @@ function renderMonitors() {
   const links = state.data?.links || [];
   const counts = new Map((state.data?.statsByLink || []).map(x => [Number(x.linkId), Number(x.count)]));
   const root = document.querySelector('#monitors');
-  if (!links.length) { root.innerHTML = '<div class="empty"><strong>Первый радар ждёт.</strong><br>Добавь ссылку на поиск и WellBOT начнёт охоту.</div>'; return; }
+  if (!links.length) { root.innerHTML = '<div class="empty"><strong>Первый радар ждёт.</strong><br>Выбери категорию и фильтры — WellBOT начнёт охоту.</div>'; return; }
   root.innerHTML = links.map(l => `<div class="monitor"><span class="monitor-icon">${platformIcon(l.platform)}</span><div><strong>${platformLabel(l.platform)} <span class="monitor-status ${l.is_active ? 'on' : ''}">${l.is_active ? 'LIVE' : 'PAUSED'}</span></strong><small>${esc(l.url)}</small></div><span class="count">${counts.get(l.id) || 0}</span><button class="switch ${l.is_active ? 'on' : ''}" data-toggle="${l.id}" aria-label="Переключить" aria-pressed="${!!l.is_active}"></button><button class="delete-link" data-delete="${l.id}" aria-label="Удалить">×</button></div>`).join('');
   root.querySelectorAll('[data-toggle]').forEach(btn => btn.addEventListener('click', async () => {
     const id = Number(btn.dataset.toggle); const link = links.find(x => x.id === id); if (!link) return;
@@ -156,12 +156,12 @@ async function load(force = false) {
       const badge = document.querySelector('#radar-count');
       badge?.classList.add('pulse-value'); setTimeout(() => badge?.classList.remove('pulse-value'), 900);
     }
-    console.info('[WellBOT]', HUNT_BUILD, 'bootstrap ok', { links: data.links?.length || 0, ads: data.ads?.length || 0, newCount });
+    console.info('[WellBOT]', WELLBOT_BUILD, 'bootstrap ok', { links: data.links?.length || 0, ads: data.ads?.length || 0, newCount });
   } catch (e) {
-    console.error('[WellBOT]', HUNT_BUILD, 'bootstrap failed', e);
+    console.error('[WellBOT]', WELLBOT_BUILD, 'bootstrap failed', e);
     setLiveStatus('OFFLINE', false);
     if (!state.data) {
-      document.querySelector('#feed').innerHTML = `<div class="empty error"><strong>WellBOT ${HUNT_BUILD}</strong><br>${esc(e.message)}<br><button class="link-btn" data-action="refresh">Повторить</button></div>`;
+      document.querySelector('#feed').innerHTML = `<div class="empty error"><strong>WellBOT ${WELLBOT_BUILD}</strong><br>${esc(e.message)}<br><button class="link-btn" data-action="refresh">Повторить</button></div>`;
       document.querySelector('#monitors').innerHTML = `<div class="empty error">${esc(e.message)}</div>`;
       document.querySelector('#drops').innerHTML = '<div class="empty">Данные временно недоступны.</div>';
       document.querySelector('#hot-find').hidden = true;
@@ -177,25 +177,62 @@ async function load(force = false) {
 function showError(message) { if (tg?.showAlert) tg.showAlert(message); else alert(message); }
 function showSuccess(message) { if (tg?.showPopup) tg.showPopup({ title: 'WellBOT', message, buttons: [{ type: 'ok' }] }); else alert(message); }
 
-function showMonitorForm() {
+async function showMonitorForm() {
   if (state.submitting) return;
   document.querySelector('#wellbot-monitor-modal')?.remove();
-  const modal = document.createElement('div'); modal.id = 'wellbot-monitor-modal'; modal.className = 'wellbot-modal';
-  modal.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="wellbot-modal-title"><button id="wellbot-monitor-x" class="modal-close" type="button" aria-label="Закрыть">×</button><div class="modal-kicker">NEW MONITOR</div><h2 id="wellbot-modal-title">Куда ставим радар?</h2><p>Вставь ссылку на поиск Kufar, Onliner или av.by. WellBOT добавит монитор напрямую — без закрытия Mini App.</p><label class="modal-label" for="wellbot-monitor-url">Ссылка на поиск</label><input id="wellbot-monitor-url" type="url" inputmode="url" autocomplete="off" placeholder="https://www.kufar.by/l/..." maxlength="4096"><div id="wellbot-monitor-error" class="modal-error" role="alert"></div><div class="modal-actions"><button id="wellbot-monitor-cancel" class="modal-secondary" type="button">Отмена</button><button id="wellbot-monitor-submit" class="modal-primary" type="button">Запустить радар <span>→</span></button></div></div>`;
+  state.catalog = state.catalog || null;
+  if (!state.catalog) {
+    try { state.catalog = await api('/api/catalog'); }
+    catch (e) { showError(e.message); return; }
+  }
+  const categories = state.catalog.categories || [];
+  const modal = document.createElement('div'); modal.id='wellbot-monitor-modal'; modal.className='wellbot-modal';
+  modal.innerHTML = `<div class="modal-card catalog-modal" role="dialog" aria-modal="true">
+    <button class="modal-close" id="wellbot-monitor-x" type="button">×</button>
+    <div class="modal-kicker">NEW RADAR</div>
+    <h2>Создать монитор</h2>
+    <p>Выберите категорию и фильтры. Ссылки Kufar больше не нужны.</p>
+    <label class="modal-label">Категория</label>
+    <select id="catalog-category"><option value="">Выберите категорию</option>${categories.map(c=>`<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('')}</select>
+    <label class="modal-label" id="subcategory-label" hidden>Подкатегория</label>
+    <select id="catalog-subcategory" hidden><option value="">Все в категории</option></select>
+    <label class="modal-label">Город</label>
+    <select id="catalog-city"><option value="">Вся Беларусь</option><option value="minsk">Минск</option><option value="brest">Брест</option><option value="vitebsk">Витебск</option><option value="gomel">Гомель</option><option value="grodno">Гродно</option><option value="mogilev">Могилёв</option></select>
+    <div class="catalog-grid">
+      <div><label class="modal-label">Цена от</label><input id="catalog-min" type="number" min="0" placeholder="0"></div>
+      <div><label class="modal-label">Цена до</label><input id="catalog-max" type="number" min="0" placeholder="Без лимита"></div>
+    </div>
+    <label class="modal-label">Ключевые слова <span class="muted">необязательно</span></label>
+    <input id="catalog-query" type="text" maxlength="120" placeholder="Например: iPhone 15 Pro">
+    <label class="modal-label">Состояние</label>
+    <select id="catalog-condition"><option value="">Любое</option><option value="new">Новое</option><option value="used">Б/у</option></select>
+    <div id="wellbot-monitor-error" class="modal-error" role="alert"></div>
+    <div class="modal-actions"><button id="wellbot-monitor-cancel" class="modal-secondary" type="button">Отмена</button><button id="wellbot-monitor-submit" class="modal-primary" type="button">Запустить радар <span>→</span></button></div>
+  </div>`;
   document.body.appendChild(modal);
-  const input = modal.querySelector('#wellbot-monitor-url'); const error = modal.querySelector('#wellbot-monitor-error'); const submit = modal.querySelector('#wellbot-monitor-submit');
-  const close = () => { if (!state.submitting) modal.remove(); };
-  modal.querySelector('#wellbot-monitor-cancel').onclick = close; modal.querySelector('#wellbot-monitor-x').onclick = close; modal.onclick = event => { if (event.target === modal) close(); };
-  const submitUrl = async () => {
-    if (state.submitting) return;
-    const url = String(input.value || '').trim(); error.textContent = '';
-    if (!/^https?:\/\//i.test(url) || !/(kufar\.by|onliner\.by|av\.by)/i.test(url)) { error.textContent = 'Нужна ссылка на поиск Kufar, Onliner или av.by.'; input.focus(); return; }
-    if (!getTelegramInitData()) { error.textContent = 'Открой WellBOT из Telegram.'; return; }
-    state.submitting = true; submit.disabled = true; submit.textContent = 'Запускаю…'; haptic('light');
-    try { const result = await api('/api/links', { method:'POST', body: JSON.stringify({ url }) }); modal.remove(); state.submitting = false; await load(true); showSuccess(result.reactivated ? 'Радар снова активен.' : 'Радар запущен. Монитор добавлен.'); haptic('success'); }
-    catch (e) { error.textContent = e.message; submit.disabled = false; submit.textContent = 'Запустить радар →'; state.submitting = false; }
+  const category=modal.querySelector('#catalog-category'), sub=modal.querySelector('#catalog-subcategory'), subLabel=modal.querySelector('#subcategory-label');
+  const city=modal.querySelector('#catalog-city'), min=modal.querySelector('#catalog-min'), max=modal.querySelector('#catalog-max'), query=modal.querySelector('#catalog-query'), condition=modal.querySelector('#catalog-condition');
+  const error=modal.querySelector('#wellbot-monitor-error'), submit=modal.querySelector('#wellbot-monitor-submit');
+  const close=()=>{if(!state.submitting)modal.remove();};
+  modal.querySelector('#wellbot-monitor-cancel').onclick=close; modal.querySelector('#wellbot-monitor-x').onclick=close; modal.onclick=e=>{if(e.target===modal)close();};
+  category.onchange=()=>{
+    const node=categories.find(c=>c.id===category.value);
+    const children=node?.children||[];
+    sub.innerHTML='<option value="">Все в категории</option>'+children.map(c=>`<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('');
+    sub.hidden=!children.length; subLabel.hidden=!children.length;
   };
-  submit.onclick = submitUrl; input.onkeydown = e => { if (e.key === 'Enter') submitUrl(); if (e.key === 'Escape') close(); }; setTimeout(() => input.focus(), 50);
+  const submitMonitor=async()=>{
+    if(state.submitting)return;
+    error.textContent='';
+    if(!category.value){error.textContent='Выберите категорию.';return;}
+    if(min.value && max.value && Number(min.value)>Number(max.value)){error.textContent='Минимальная цена не может быть выше максимальной.';return;}
+    state.submitting=true; submit.disabled=true; submit.textContent='Запускаю…'; haptic('light');
+    const payload={source:'kufar',categoryId:category.value,subcategoryId:sub.value||undefined,city:city.value||undefined,query:query.value.trim()||undefined,minPrice:min.value?Number(min.value):undefined,maxPrice:max.value?Number(max.value):undefined,condition:condition.value||undefined};
+    try { const result=await api('/api/monitors',{method:'POST',body:JSON.stringify(payload)}); modal.remove(); state.submitting=false; await load(true); showSuccess(result.reactivated?'Радар снова активен.':'Радар создан. WellBOT уже начал поиск.'); haptic('success'); }
+    catch(e){error.textContent=e.message;submit.disabled=false;submit.textContent='Запустить радар →';state.submitting=false;}
+  };
+  submit.onclick=submitMonitor;
+  modal.querySelectorAll('input,select').forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter')submitMonitor();if(e.key==='Escape')close();}));
 }
 
 document.querySelectorAll('[data-action="add"]').forEach(btn => btn.addEventListener('click', showMonitorForm));
