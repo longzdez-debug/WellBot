@@ -9,9 +9,9 @@ const CATEGORY_MAP: Record<string, string> = {
   'shiny-i-diski': '2075', zapchasti: '2040', 'vodnyj-transport': '2050',
   'gruzoviki-i-avtobusy': '2060', 'selhoztekhnika': '2080', spectekhnika: '2090',
   'uslugi-dlya-avto': '2100',
-  'telefony-i-planshety': '17010', 'mobilnye-telefony': '17010', telefony: '17010',
-  noutbuki: '19020', kompyutery: '19010', televizory: '5060',
-  'igrovye-pristavki-i-igry': '12040', 'stiralnye-mashiny': '14050',
+  'telefony-i-planshety': '17010', 'mobilnye-telefony': '17010', telefony: '17010', 'komplektuyushchie-dlya-telefonov': '17020', 'aksessuary-dlya-telefonov': '17030', 'telefoniya-i-svyaz': '17040', planshety: '17050', 'graficheskie-planshety': '17060', 'elektronnye-knigi': '17070', 'umnye-chasy-i-fitnes-braslety': '17090', 'komplektuyushchie-dlya-planshetov': '17120',
+  noutbuki: '16040', kompyutery: '16020', televizory: '5060',
+  'igrovye-pristavki-i-igry': '12040', naushniki: '5100', 'stiralnye-mashiny': '14050',
   mebel: '15040', velosipedy: '8030',
 };
 
