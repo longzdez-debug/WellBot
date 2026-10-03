@@ -104,12 +104,22 @@ function renderFeed() {
   bindListingLinks(feed);
 }
 
+function catalogLabel(id) {
+  const categories = state.catalog?.categories || [];
+  for (const category of categories) {
+    if (category.id === id) return category.title;
+    const child = (category.children || []).find(item => item.id === id);
+    if (child) return child.title;
+  }
+  return id || 'Каталог';
+}
+
 function renderMonitors() {
   const links = state.data?.links || [];
   const counts = new Map((state.data?.statsByLink || []).map(x => [Number(x.linkId), Number(x.count)]));
   const root = document.querySelector('#monitors');
   if (!links.length) { root.innerHTML = '<div class="empty"><strong>Первый радар ждёт.</strong><br>Выбери категорию и фильтры — WellBOT начнёт охоту.</div>'; return; }
-  root.innerHTML = links.map(l => { const c=l.config||{}; const scope=[c.city,c.region].filter(Boolean).join(' · ')||'Вся Беларусь'; const filters=[c.query,c.minPrice!=null?`от ${c.minPrice}`:'',c.maxPrice!=null?`до ${c.maxPrice}`:''].filter(Boolean).join(' · '); return `<div class="monitor"><span class="monitor-icon">${platformIcon(l.platform)}</span><div><strong>${platformLabel(l.platform)} <span class="monitor-status ${l.is_active ? 'on' : ''}">${l.is_active ? 'LIVE' : 'PAUSED'}</span></strong><small>📂 ${esc(c.categoryId||'Каталог')} · 📍 ${esc(scope)}${filters?` · 🔎 ${esc(filters)}`:''}</small></div><span class="count">${counts.get(l.id) || 0}</span><button class="switch ${l.is_active ? 'on' : ''}" data-toggle="${l.id}" aria-label="Переключить" aria-pressed="${!!l.is_active}"></button><button class="delete-link" data-delete="${l.id}" aria-label="Удалить">×</button></div>`; }).join('');
+  root.innerHTML = links.map(l => { const c=l.config||{}; const scope=[c.city,c.region].filter(Boolean).join(' · ')||'Вся Беларусь'; const filters=[c.query,c.minPrice!=null?`от ${c.minPrice}`:'',c.maxPrice!=null?`до ${c.maxPrice}`:'',c.condition==='new'?'Новое':c.condition==='used'?'Б/у':'',c.seller==='company'?'Компания':c.seller==='private'?'Частное лицо':''].filter(Boolean).join(' · '); const categoryTitle=c.subcategoryId?catalogLabel(c.subcategoryId):catalogLabel(c.categoryId); return `<div class="monitor"><span class="monitor-icon">${platformIcon(l.platform)}</span><div><strong>${platformLabel(l.platform)} <span class="monitor-status ${l.is_active ? 'on' : ''}">${l.is_active ? 'LIVE' : 'PAUSED'}</span></strong><small>📂 ${esc(categoryTitle)} · 📍 ${esc(scope)}${filters?` · 🔎 ${esc(filters)}`:''}</small></div><span class="count">${counts.get(l.id) || 0}</span><button class="switch ${l.is_active ? 'on' : ''}" data-toggle="${l.id}" aria-label="Переключить" aria-pressed="${!!l.is_active}"></button><button class="delete-link" data-delete="${l.id}" aria-label="Удалить">×</button></div>`; }).join('');
   root.querySelectorAll('[data-toggle]').forEach(btn => btn.addEventListener('click', async () => {
     const id = Number(btn.dataset.toggle); const link = links.find(x => x.id === id); if (!link) return;
     haptic('light'); btn.disabled = true;
@@ -144,7 +154,8 @@ async function load(force = false) {
   if (!state.data) renderSkeleton();
   setLiveStatus('SYNC', true);
   try {
-    const data = await api('/api/bootstrap');
+    const [data, catalog] = await Promise.all([api('/api/bootstrap'), state.catalog ? Promise.resolve(state.catalog) : api('/api/catalog')]);
+    state.catalog = catalog;
     const hadData = !!state.data;
     const previousAds = new Set((state.data?.ads || []).map(a => String(a.id ?? a.ad_id ?? a.ad_url)));
     state.data = data; state.lastLoadedAt = Date.now();
@@ -211,7 +222,7 @@ async function showMonitorForm() {
   </div>`;
   document.body.appendChild(modal);
   const category=modal.querySelector('#catalog-category'), sub=modal.querySelector('#catalog-subcategory'), subLabel=modal.querySelector('#subcategory-label');
-  const city=modal.querySelector('#catalog-city'), min=modal.querySelector('#catalog-min'), max=modal.querySelector('#catalog-max'), query=modal.querySelector('#catalog-query'), condition=modal.querySelector('#catalog-condition');
+  const city=modal.querySelector('#catalog-city'), min=modal.querySelector('#catalog-min'), max=modal.querySelector('#catalog-max'), query=modal.querySelector('#catalog-query'), condition=modal.querySelector('#catalog-condition'), seller=modal.querySelector('#catalog-seller');
   const error=modal.querySelector('#wellbot-monitor-error'), submit=modal.querySelector('#wellbot-monitor-submit');
   const close=()=>{if(!state.submitting)modal.remove();};
   modal.querySelector('#wellbot-monitor-cancel').onclick=close; modal.querySelector('#wellbot-monitor-x').onclick=close; modal.onclick=e=>{if(e.target===modal)close();};
@@ -227,7 +238,7 @@ async function showMonitorForm() {
     if(!category.value){error.textContent='Выберите категорию.';return;}
     if(min.value && max.value && Number(min.value)>Number(max.value)){error.textContent='Минимальная цена не может быть выше максимальной.';return;}
     state.submitting=true; submit.disabled=true; submit.textContent='Запускаю…'; haptic('light');
-    const payload={source:'kufar',categoryId:category.value,subcategoryId:sub.value||undefined,city:city.value||undefined,query:query.value.trim()||undefined,minPrice:min.value?Number(min.value):undefined,maxPrice:max.value?Number(max.value):undefined,condition:condition.value||undefined};
+    const payload={source:'kufar',categoryId:category.value,subcategoryId:sub.value||undefined,city:city.value||undefined,query:query.value.trim()||undefined,minPrice:min.value?Number(min.value):undefined,maxPrice:max.value?Number(max.value):undefined,condition:condition.value||undefined,seller:seller.value||undefined};
     try { const result=await api('/api/monitors',{method:'POST',body:JSON.stringify(payload)}); modal.remove(); state.submitting=false; await load(true); showSuccess(result.reactivated?'Радар снова активен.':'Радар создан. WellBOT уже начал поиск.'); haptic('success'); }
     catch(e){error.textContent=e.message;submit.disabled=false;submit.textContent='Запустить радар →';state.submitting=false;}
   };
