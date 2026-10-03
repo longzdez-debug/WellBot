@@ -47,6 +47,7 @@ describe('ParserScheduler', () => {
     return {
       getActiveLinks: jest.fn().mockResolvedValue(linkList),
       getUserById: jest.fn().mockResolvedValue(user),
+      getUsersByIds: jest.fn().mockResolvedValue([user]),
       bulkCreateAds: jest.fn().mockImplementation(async (_linkId: number, input: Ad[]) => {
         for (const ad of input) ads.set(ad.external_id, { ...ad, id: ads.size + 1 });
         return input.length;
