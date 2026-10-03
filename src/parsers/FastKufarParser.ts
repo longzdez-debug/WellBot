@@ -353,12 +353,20 @@ export class FastKufarParser extends BaseParser {
       // API ID we deliberately use the rendered category page instead of risking
       // a silent fallback to "all Kufar listings".
       if (params.cat) {
-        const results = await Promise.allSettled(API_ENDPOINTS.map(requestApi));
-        const nonEmpty = results.find((result): result is PromiseFulfilledResult<Ad[]> => result.status === 'fulfilled' && result.value.length > 0);
-        if (nonEmpty) return nonEmpty.value;
-        const empty = results.find((result): result is PromiseFulfilledResult<Ad[]> => result.status === 'fulfilled');
-        if (empty) return empty.value;
-        throw new Error('All Kufar API endpoints failed');
+        let lastError: unknown;
+        for (const endpoint of API_ENDPOINTS) {
+          try {
+            const results = await requestApi(endpoint);
+            return results;
+          } catch (error: unknown) {
+            lastError = error;
+            logger.warn('Kufar API endpoint failed; trying fallback endpoint', {
+              endpoint,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+        throw lastError instanceof Error ? lastError : new Error('All Kufar API endpoints failed');
       }
       logger.debug('Kufar category has no verified API id; using rendered category page', {
         url,
