@@ -133,6 +133,12 @@ export class FastKufarParser extends BaseParser {
     const brandTerms = requestedBrandSlug ? (BRAND_TERMS[requestedBrandSlug] || [requestedBrandSlug]) : [];
     const normalizedBrandTerms = brandTerms.map(normalizeSearchText).filter(Boolean);
     const normalizedRequestedQuery = normalizeSearchText(requestedQuery);
+    const requestedQueryTerms = normalizedRequestedQuery.split(' ').filter(term => term.length >= 2);
+    const queryMatchesAd = (text: string): boolean => {
+      if (!requestedQueryTerms.length) return true;
+      if (text.includes(normalizedRequestedQuery)) return true;
+      return requestedQueryTerms.every(term => text.includes(term));
+    };
 
     // Do not send Kufar's brand subcategory value (e.g. subcat=Apple):
     // current API variants reject it with HTTP 422. Brand matching is enforced
@@ -190,6 +196,7 @@ export class FastKufarParser extends BaseParser {
         if (!ad?.ad_id) return false;
         if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return false;
         const text = adSearchText(ad);
+        if (!queryMatchesAd(text)) return false;
         if (normalizedBrandTerms.length > 0 && !normalizedBrandTerms.some(term => text.includes(term))) return false;
         const condition = normalizeSearchText(adCondition(ad));
         if (requestedCondition === 'new' && !/(new|нов|новое|новая|новый)/.test(condition)) return false;
@@ -281,6 +288,7 @@ export class FastKufarParser extends BaseParser {
       return [...unique.values()].map((ad: any) => {
         if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return null;
         const text = adSearchText(ad);
+        if (!queryMatchesAd(text)) return null;
         if (normalizedBrandTerms.length && !normalizedBrandTerms.some(term => text.includes(term))) return null;
         const condition = normalizeSearchText(adCondition(ad));
         if (requestedCondition === 'new' && !/(new|нов|новое|новая|новый)/.test(condition)) return null;
@@ -323,7 +331,11 @@ export class FastKufarParser extends BaseParser {
         if (empty) return empty.value;
         throw new Error('All Kufar API endpoints failed');
       }
-      logger.debug('Kufar category has no verified API id; using rendered page', { url });
+      logger.debug('Kufar category has no verified API id; using rendered category page', {
+        url,
+        categoryPath: parts.filter(part => !/^r~|^mt~/i.test(part)).join('/'),
+        query: requestedQuery || null,
+      });
     } catch (error: any) {
       logger.warn('Kufar API hot-path failed; trying rendered page', {
         url,
