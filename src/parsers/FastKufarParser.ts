@@ -2,7 +2,18 @@ import { BaseParser } from './BaseParser';
 import { Ad } from '../types';
 import { logger } from '../utils/logger';
 
-const CATEGORY_MAP: Record<string, string> = {};
+const CATEGORY_MAP: Record<string, string> = {
+  kvartiru: '1010', komnatu: '1040', dom: '1020', dachu: '1020', uchastok: '1080',
+  kommercheskaya: '1050', garazh: '1030',
+  avtomobili: '2010', mototsikly: '2030', 'avtobusy-i-mikroavtobusy': '2060',
+  'shiny-i-diski': '2075', zapchasti: '2040', 'vodnyj-transport': '2050',
+  'gruzoviki-i-avtobusy': '2060', 'selhoztekhnika': '2080', spectekhnika: '2090',
+  'uslugi-dlya-avto': '2100',
+  'telefony-i-planshety': '17010', 'mobilnye-telefony': '17010', telefony: '17010',
+  noutbuki: '19020', kompyutery: '19010', televizory: '5060',
+  'igrovye-pristavki-i-igry': '12040', 'stiralnye-mashiny': '14050',
+  mebel: '15040', velosipedy: '8030',
+};
 
 const BRAND_MAP: Record<string, string> = {
   apple: 'Apple', samsung: 'Samsung', xiaomi: 'Xiaomi', huawei: 'Huawei', honor: 'Honor',
