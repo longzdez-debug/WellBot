@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { DatabaseService } from '../database/DatabaseService';
 import { logger } from '../utils/logger';
-import { LinkAcceptance } from '../utils/linkAcceptance';
+import { KUFAR_CATALOG, MonitorConfig, findCatalogNode } from '../catalog/KufarCatalog';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -108,7 +108,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
 
       if (requestPath === '/health' || requestPath === '/healthz') {
         if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); json(res, 405, { error: 'method_not_allowed' }); return; }
-        json(res, 200, { status: 'ok', service: 'hunt-web' }); return;
+        json(res, 200, { status: 'ok', service: 'wellbot-web' }); return;
       }
 
       if (requestPath.startsWith('/api/')) {
@@ -119,17 +119,57 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
         }
         const initData = req.headers['x-telegram-init-data'];
         const auth = parseTelegramInitData(typeof initData === 'string' ? initData : '', botToken);
-        if (!auth) { logger.warn('HUNT API unauthorized request', { requestPath, method: req.method }); json(res, 401, { error: 'unauthorized' }); return; }
+        if (!auth) { logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method }); json(res, 401, { error: 'unauthorized' }); return; }
         const user = await db.getUser(auth.user.id);
-        if (!user) { logger.warn('HUNT API user not registered', { telegramId: auth.user.id, requestPath }); json(res, 403, { error: 'user_not_registered' }); return; }
+        if (!user) { logger.warn('WellBOT API user not registered', { telegramId: auth.user.id, requestPath }); json(res, 403, { error: 'user_not_registered' }); return; }
 
         if (requestPath === '/api/bootstrap' && req.method === 'GET') {
           const [links, ads, priceDrops, stats, statsByLink, channel] = await Promise.all([
             db.getUserLinks(user.id), db.getDashboardAds(user.id, 50), db.getDashboardPriceDrops(user.id, 30),
             db.getDashboardStats(user.id), db.getUserAdsCount(user.id), db.getActiveChannelSubscription(user.id),
           ]);
-          logger.info('HUNT bootstrap', { telegramId: auth.user.id, dbUserId: user.id, links: links.length, ads: ads.length, priceDrops: priceDrops.length, totalLinks: stats.totalLinks, activeLinks: stats.activeLinks, channelConnected: !!channel });
+          logger.info('WellBOT bootstrap', { telegramId: auth.user.id, dbUserId: user.id, links: links.length, ads: ads.length, priceDrops: priceDrops.length, totalLinks: stats.totalLinks, activeLinks: stats.activeLinks, channelConnected: !!channel });
           json(res, 200, { user: { id: user.id, telegramId: user.telegram_id, username: user.username }, links, ads, priceDrops, stats, statsByLink, channel, serverTime: new Date().toISOString() });
+          return;
+        }
+
+        if (requestPath === '/api/catalog' && req.method === 'GET') {
+          json(res, 200, { source: 'kufar', categories: KUFAR_CATALOG });
+          return;
+        }
+
+        if (requestPath === '/api/monitors' && req.method === 'POST') {
+          let body: Record<string, unknown>;
+          try { body = await readJson(req); }
+          catch (error: unknown) { json(res, error instanceof Error && error.message === 'body_too_large' ? 413 : 400, { error: 'invalid_json' }); return; }
+          const config = body as unknown as MonitorConfig;
+          if (config.source !== 'kufar' || typeof config.categoryId !== 'string' || !findCatalogNode(config.categoryId)) {
+            json(res, 400, { error: 'invalid_category', message: 'Выберите категорию из каталога WellBOT.' }); return;
+          }
+          if (config.subcategoryId && !findCatalogNode(config.subcategoryId)) {
+            json(res, 400, { error: 'invalid_subcategory', message: 'Выберите подкатегорию из каталога WellBOT.' }); return;
+          }
+          if (config.query && (typeof config.query !== 'string' || config.query.length > 120)) {
+            json(res, 400, { error: 'invalid_query' }); return;
+          }
+          if (config.minPrice != null && (!Number.isFinite(Number(config.minPrice)) || Number(config.minPrice) < 0)) {
+            json(res, 400, { error: 'invalid_min_price' }); return;
+          }
+          if (config.maxPrice != null && (!Number.isFinite(Number(config.maxPrice)) || Number(config.maxPrice) < 0)) {
+            json(res, 400, { error: 'invalid_max_price' }); return;
+          }
+          const links = await db.getUserLinks(user.id);
+          if (links.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} мониторов.` }); return; }
+          const { buildKufarSearchUrl } = await import('../catalog/KufarCatalog');
+          const url = buildKufarSearchUrl(config);
+          const existing = links.find(link => link.source_key && link.source_key === `${config.source}:${config.categoryId}:${config.subcategoryId||''}:${config.region||''}:${config.city||''}:${config.query||''}:${config.minPrice??''}:${config.maxPrice??''}:${config.condition||''}:${config.seller||''}`);
+          if (existing) {
+            if (!existing.is_active) { await db.setLinkActive(existing.id, user.id, true); json(res, 200, { link: { ...existing, is_active: true }, reactivated: true }); return; }
+            json(res, 409, { error: 'duplicate', message: 'Такой монитор уже добавлен.' }); return;
+          }
+          const link = await db.createLink(user.id, url, 'kufar', config);
+          logger.info('WellBOT catalog monitor created', { telegramId: auth.user.id, dbUserId: user.id, linkId: link.id, categoryId: config.categoryId, subcategoryId: config.subcategoryId || null });
+          json(res, 201, { link, config });
           return;
         }
 
@@ -152,21 +192,21 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
             const me = await telegramApi<{ id: number }>(botToken, 'getMe', {});
             const member = await telegramApi<TelegramMember>(botToken, 'getChatMember', { chat_id: channelId, user_id: me.id });
             const canPost = member.status === 'creator' || (member.status === 'administrator' && member.can_post_messages !== false);
-            if (!canPost) { json(res, 400, { error: 'bot_not_admin', message: 'Добавь HUNT в канал администратором с правом публикации.' }); return; }
+            if (!canPost) { json(res, 400, { error: 'bot_not_admin', message: 'Добавь WellBOT в канал администратором с правом публикации.' }); return; }
             await db.createChannelSubscription(user.id, channelId, chat.username || null, chat.title || null);
-            logger.info('HUNT channel connected', { telegramId: auth.user.id, dbUserId: user.id, channelId, channelUsername: chat.username || null });
+            logger.info('WellBOT channel connected', { telegramId: auth.user.id, dbUserId: user.id, channelId, channelUsername: chat.username || null });
             json(res, 200, { channel: await db.getActiveChannelSubscription(user.id) });
           } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error);
-            logger.warn('HUNT channel validation failed', { telegramId: auth.user.id, channelId, error: message });
-            json(res, 400, { error: 'channel_validation_failed', message: 'Не удалось получить доступ к каналу. Проверь ID и убедись, что HUNT добавлен администратором.' });
+            logger.warn('WellBOT channel validation failed', { telegramId: auth.user.id, channelId, error: message });
+            json(res, 400, { error: 'channel_validation_failed', message: 'Не удалось получить доступ к каналу. Проверь ID и убедись, что WellBOT добавлен администратором.' });
           }
           return;
         }
 
         if (requestPath === '/api/channel' && req.method === 'DELETE') {
           await db.deactivateAllChannelSubscriptions(user.id);
-          logger.info('HUNT channel disconnected', { telegramId: auth.user.id, dbUserId: user.id });
+          logger.info('WellBOT channel disconnected', { telegramId: auth.user.id, dbUserId: user.id });
           json(res, 200, { ok: true });
           return;
         }
@@ -188,7 +228,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           }
           if (links.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} мониторов.` }); return; }
           const link = await db.createLink(user.id, url, assessment.platform);
-          logger.info('HUNT monitor created', { telegramId: auth.user.id, dbUserId: user.id, linkId: link.id, platform: link.platform, url: link.url });
+          logger.info('WellBOT monitor created', { telegramId: auth.user.id, dbUserId: user.id, linkId: link.id, platform: link.platform, url: link.url });
           json(res, 201, { link, reactivated: false });
           return;
         }
@@ -224,7 +264,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (message === 'body_too_large') { json(res, 413, { error: 'body_too_large' }); return; }
-      if (requestPath.startsWith('/api/')) { logger.error('HUNT API request failed', { requestPath, error: message }); json(res, 500, { error: 'internal_error' }); return; }
+      if (requestPath.startsWith('/api/')) { logger.error('WellBOT API request failed', { requestPath, error: message }); json(res, 500, { error: 'internal_error' }); return; }
       res.statusCode = 404;
       applySecurityHeaders(res);
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -232,6 +272,6 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
     }
   });
 
-  server.listen(port, '0.0.0.0', () => logger.info('HUNT WebApp server started', { port, webRoot }));
+  server.listen(port, '0.0.0.0', () => logger.info('WellBOT WebApp server started', { port, webRoot }));
   return { close: () => new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve()))) };
 }
