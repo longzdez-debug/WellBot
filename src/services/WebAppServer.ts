@@ -75,17 +75,6 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   return parsed as Record<string, unknown>;
 }
 
-function normalizeUrl(url: string): string {
-  try {
-    const value = new URL(url);
-    value.hostname = value.hostname.toLowerCase().replace(/^www\./, '');
-    value.protocol = 'https:';
-    return value.toString();
-  } catch {
-    return url.trim().toLowerCase();
-  }
-}
-
 async function telegramApi<T>(botToken: string, method: string, body: Record<string, unknown>): Promise<T> {
   const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
     method: 'POST',
@@ -163,7 +152,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           if (config.minPrice != null && config.maxPrice != null && Number(config.minPrice) > Number(config.maxPrice)) { json(res, 400, { error: 'invalid_price_range' }); return; }
           const links = await db.getUserLinks(user.id);
           if (links.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} мониторов.` }); return; }
-          const { buildKufarSearchUrl } = await import('../catalog/KufarCatalog');
+          const { buildKufarSearchUrl } = await import('../catalog/KufarCatalog.js');
           const url = buildKufarSearchUrl(config);
           const existing = links.find(link => link.source_key && link.source_key === `${config.source}:${config.categoryId}:${config.subcategoryId||''}:${config.region||''}:${config.city||''}:${config.query||''}:${config.minPrice??''}:${config.maxPrice??''}:${config.condition||''}:${config.seller||''}`);
           if (existing) {
