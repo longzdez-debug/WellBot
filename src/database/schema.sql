@@ -52,6 +52,12 @@ CREATE INDEX IF NOT EXISTS idx_ads_external_id ON ads(external_id);
 CREATE INDEX IF NOT EXISTS idx_ads_created_at ON ads(created_at);
 CREATE INDEX IF NOT EXISTS idx_ads_link_created_at ON ads(link_id, created_at DESC);
 
+ALTER TABLE ads ADD COLUMN IF NOT EXISTS market_status VARCHAR(20);
+ALTER TABLE ads ADD COLUMN IF NOT EXISTS market_percent DECIMAL(8,2);
+ALTER TABLE ads ADD COLUMN IF NOT EXISTS market_median DECIMAL(12,2);
+
+
+
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ads_external_id_key') THEN
