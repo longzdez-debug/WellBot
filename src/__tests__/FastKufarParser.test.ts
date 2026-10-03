@@ -7,6 +7,25 @@ function nextData(ads: unknown[]): string {
 }
 
 describe('FastKufarParser catalog/search behavior', () => {
+  test('uses the persisted numeric subcategory ID from the monitor identity', async () => {
+    const calls: Array<{ url: string; config: any }> = [];
+    const axiosMock = {
+      get: jest.fn(async (url: string, config: any) => {
+        calls.push({ url, config });
+        return { data: { ads: [{ ad_id: '1', subject: 'iPhone 15 Pro', price_byn: 100000, ad_link: 'https://www.kufar.by/ad/1' }] } };
+      }),
+    } as any;
+
+    const parser = new FastKufarParser(axiosMock);
+    const ads = await parser.parseUrl(
+      'https://www.kufar.by/l/elektronika?query=iPhone%2015&wb=kufar%7Celectronics%7C5040%7C%7C%7CiPhone%2015%7C%7C%7C%7Cnormal',
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].config.params.cat).toBe('5040');
+    expect(ads.map(ad => ad.external_id)).toEqual(['1']);
+  });
+
   test('uses the selected Kufar category page and keeps only query matches', async () => {
     const calls: Array<{ url: string; config: any }> = [];
     const axiosMock = {
