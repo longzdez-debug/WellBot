@@ -41,13 +41,6 @@ export class BotHandler {
       else if (msg.text === '➕ Добавить монитор') await this.handleAddLinkButton(chatId, userId);
       else if (msg.text === '📋 Мои мониторы') await this.handleMyLinks(chatId, userId);
       else if (msg.text === '🗑 Удалить все мониторы') await this.handleDeleteAllLinks(chatId, userId);
-      else if (msg.text === '📺 Привязать канал') await this.handleAddChannel(chatId, userId);
-      else if (msg.text === '📺 Отключить канал') await this.handleRemoveChannel(chatId, userId);
-      else if (msg.text === '📺 Статус канала') await this.handleChannelStatus(chatId, userId);
-      else if (msg.text.startsWith('/addchannel')) await this.handleAddChannelCommand(chatId, userId, msg.text);
-      else if (msg.text === '/removechannel') await this.handleRemoveChannel(chatId, userId);
-      
-      else if (this.userStates.get(userId) === 'awaiting_channel') await this.handleAddChannelCommand(chatId, userId, msg.text);
       
     });
 
@@ -81,7 +74,7 @@ export class BotHandler {
     } catch (error: any) { logger.error('Failed to handle /start', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка. Попробуйте позже.'); }
   }
 
-  async handleAddLinkButton(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } if (await this.db.getUserLinksCount(user.id) >= 10) { await this.bot.sendMessage(chatId, '⚠️ Достигнут лимит в 10 мониторов.'); return; } this.userStates.delete(userId); await this.bot.sendMessage(chatId, '📂 Откройте WellBOT и выберите категорию, город и фильтры.\n\nWellBOT сам создаст и запустит мониторинг — ссылки больше не нужны.', { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to handle add link button', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); } }
+  async handleAddLinkButton(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } if (await this.db.getUserLinksCount(user.id) >= 50) { await this.bot.sendMessage(chatId, '⚠️ Достигнут лимит в 10 мониторов.'); return; } this.userStates.delete(userId); await this.bot.sendMessage(chatId, '📂 Откройте WellBOT и выберите категорию, город и фильтры.\n\nWellBOT сам создаст и запустит мониторинг — ссылки больше не нужны.', { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to handle add link button', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); } }
 
   async handleMyLinks(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } const links = await this.db.getUserLinks(user.id); if (!links.length) { await this.bot.sendMessage(chatId, '📋 У вас пока нет мониторов.', { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить монитор', callback_data: 'add_link' }]] } }); return; } const platformEmoji: Record<Platform, string> = { kufar: '🟢', onliner: '🔵', av: '🚗' }; for (const link of links) { if (!platformEmoji[link.platform as Platform]) continue; const status = link.is_active ? '✅ Активна' : '❌ Неактивна'; const config = (link as Link & { config?: any }).config || {}; const category = typeof config.subcategoryId === 'string' ? config.subcategoryId : typeof config.categoryId === 'string' ? config.categoryId : 'Каталог'; const scope = [config.city, config.region].filter(Boolean).join(' · ') || 'Вся Беларусь'; const filters = [config.query, config.minPrice != null ? `от ${config.minPrice}` : '', config.maxPrice != null ? `до ${config.maxPrice}` : '', config.condition === 'new' ? 'Новое' : config.condition === 'used' ? 'Б/у' : '', config.seller === 'company' ? 'Компания' : config.seller === 'private' ? 'Частное лицо' : ''].filter(Boolean).join(' · '); await this.bot.sendMessage(chatId, `${platformEmoji[link.platform as Platform]} ${link.platform.toUpperCase()}\n\n📂 ${category}\n📍 ${scope}${filters ? `\n🔎 ${filters}` : ''}\n\nСтатус: ${status}`, { reply_markup: { inline_keyboard: [[{ text: '🔍 Проверить', callback_data: `check_${link.id}` }, { text: '🗑 Удалить', callback_data: `delete_${link.id}` }]] } }); } } catch (error: any) { logger.error('Failed to show monitors', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Не удалось загрузить мониторы.'); } }
 
@@ -124,50 +117,6 @@ export class BotHandler {
     }
   }
 
-  async handleAddChannel(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); await this.bot.sendMessage(chatId, '📺 Для привязки канала:\n\n1. Добавьте бота в канал как администратора\n2. Укажите ID канала в WellBOT\n3. WellBOT проверит права и включит публикацию.\n\nID обычно выглядит так: -1001234567890', { reply_markup: this.getMainKeyboard() }); this.userStates.set(userId, 'awaiting_channel'); } catch (error: any) { logger.error('Failed to handle add channel', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); } }
-
-  async handleRemoveChannel(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user) { await this.bot.sendMessage(chatId, '❌ Ошибка.', { reply_markup: this.getMainKeyboard() }); return; } await this.db.deactivateAllChannelSubscriptions(user.id); await this.bot.sendMessage(chatId, '✅ Канал отключён.\n\nТеперь уведомления будут приходить только в личку.', { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to handle remove channel', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); } }
-
-  async handleChannelStatus(chatId: number, userId: number): Promise<void> { try { let user = await this.db.getUser(userId); if (!user) { await this.db.createUser(userId, null); user = await this.db.getUser(userId); } if (!user) { await this.bot.sendMessage(chatId, '❌ Ошибка.', { reply_markup: this.getMainKeyboard() }); return; } const subscription = await this.db.getActiveChannelSubscription(user.id); if (!subscription) { await this.bot.sendMessage(chatId, '📺 Канал не привязан.\n\nОткрой WellBOT → Канал для подключения.', { reply_markup: this.getMainKeyboard() }); return; } const channelInfo = subscription.channel_username ? `@${subscription.channel_username}` : `ID: ${subscription.channel_id}`; await this.bot.sendMessage(chatId, `📺 Привязанный канал:\n${channelInfo}\n\n${subscription.channel_title || ''}`, { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to handle channel status', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); } }
-
-  async handleAddChannelCommand(chatId: number, userId: number, text: string): Promise<void> {
-    try {
-      const match = text.match(/^\/addchannel\s+(-?\d+)$/);
-      if (!match) {
-        await this.bot.sendMessage(chatId, '❌ Неверный формат.\n\nИспользуйте: /addchannel -1001234567890', { reply_markup: this.getMainKeyboard() });
-        return;
-      }
-      const channelId = Number(match[1]);
-      if (!Number.isSafeInteger(channelId)) {
-        await this.bot.sendMessage(chatId, '❌ Некорректный ID канала.', { reply_markup: this.getMainKeyboard() });
-        return;
-      }
-      const channel = await this.bot.getChat(channelId);
-      if (channel.type !== 'channel') {
-        await this.bot.sendMessage(chatId, '❌ Указанный chat ID не является каналом.', { reply_markup: this.getMainKeyboard() });
-        return;
-      }
-      const me = await this.bot.getMe();
-      const member = await this.bot.getChatMember(channelId, me.id);
-      const canPost = member.status === 'creator' || (member.status === 'administrator' && member.can_post_messages !== false);
-      if (!canPost) {
-        await this.bot.sendMessage(chatId, '❌ Сначала добавьте WellBOT в канал администратором с правом публикации.', { reply_markup: this.getMainKeyboard() });
-        return;
-      }
-      await this.db.createUser(userId, null);
-      const dbUser = await this.db.getUser(userId);
-      if (!dbUser) {
-        await this.bot.sendMessage(chatId, '❌ Ошибка создания пользователя.', { reply_markup: this.getMainKeyboard() });
-        return;
-      }
-      await this.db.createChannelSubscription(dbUser.id, channelId, channel.username || null, channel.title || null);
-      this.userStates.delete(userId);
-      await this.bot.sendMessage(chatId, `✅ Канал ${channel.title ? `«${channel.title}» ` : ''}(${channelId}) привязан!\n\nТеперь уведомления будут приходить в канал и в личку.`, { reply_markup: this.getMainKeyboard() });
-    } catch (error: any) {
-      logger.error('Failed to add channel', { userId, error: error.message, stack: error.stack });
-      await this.bot.sendMessage(chatId, '❌ Не удалось проверить канал. Убедитесь, что WellBOT добавлен администратором и имеет право публикации.', { reply_markup: this.getMainKeyboard() });
-    }
-  }
   async handleClearAds(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } await this.bot.sendMessage(chatId, '🗑 Это удалит все сохранённые объявления из базы данных.\n\nМониторы останутся на месте, и бот начнёт заново отслеживать все объявления как новые.\n\nПродолжить?', { reply_markup: { inline_keyboard: [[{ text: '✅ Да, очистить объявления', callback_data: 'confirm_clear_ads' }, { text: '❌ Отмена', callback_data: 'cancel_clear_ads' }]] } }); } catch (error: any) { logger.error('Failed to handle /clear', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); } }
 
   async handleStats(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } const links = await this.db.getUserLinks(user.id); const stats = await this.db.getUserAdsCount(user.id); const totalAds = stats.reduce((sum, stat) => sum + stat.count, 0); const statsByLink = stats.map(stat => `  ${stat.linkPlatform.toUpperCase()}: ${stat.count} объявлений`); await this.bot.sendMessage(chatId, `📊 Статистика:\n\n🎯 Мониторов: ${links.length}\n📄 Всего объявлений в базе: ${totalAds}\n\n${statsByLink.length ? statsByLink.join('\n') : 'Нет данных'}`, { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to handle /stats', { userId, error: error.message, stack: error.stack }); await this.bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`); } }
