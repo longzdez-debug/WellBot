@@ -7,3 +7,6 @@
 .listing{box-shadow:0 8px 28px rgba(0,0,0,.16),inset 0 1px 0 rgba(255,255,255,.025)}
 .listing:hover{box-shadow:0 14px 38px rgba(0,0,0,.24),0 0 0 1px rgba(156,255,46,.08)}
 .stats article,.radar-card,.monitor,.hot-card{box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 14px 45px rgba(0,0,0,.16)}
+
+/* Native monitor catalog */
+.catalog-modal select,.catalog-modal input{width:100%;box-sizing:border-box;border:1px solid var(--tg-hint,#3a3f46);background:rgba(255,255,255,.04);color:var(--tg-text,#fff);border-radius:14px;padding:12px 14px;font:inherit;outline:none}.catalog-modal select:focus,.catalog-modal input:focus{border-color:rgba(255,255,255,.35)}.catalog-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.catalog-modal .muted{opacity:.5;font-weight:400;font-size:.85em}
