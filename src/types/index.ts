@@ -1,6 +1,6 @@
 export interface User {
   id: number; telegram_id: number; username: string | null; created_at: Date;
-  config?: Record<string, unknown> | null; source_key?: string | null; next_check_at?: Date | null;
+  config?: Record<string, unknown> | null; source_key?: string | null; next_check_at?: Date | null; priority?: number;
 }
 export interface Link {
   id: number; user_id: number; url: string; platform: Platform;
