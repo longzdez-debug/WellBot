@@ -90,7 +90,7 @@ For Kufar, use a search/category URL (`kufar.by/l/*`) rather than a direct listi
 |---|---:|---|
 | `PARSE_INTERVAL_SECONDS` | `5` | Polling interval; values below 1 second are clamped to 1 second |
 | `PARSE_CONCURRENCY` | `20` | Maximum search URLs parsed in parallel, clamped to 1–50 |
-| `HUNT_WEB_PORT` | disabled | Built-in Mini App server port |
+| `WELLBOT_WEB_PORT` | disabled | Built-in Mini App server port |
 | `WELLBOT_WEBAPP_URL` | empty | Public HTTPS Mini App URL |
 | `DB_PASSWORD` | — | PostgreSQL password used by Docker Compose |
 
