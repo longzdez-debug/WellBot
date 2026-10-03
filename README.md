@@ -49,7 +49,7 @@ Before running the script, set at minimum:
 ```env
 TELEGRAM_BOT_TOKEN=your_bot_token
 DB_PASSWORD=use-a-long-random-password
-HUNT_WEBAPP_URL=https://your-domain.example/
+WELLBOT_WEBAPP_URL=https://your-domain.example/
 PARSE_INTERVAL_SECONDS=5
 PARSE_CONCURRENCY=20
 ```
@@ -60,7 +60,7 @@ PARSE_CONCURRENCY=20
 
 ## HTTPS / Mini App
 
-For the Mini App, the built-in WellBOT web server listens on port `8080`. Put an HTTPS reverse proxy in front of it and set `HUNT_WEBAPP_URL` to the public HTTPS URL.
+For the Mini App, the built-in WellBOT web server listens on port `8080`. Put an HTTPS reverse proxy in front of it and set `WELLBOT_WEBAPP_URL` to the public HTTPS URL.
 
 A minimal Caddy example is provided in `Caddyfile.example`:
 
@@ -91,7 +91,7 @@ For Kufar, use a search/category URL (`kufar.by/l/*`) rather than a direct listi
 | `PARSE_INTERVAL_SECONDS` | `5` | Polling interval; values below 1 second are clamped to 1 second |
 | `PARSE_CONCURRENCY` | `20` | Maximum search URLs parsed in parallel, clamped to 1–50 |
 | `HUNT_WEB_PORT` | disabled | Built-in Mini App server port |
-| `HUNT_WEBAPP_URL` | empty | Public HTTPS Mini App URL |
+| `WELLBOT_WEBAPP_URL` | empty | Public HTTPS Mini App URL |
 | `DB_PASSWORD` | — | PostgreSQL password used by Docker Compose |
 
 ## Reliability model
