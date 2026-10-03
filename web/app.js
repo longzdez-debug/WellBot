@@ -39,11 +39,11 @@ const price = (value) => value !== null && value !== undefined && value !== '' ?
 
 async function api(path, options = {}) {
   const initData = getTelegramInitData();
-  if (!initData) throw new Error('HUNT нужно открыть кнопкой внутри Telegram. Открой HUNT заново из бота.');
+  if (!initData) throw new Error('WellBOT нужно открыть кнопкой внутри Telegram. Открой WellBOT заново из бота.');
   const response = await fetch(path, { ...options, cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData, ...(options.headers || {}) } });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = payload.message || ({ unauthorized: 'Сессия Telegram недействительна. Закройте HUNT и откройте заново.', user_not_registered: 'Сначала нажмите /start в боте.', duplicate: 'Эта ссылка уже добавлена.', limit_reached: 'Достигнут лимит в 10 мониторов.', unsupported_url: 'Ссылка не поддерживается.' }[payload.error]) || `HTTP ${response.status}`;
+    const message = payload.message || ({ unauthorized: 'Сессия Telegram недействительна. Закройте WellBOT и откройте заново.', user_not_registered: 'Сначала нажмите /start в боте.', duplicate: 'Эта ссылка уже добавлена.', limit_reached: 'Достигнут лимит в 10 мониторов.', unsupported_url: 'Ссылка не поддерживается.' }[payload.error]) || `HTTP ${response.status}`;
     throw new Error(message);
   }
   return payload;
@@ -108,7 +108,7 @@ function renderMonitors() {
   const links = state.data?.links || [];
   const counts = new Map((state.data?.statsByLink || []).map(x => [Number(x.linkId), Number(x.count)]));
   const root = document.querySelector('#monitors');
-  if (!links.length) { root.innerHTML = '<div class="empty"><strong>Первый радар ждёт.</strong><br>Добавь ссылку на поиск и HUNT начнёт охоту.</div>'; return; }
+  if (!links.length) { root.innerHTML = '<div class="empty"><strong>Первый радар ждёт.</strong><br>Добавь ссылку на поиск и WellBOT начнёт охоту.</div>'; return; }
   root.innerHTML = links.map(l => `<div class="monitor"><span class="monitor-icon">${platformIcon(l.platform)}</span><div><strong>${platformLabel(l.platform)} <span class="monitor-status ${l.is_active ? 'on' : ''}">${l.is_active ? 'LIVE' : 'PAUSED'}</span></strong><small>${esc(l.url)}</small></div><span class="count">${counts.get(l.id) || 0}</span><button class="switch ${l.is_active ? 'on' : ''}" data-toggle="${l.id}" aria-label="Переключить" aria-pressed="${!!l.is_active}"></button><button class="delete-link" data-delete="${l.id}" aria-label="Удалить">×</button></div>`).join('');
   root.querySelectorAll('[data-toggle]').forEach(btn => btn.addEventListener('click', async () => {
     const id = Number(btn.dataset.toggle); const link = links.find(x => x.id === id); if (!link) return;
@@ -156,12 +156,12 @@ async function load(force = false) {
       const badge = document.querySelector('#radar-count');
       badge?.classList.add('pulse-value'); setTimeout(() => badge?.classList.remove('pulse-value'), 900);
     }
-    console.info('[HUNT]', HUNT_BUILD, 'bootstrap ok', { links: data.links?.length || 0, ads: data.ads?.length || 0, newCount });
+    console.info('[WellBOT]', HUNT_BUILD, 'bootstrap ok', { links: data.links?.length || 0, ads: data.ads?.length || 0, newCount });
   } catch (e) {
-    console.error('[HUNT]', HUNT_BUILD, 'bootstrap failed', e);
+    console.error('[WellBOT]', HUNT_BUILD, 'bootstrap failed', e);
     setLiveStatus('OFFLINE', false);
     if (!state.data) {
-      document.querySelector('#feed').innerHTML = `<div class="empty error"><strong>HUNT ${HUNT_BUILD}</strong><br>${esc(e.message)}<br><button class="link-btn" data-action="refresh">Повторить</button></div>`;
+      document.querySelector('#feed').innerHTML = `<div class="empty error"><strong>WellBOT ${HUNT_BUILD}</strong><br>${esc(e.message)}<br><button class="link-btn" data-action="refresh">Повторить</button></div>`;
       document.querySelector('#monitors').innerHTML = `<div class="empty error">${esc(e.message)}</div>`;
       document.querySelector('#drops').innerHTML = '<div class="empty">Данные временно недоступны.</div>';
       document.querySelector('#hot-find').hidden = true;
@@ -175,22 +175,22 @@ async function load(force = false) {
 }
 
 function showError(message) { if (tg?.showAlert) tg.showAlert(message); else alert(message); }
-function showSuccess(message) { if (tg?.showPopup) tg.showPopup({ title: 'HUNT', message, buttons: [{ type: 'ok' }] }); else alert(message); }
+function showSuccess(message) { if (tg?.showPopup) tg.showPopup({ title: 'WellBOT', message, buttons: [{ type: 'ok' }] }); else alert(message); }
 
 function showMonitorForm() {
   if (state.submitting) return;
-  document.querySelector('#hunt-monitor-modal')?.remove();
-  const modal = document.createElement('div'); modal.id = 'hunt-monitor-modal'; modal.className = 'hunt-modal';
-  modal.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="hunt-modal-title"><button id="hunt-monitor-x" class="modal-close" type="button" aria-label="Закрыть">×</button><div class="modal-kicker">NEW MONITOR</div><h2 id="hunt-modal-title">Куда ставим радар?</h2><p>Вставь ссылку на поиск Kufar, Onliner или av.by. HUNT добавит монитор напрямую — без закрытия Mini App.</p><label class="modal-label" for="hunt-monitor-url">Ссылка на поиск</label><input id="hunt-monitor-url" type="url" inputmode="url" autocomplete="off" placeholder="https://www.kufar.by/l/..." maxlength="4096"><div id="hunt-monitor-error" class="modal-error" role="alert"></div><div class="modal-actions"><button id="hunt-monitor-cancel" class="modal-secondary" type="button">Отмена</button><button id="hunt-monitor-submit" class="modal-primary" type="button">Запустить радар <span>→</span></button></div></div>`;
+  document.querySelector('#wellbot-monitor-modal')?.remove();
+  const modal = document.createElement('div'); modal.id = 'wellbot-monitor-modal'; modal.className = 'wellbot-modal';
+  modal.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="wellbot-modal-title"><button id="wellbot-monitor-x" class="modal-close" type="button" aria-label="Закрыть">×</button><div class="modal-kicker">NEW MONITOR</div><h2 id="wellbot-modal-title">Куда ставим радар?</h2><p>Вставь ссылку на поиск Kufar, Onliner или av.by. WellBOT добавит монитор напрямую — без закрытия Mini App.</p><label class="modal-label" for="wellbot-monitor-url">Ссылка на поиск</label><input id="wellbot-monitor-url" type="url" inputmode="url" autocomplete="off" placeholder="https://www.kufar.by/l/..." maxlength="4096"><div id="wellbot-monitor-error" class="modal-error" role="alert"></div><div class="modal-actions"><button id="wellbot-monitor-cancel" class="modal-secondary" type="button">Отмена</button><button id="wellbot-monitor-submit" class="modal-primary" type="button">Запустить радар <span>→</span></button></div></div>`;
   document.body.appendChild(modal);
-  const input = modal.querySelector('#hunt-monitor-url'); const error = modal.querySelector('#hunt-monitor-error'); const submit = modal.querySelector('#hunt-monitor-submit');
+  const input = modal.querySelector('#wellbot-monitor-url'); const error = modal.querySelector('#wellbot-monitor-error'); const submit = modal.querySelector('#wellbot-monitor-submit');
   const close = () => { if (!state.submitting) modal.remove(); };
-  modal.querySelector('#hunt-monitor-cancel').onclick = close; modal.querySelector('#hunt-monitor-x').onclick = close; modal.onclick = event => { if (event.target === modal) close(); };
+  modal.querySelector('#wellbot-monitor-cancel').onclick = close; modal.querySelector('#wellbot-monitor-x').onclick = close; modal.onclick = event => { if (event.target === modal) close(); };
   const submitUrl = async () => {
     if (state.submitting) return;
     const url = String(input.value || '').trim(); error.textContent = '';
     if (!/^https?:\/\//i.test(url) || !/(kufar\.by|onliner\.by|av\.by)/i.test(url)) { error.textContent = 'Нужна ссылка на поиск Kufar, Onliner или av.by.'; input.focus(); return; }
-    if (!getTelegramInitData()) { error.textContent = 'Открой HUNT из Telegram.'; return; }
+    if (!getTelegramInitData()) { error.textContent = 'Открой WellBOT из Telegram.'; return; }
     state.submitting = true; submit.disabled = true; submit.textContent = 'Запускаю…'; haptic('light');
     try { const result = await api('/api/links', { method:'POST', body: JSON.stringify({ url }) }); modal.remove(); state.submitting = false; await load(true); showSuccess(result.reactivated ? 'Радар снова активен.' : 'Радар запущен. Монитор добавлен.'); haptic('success'); }
     catch (e) { error.textContent = e.message; submit.disabled = false; submit.textContent = 'Запустить радар →'; state.submitting = false; }
