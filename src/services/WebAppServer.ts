@@ -140,6 +140,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           }
           if (config.condition && config.condition !== 'new' && config.condition !== 'used') { json(res, 400, { error: 'invalid_condition' }); return; }
           if (config.seller && config.seller !== 'private' && config.seller !== 'company') { json(res, 400, { error: 'invalid_seller' }); return; }
+          if (config.mode && config.mode !== 'normal' && config.mode !== 'sniper') { json(res, 400, { error: 'invalid_mode' }); return; }
           if (config.query && (typeof config.query !== 'string' || config.query.length > 120)) {
             json(res, 400, { error: 'invalid_query' }); return;
           }
