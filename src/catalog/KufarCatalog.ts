@@ -1,89 +1,38 @@
-export interface CatalogNode {
-  id: string;
-  title: string;
-  slug?: string;
-  children?: CatalogNode[];
-}
-
+export interface CatalogNode { id:string; title:string; slug:string; children?:CatalogNode[]; }
 export interface MonitorConfig {
-  source: 'kufar';
-  categoryId: string;
-  subcategoryId?: string;
-  region?: string;
-  city?: string;
-  query?: string;
-  minPrice?: number;
-  maxPrice?: number;
-  condition?: 'new' | 'used';
-  seller?: 'private' | 'company';
+  source:'kufar'; categoryId:string; subcategoryId?:string; region?:string; city?:string; query?:string;
+  minPrice?:number; maxPrice?:number; condition?:'new'|'used'; seller?:'private'|'company';
 }
+const node=(id:string,title:string,slug:string,children:CatalogNode[]=[]):CatalogNode=>({id,title,slug,...(children.length?{children}:{})});
+const child=(id:string,title:string,slug:string):CatalogNode=>({id,title,slug});
 
-const category = (id:string,title:string,slug:string,children:CatalogNode[]=[]):CatalogNode => ({id,title,slug,children});
-
-export const KUFAR_CATALOG: CatalogNode[] = [
-  category('real_estate','Недвижимость','nedvizhimost',[
-    {id:'real_estate_apartments',title:'Квартиры',slug:'kvartiru'},{id:'real_estate_houses',title:'Дома и коттеджи',slug:'dom'},{id:'real_estate_rooms',title:'Комнаты',slug:'komnatu'},
-    {id:'real_estate_land',title:'Земельные участки',slug:'uchastok'},{id:'real_estate_commercial',title:'Коммерческая недвижимость',slug:'kommercheskaya'},{id:'real_estate_garages',title:'Гаражи',slug:'garazh'}
-  ]),
-  category('travel','Путешествия','puteshestviya'),
-  category('auto','Авто и запчасти','avto-i-zapchasti',[
-    {id:'auto_cars',title:'Легковые автомобили',slug:'avtomobili'},{id:'auto_parts',title:'Запчасти',slug:'avtozapchasti'},{id:'auto_tires',title:'Шины и диски',slug:'shiny-i-diski'},{id:'auto_accessories',title:'Автоаксессуары',slug:'autoaccessories'}
-  ]),
-  category('services','Услуги','uslugi'),
-  category('home_appliances','Бытовая техника','bytovaya-tehnika'),
-  category('computers','Компьютерная техника','kompyuternaya-tehnika',[
-    {id:'computers_laptops',title:'Ноутбуки',slug:'noutbuki'},{id:'computers_desktops',title:'Компьютеры',slug:'kompyutery'},{id:'computers_monitors',title:'Мониторы',slug:'monitory'},{id:'computers_components',title:'Комплектующие',slug:'komplektuyushchie'}
-  ]),
-  category('phones','Телефоны и планшеты','telefony-i-planshety',[
-    {id:'phones_mobile',title:'Мобильные телефоны и смартфоны',slug:'mobilnye-telefony'},{id:'phones_tablets',title:'Планшеты',slug:'planshety'},{id:'phones_accessories',title:'Аксессуары',slug:'aksessuary'}
-  ]),
-  category('electronics','Электроника','elektronika',[
-    {id:'electronics_audio',title:'Аудиотехника',slug:'audiotehnika'},{id:'electronics_headphones',title:'Наушники',slug:'naushniki'},{id:'electronics_tv',title:'ТВ и видеотехника',slug:'tv-i-videotekhnika'},
-    {id:'electronics_photo',title:'Фототехника и оптика',slug:'fototekhnika-i-optika'},{id:'electronics_games',title:'Игры и приставки',slug:'igrovye-pristavki-i-igry'},{id:'electronics_smart_home',title:'Безопасность и умный дом',slug:'bezopasnost-i-umnyj-dom'}
-  ]),
-  category('women_clothes','Женский гардероб','zhenskij-garderob'),
-  category('men_clothes','Мужской гардероб','muzhskoj-garderob'),
-  category('beauty','Красота и здоровье','krasota-i-zdorove'),
-  category('kids','Всё для детей и мам','vsyo-dlya-detej-i-mam'),
-  category('furniture','Мебель','mebel'),
-  category('home','Все для дома','vse-dlya-doma'),
-  category('repair','Ремонт и стройка','remont-i-strojka'),
-  category('garden','Сад и огород','sad-i-ogorod'),
-  category('hobby','Хобби, спорт и туризм','hobby-sport-i-turizm'),
-  category('wedding','Свадьба и праздники','svadba-i-prazdniki'),
-  category('animals','Животные','zhivotnye'),
-  category('business','Готовый бизнес и оборудование','gotovyj-biznes-i-oborudovanie'),
-  category('jobs','Работа','rabota'),
-  category('other','Прочее','prochee'),
+/* WellBOT-owned UX taxonomy. Labels follow Kufar's current top-level categories. */
+export const KUFAR_CATALOG:CatalogNode[]=[
+ node('real_estate','Недвижимость','nedvizhimost',[child('real_estate_apartments','Квартиры','kvartiru'),child('real_estate_houses','Дома и коттеджи','dom'),child('real_estate_rooms','Комнаты','komnatu'),child('real_estate_land','Земельные участки','uchastok'),child('real_estate_commercial','Коммерческая недвижимость','kommercheskaya'),child('real_estate_garages','Гаражи','garazh')]),
+ node('travel','Путешествия','puteshestviya'),
+ node('auto','Авто и запчасти','avto-i-zapchasti',[child('auto_cars','Легковые автомобили','avtomobili'),child('auto_motorcycles','Мотоциклы','mototsikly'),child('auto_buses','Автобусы и микроавтобусы','avtobusy-i-mikroavtobusy'),child('auto_tires','Шины и диски','shiny-i-diski'),child('auto_parts','Автозапчасти','avtozapchasti')]),
+ node('services','Услуги','uslugi'),
+ node('home_appliances','Бытовая техника','bytovaya-tehnika',[child('home_appliances_washing','Стиральные машины','stiralnye-mashiny')]),
+ node('computers','Компьютерная техника','kompyuternaya-tehnika',[child('computers_laptops','Ноутбуки','noutbuki'),child('computers_desktops','Компьютеры / системные блоки','kompyutery'),child('computers_monitors','Мониторы','monitory'),child('computers_components','Комплектующие','komplektuyushchie'),child('computers_office','Оргтехника','orgtekhnika'),child('computers_peripherals','Периферия и аксессуары','kompjuternaja-periferiya-i-aksessuary'),child('computers_network','Сетевое оборудование','setevoe-oborudovanie'),child('computers_other','Прочие компьютерные товары','prochie-kompyuternye-tovary')]),
+ node('phones','Телефоны и планшеты','telefony-i-planshety',[child('phones_mobile','Мобильные телефоны','mobilnye-telefony'),child('phones_components','Комплектующие для телефонов','komplektuyushchie-dlya-telefonov'),child('phones_accessories','Аксессуары для телефонов','aksessuary-dlya-telefonov'),child('phones_telephony','Телефония и связь','telefoniya-i-svyaz'),child('phones_tablets','Планшеты','planshety'),child('phones_tablet_components','Комплектующие для планшетов','komplektuyushchie-dlya-planshetov'),child('phones_graphics','Графические планшеты','graficheskie-planshety'),child('phones_ebooks','Электронные книги','elektronnye-knigi'),child('phones_watches','Умные часы и фитнес-браслеты','umnye-chasy-i-fitnes-braslety'),child('phones_audio','Наушники','naushniki')]),
+ node('electronics','Электроника','elektronika',[child('electronics_tv','ТВ и видеотехника','televizory'),child('electronics_games','Игры и приставки','igrovye-pristavki-i-igry')]),
+ node('women_clothes','Женский гардероб','zhenskij-garderob'),node('men_clothes','Мужской гардероб','muzhskoj-garderob'),
+ node('beauty','Красота и здоровье','krasota-i-zdorove'),node('kids','Всё для детей и мам','vsyo-dlya-detej-i-mam'),node('furniture','Мебель','mebel'),
+ node('home','Все для дома','vse-dlya-doma'),node('repair','Ремонт и стройка','remont-i-strojka'),node('garden','Сад и огород','sad-i-ogorod'),
+ node('hobby','Хобби, спорт и туризм','hobby-sport-i-turizm'),node('wedding','Свадьба и праздники','svadba-i-prazdniki'),node('animals','Животные','zhivotnye'),
+ node('business','Готовый бизнес и оборудование','gotovyj-biznes-i-oborudovanie'),node('jobs','Работа','rabota'),node('other','Прочее','prochee')
 ];
-
-const REGION_SLUGS: Record<string,string> = {
-  minsk:'minsk', brest:'brest', vitebsk:'vitebsk', gomel:'gomel', grodno:'grodno', mogilev:'mogilev',
-  minskaya_oblast:'minskaya-oblast', brestskaya_oblast:'brestskaya-oblast', vitebskaya_oblast:'vitebskaya-oblast',
-  gomelskaya_oblast:'gomelskaya-oblast', grodnenskaya_oblast:'grodnenskaya-oblast', mogilevskaya_oblast:'mogilevskaya-oblast'
-};
-
-export function findCatalogNode(id:string):CatalogNode|null {
-  for (const node of KUFAR_CATALOG) {
-    if (node.id===id) return node;
-    const child=node.children?.find(x=>x.id===id);
-    if (child) return child;
-  }
-  return null;
-}
-
-export function buildKufarSearchUrl(config:MonitorConfig):string {
-  const node=findCatalogNode(config.subcategoryId || config.categoryId);
-  const categorySlug=node?.slug || findCatalogNode(config.categoryId)?.slug || '';
-  const city=config.city ? encodeURIComponent(config.city) : '';
-  const region=config.region ? REGION_SLUGS[config.region] || config.region : '';
-  const prefix=city ? `/l/r~${city}/` : region ? `/l/r~${region}/` : '/l/';
-  const path=`${prefix}${categorySlug}`;
-  const url=new URL(path,'https://www.kufar.by');
-  if (config.query) url.searchParams.set('query',config.query);
-  if (config.minPrice!=null) url.searchParams.set('prc',String(config.minPrice));
-  if (config.maxPrice!=null) url.searchParams.set('prc',String(config.maxPrice));
-  if (config.condition==='new') url.searchParams.set('cur', 'new');
-  if (config.condition==='used') url.searchParams.set('cur', 'used');
-  return url.toString();
+const REGION_SLUGS:Record<string,string>={minsk:'minsk',brest:'brest',vitebsk:'vitebsk',gomel:'gomel',grodno:'grodno',mogilev:'mogilev',minskaya_oblast:'minskaya-oblast',brestskaya_oblast:'brestskaya-oblast',vitebskaya_oblast:'vitebskaya-oblast',gomelskaya_oblast:'gomelskaya-oblast',grodnenskaya_oblast:'grodnenskaya-oblast',mogilevskaya_oblast:'mogilevskaya-oblast'};
+export function findCatalogNode(id:string):CatalogNode|null{for(const category of KUFAR_CATALOG){if(category.id===id)return category;const found=category.children?.find(item=>item.id===id);if(found)return found;}return null;}
+export function findCatalogCategory(id:string):CatalogNode|null{const direct=KUFAR_CATALOG.find(category=>category.id===id);if(direct)return direct;return KUFAR_CATALOG.find(category=>category.children?.some(item=>item.id===id))||null;}
+export function getCatalogLabel(id:string):string{return findCatalogNode(id)?.title||'Каталог';}
+export function buildKufarSearchUrl(config:MonitorConfig):string{
+ const selected=findCatalogNode(config.subcategoryId||config.categoryId); const category=findCatalogCategory(config.categoryId); const slug=selected?.slug||category?.slug||'';
+ const city=config.city?encodeURIComponent(config.city):''; const region=config.region?REGION_SLUGS[config.region]||config.region:'';
+ const prefix=city?'/l/r~'+city+'/':region?'/l/r~'+region+'/':'/l/'; const url=new URL(prefix+slug,'https://www.kufar.by');
+ if(config.query?.trim())url.searchParams.set('query',config.query.trim());
+ const min=config.minPrice!=null&&Number.isFinite(Number(config.minPrice))?Number(config.minPrice):undefined;
+ const max=config.maxPrice!=null&&Number.isFinite(Number(config.maxPrice))?Number(config.maxPrice):undefined;
+ if(min!=null||max!=null)url.searchParams.set('prc','r:'+(min??0)+','+(max??''));
+ return url.toString();
 }
