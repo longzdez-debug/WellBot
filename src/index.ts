@@ -42,7 +42,7 @@ async function main() {
 
   const shutdown = async () => {
     logger.info('Shutting down...');
-    scheduler.stop();
+    await scheduler.stop();
     bot.stop();
     if (webServer) await webServer.close();
     await db.close();
