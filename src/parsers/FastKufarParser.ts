@@ -300,10 +300,12 @@ export class FastKufarParser extends BaseParser {
     try {
       // Race the two known search backends. This reduces tail latency when one
       // backend is degraded while keeping the hot path independent of either one.
-      const apiResults = await Promise.any(API_ENDPOINTS.map(requestApi));
-      if (apiResults.length > 0) return apiResults;
-      // Empty is a valid response; do not replace it with a slower HTML request.
-      return apiResults;
+      const results = await Promise.allSettled(API_ENDPOINTS.map(requestApi));
+      const nonEmpty = results.find((result): result is PromiseFulfilledResult<Ad[]> => result.status === 'fulfilled' && result.value.length > 0);
+      if (nonEmpty) return nonEmpty.value;
+      const empty = results.find((result): result is PromiseFulfilledResult<Ad[]> => result.status === 'fulfilled');
+      if (empty) return empty.value;
+      throw new Error('All Kufar API endpoints failed');
     } catch (error: any) {
       logger.warn('Kufar API hot-path failed; trying rendered page', {
         url,
