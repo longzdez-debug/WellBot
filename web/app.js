@@ -1,4 +1,4 @@
-const WELLBOT_BUILD = '2026.10.03.4';
+const WELLBOT_BUILD = '2026.10.03.5';
 const tg = window.Telegram?.WebApp;
 const state = { data: null, filter: 'all', loading: false, submitting: false, lastLoadedAt: 0 };
 
@@ -219,12 +219,14 @@ async function showMonitorForm() {
     <select id="catalog-condition"><option value="">Любое</option><option value="new">Новое</option><option value="used">Б/у</option></select>
     <label class="modal-label">Продавец</label>
     <select id="catalog-seller"><option value="">Любой</option><option value="private">Частное лицо</option><option value="company">Компания</option></select>
+    <label class="modal-label">Режим</label>
+    <select id="catalog-mode"><option value="normal">Обычный — стандартная нагрузка</option><option value="sniper">SNIPER — максимально частая проверка</option></select>
     <div id="wellbot-monitor-error" class="modal-error" role="alert"></div>
     <div class="modal-actions"><button id="wellbot-monitor-cancel" class="modal-secondary" type="button">Отмена</button><button id="wellbot-monitor-submit" class="modal-primary" type="button">Запустить радар <span>→</span></button></div>
   </div>`;
   document.body.appendChild(modal);
   const category=modal.querySelector('#catalog-category'), sub=modal.querySelector('#catalog-subcategory'), subLabel=modal.querySelector('#subcategory-label');
-  const city=modal.querySelector('#catalog-city'), min=modal.querySelector('#catalog-min'), max=modal.querySelector('#catalog-max'), query=modal.querySelector('#catalog-query'), condition=modal.querySelector('#catalog-condition'), seller=modal.querySelector('#catalog-seller');
+  const city=modal.querySelector('#catalog-city'), min=modal.querySelector('#catalog-min'), max=modal.querySelector('#catalog-max'), query=modal.querySelector('#catalog-query'), condition=modal.querySelector('#catalog-condition'), seller=modal.querySelector('#catalog-seller'), mode=modal.querySelector('#catalog-mode');
   const error=modal.querySelector('#wellbot-monitor-error'), submit=modal.querySelector('#wellbot-monitor-submit');
   const close=()=>{if(!state.submitting)modal.remove();};
   modal.querySelector('#wellbot-monitor-cancel').onclick=close; modal.querySelector('#wellbot-monitor-x').onclick=close; modal.onclick=e=>{if(e.target===modal)close();};
@@ -240,7 +242,7 @@ async function showMonitorForm() {
     if(!category.value){error.textContent='Выберите категорию.';return;}
     if(min.value && max.value && Number(min.value)>Number(max.value)){error.textContent='Минимальная цена не может быть выше максимальной.';return;}
     state.submitting=true; submit.disabled=true; submit.textContent='Запускаю…'; haptic('light');
-    const payload={source:'kufar',categoryId:category.value,subcategoryId:sub.value||undefined,city:city.value||undefined,query:query.value.trim()||undefined,minPrice:min.value?Number(min.value):undefined,maxPrice:max.value?Number(max.value):undefined,condition:condition.value||undefined,seller:seller.value||undefined};
+    const payload={source:'kufar',categoryId:category.value,subcategoryId:sub.value||undefined,city:city.value||undefined,query:query.value.trim()||undefined,minPrice:min.value?Number(min.value):undefined,maxPrice:max.value?Number(max.value):undefined,condition:condition.value||undefined,seller:seller.value||undefined,mode:mode.value||'normal'};
     try { const result=await api('/api/monitors',{method:'POST',body:JSON.stringify(payload)}); modal.remove(); state.submitting=false; await load(true); showSuccess(result.reactivated?'Радар снова активен.':'Радар создан. WellBOT уже начал поиск.'); haptic('success'); }
     catch(e){error.textContent=e.message;submit.disabled=false;submit.textContent='Запустить радар →';state.submitting=false;}
   };
