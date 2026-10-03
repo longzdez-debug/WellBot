@@ -1,4 +1,4 @@
-const WELLBOT_BUILD = '2026.10.03.5';
+const WELLBOT_BUILD = '2026.10.04.1';
 const tg = window.Telegram?.WebApp;
 const state = { data: null, filter: 'all', loading: false, submitting: false, lastLoadedAt: 0 };
 
@@ -43,7 +43,7 @@ async function api(path, options = {}) {
   const response = await fetch(path, { ...options, cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData, ...(options.headers || {}) } });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = payload.message || ({ unauthorized: 'Сессия Telegram недействительна. Закройте WellBOT и откройте заново.', user_not_registered: 'Сначала нажмите /start в боте.', duplicate: 'Эта ссылка уже добавлена.', limit_reached: 'Достигнут лимит в 10 мониторов.', unsupported_url: 'Ссылка не поддерживается.' }[payload.error]) || `HTTP ${response.status}`;
+    const message = payload.message || ({ unauthorized: 'Сессия Telegram недействительна. Закройте WellBOT и откройте заново.', user_not_registered: 'Сначала нажмите /start в боте.', duplicate: 'Эта ссылка уже добавлена.', limit_reached: 'Достигнут лимит в 50 поисков.', unsupported_url: 'Ссылка не поддерживается.' }[payload.error]) || `HTTP ${response.status}`;
     throw new Error(message);
   }
   return payload;
@@ -57,7 +57,7 @@ function renderStats(stats) {
   document.querySelector('#stat-active').textContent = stats?.activeLinks ?? 0;
   document.querySelector('#stat-new').textContent = stats?.adsToday ?? 0;
   document.querySelector('#stat-drops').textContent = stats?.priceDropsToday ?? 0;
-  document.querySelector('#radar-count').textContent = stats?.adsToday ?? 0;
+  document.querySelector('#overview-count').textContent = stats?.adsToday ?? 0;
   const inlineActive = document.querySelector('#stat-active-inline');
   if (inlineActive) inlineActive.textContent = stats?.activeLinks ?? 0;
   const username = state.data?.user?.username;
@@ -101,7 +101,7 @@ function renderFeed() {
   const all = state.data?.ads || [];
   const ads = state.filter === 'all' ? all : all.filter(a => a.link_platform === state.filter);
   const feed = document.querySelector('#feed');
-  if (!ads.length) { feed.innerHTML = `<div class="empty"><strong>Радар чист.</strong><br>Новых объявлений по этому фильтру пока нет.</div>`; return; }
+  if (!ads.length) { feed.innerHTML = `<div class="empty"><strong>Лента чиста.</strong><br>Новых объявлений по этому фильтру пока нет.</div>`; return; }
   feed.innerHTML = ads.map(a => listingMarkup(a)).join('');
   bindListingLinks(feed);
 }
@@ -166,7 +166,7 @@ async function load(force = false) {
     setLiveStatus('LIVE', true);
     if (hadData && newCount > 0) {
       haptic('success');
-      const badge = document.querySelector('#radar-count');
+      const badge = document.querySelector('#overview-count');
       badge?.classList.add('pulse-value'); setTimeout(() => badge?.classList.remove('pulse-value'), 900);
     }
     console.info('[WellBOT]', WELLBOT_BUILD, 'bootstrap ok', { links: data.links?.length || 0, ads: data.ads?.length || 0, newCount });
@@ -255,7 +255,7 @@ async function showMonitorForm() {
     state.submitting=true; submit.disabled=true; submit.textContent='Запускаю…'; haptic('light');
     const payload={source:'kufar',categoryId:category.value,subcategoryId:sub.value||undefined,city:city.value||undefined,query:query.value.trim()||undefined,minPrice:min.value?Number(min.value):undefined,maxPrice:max.value?Number(max.value):undefined,condition:condition.value||undefined,seller:seller.value||undefined,mode:mode.value||'normal'};
     try { const result=await api('/api/monitors',{method:'POST',body:JSON.stringify(payload)}); modal.remove(); state.submitting=false; await load(true); showSuccess(result.reactivated?'Поиск снова активен.':'Поиск создан. WellBOT уже начал мониторинг.'); haptic('success'); }
-    catch(e){error.textContent=e.message;submit.disabled=false;submit.textContent='Запустить радар →';state.submitting=false;}
+    catch(e){error.textContent=e.message;submit.disabled=false;submit.textContent='Создать поиск →';state.submitting=false;}
   };
   submit.onclick=submitMonitor;
   modal.querySelectorAll('input,select').forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter')submitMonitor();if(e.key==='Escape')close();}));
