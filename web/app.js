@@ -204,6 +204,7 @@ async function showMonitorForm() {
     <h2>Создать монитор</h2>
     <p>Выберите категорию и фильтры. Ссылки Kufar больше не нужны.</p>
     <label class="modal-label">Категория</label>
+    <input id="catalog-category-search" type="search" maxlength="80" placeholder="Найти категорию…">
     <select id="catalog-category"><option value="">Выберите категорию</option>${categories.map(c=>`<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('')}</select>
     <label class="modal-label" id="subcategory-label" hidden>Подкатегория</label>
     <select id="catalog-subcategory" hidden><option value="">Все в категории</option></select>
@@ -225,17 +226,25 @@ async function showMonitorForm() {
     <div class="modal-actions"><button id="wellbot-monitor-cancel" class="modal-secondary" type="button">Отмена</button><button id="wellbot-monitor-submit" class="modal-primary" type="button">Запустить радар <span>→</span></button></div>
   </div>`;
   document.body.appendChild(modal);
-  const category=modal.querySelector('#catalog-category'), sub=modal.querySelector('#catalog-subcategory'), subLabel=modal.querySelector('#subcategory-label');
+  const categorySearch=modal.querySelector('#catalog-category-search'), category=modal.querySelector('#catalog-category'), sub=modal.querySelector('#catalog-subcategory'), subLabel=modal.querySelector('#subcategory-label');
   const city=modal.querySelector('#catalog-city'), min=modal.querySelector('#catalog-min'), max=modal.querySelector('#catalog-max'), query=modal.querySelector('#catalog-query'), condition=modal.querySelector('#catalog-condition'), seller=modal.querySelector('#catalog-seller'), mode=modal.querySelector('#catalog-mode');
   const error=modal.querySelector('#wellbot-monitor-error'), submit=modal.querySelector('#wellbot-monitor-submit');
   const close=()=>{if(!state.submitting)modal.remove();};
   modal.querySelector('#wellbot-monitor-cancel').onclick=close; modal.querySelector('#wellbot-monitor-x').onclick=close; modal.onclick=e=>{if(e.target===modal)close();};
+  const renderCategories=(needle='')=>{
+    const q=needle.trim().toLocaleLowerCase('ru-RU');
+    const matches=categories.filter(c=>!q || c.title.toLocaleLowerCase('ru-RU').includes(q) || (c.children||[]).some(x=>x.title.toLocaleLowerCase('ru-RU').includes(q)));
+    category.innerHTML='<option value="">Выберите категорию</option>'+matches.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.title)+'</option>').join('');
+    if (category.value) category.dispatchEvent(new Event('change'));
+  };
+  categorySearch.oninput=()=>renderCategories(categorySearch.value);
   category.onchange=()=>{
     const node=categories.find(c=>c.id===category.value);
     const children=node?.children||[];
     sub.innerHTML='<option value="">Все в категории</option>'+children.map(c=>`<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('');
     sub.hidden=!children.length; subLabel.hidden=!children.length;
   };
+  renderCategories();
   const submitMonitor=async()=>{
     if(state.submitting)return;
     error.textContent='';
