@@ -30,7 +30,8 @@ export class DatabaseService {
   async getLinkForUser(linkId:number,userId:number):Promise<Link|null>{const r=await this.pool.query<Link>('SELECT * FROM links WHERE id=$1 AND user_id=$2',[linkId,userId]);return r.rows[0]||null;}
   async deleteLink(linkId:number,userId?:number):Promise<boolean>{const query=userId==null?'DELETE FROM links WHERE id=$1':'DELETE FROM links WHERE id=$1 AND user_id=$2';const params=userId==null?[linkId]:[linkId,userId];const r=await this.pool.query(query,params);return(r.rowCount||0)>0;}
   async setLinkActive(linkId:number,userId:number,isActive:boolean):Promise<boolean>{const r=await this.pool.query('UPDATE links SET is_active=$1,error_count=CASE WHEN $1 THEN 0 ELSE error_count END WHERE id=$2 AND user_id=$3',[isActive,linkId,userId]);return(r.rowCount||0)>0;}
-  async getActiveLinks():Promise<Link[]>{const r=await this.pool.query<Link>('SELECT * FROM links WHERE is_active=true ORDER BY id',[]);return r.rows;}
+  async getActiveLinks():Promise<Link[]>{const r=await this.pool.query<Link>('SELECT * FROM links WHERE is_active=true AND (next_check_at IS NULL OR next_check_at<=CURRENT_TIMESTAMP) ORDER BY COALESCE(next_check_at,CURRENT_TIMESTAMP),id',[]);return r.rows;}
+  async scheduleNextCheck(linkId:number,delayMs:number):Promise<void>{const safe=Math.min(Math.max(Math.floor(delayMs),250),300000);await this.pool.query('UPDATE links SET next_check_at=CURRENT_TIMESTAMP+($2::int * INTERVAL \'1 millisecond\') WHERE id=$1 AND is_active=true',[linkId,safe]);}
   async incrementErrorCount(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET error_count=error_count+1 WHERE id=$1',[linkId]);}
   async markLinkInactive(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET is_active=false WHERE id=$1',[linkId]);}
   async updateLastParsed(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET last_parsed_at=CURRENT_TIMESTAMP WHERE id=$1',[linkId]);}
