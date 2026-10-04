@@ -2,51 +2,18 @@ import { Ad } from '../types';
 import { parseMarketPrice } from './MarketEngine';
 
 export interface DealAnalysis {
-  score: number | null;
-  buyPrice: number | null;
-  marketPrice: number | null;
-  sellPrice: number | null;
-  profit: number | null;
-  roi: number | null;
-  currency: string | null;
-  reasons: string[];
+  score:number|null; buyPrice:number|null; marketPrice:number|null; sellPrice:number|null; profit:number|null; roi:number|null; currency:string|null; reasons:string[]; confidence:string|null;
 }
-
-export function analyzeDeal(ad: Ad): DealAnalysis {
-  const current = parseMarketPrice(ad.price);
-  const market = typeof ad.market_median === 'number' && Number.isFinite(ad.market_median) ? ad.market_median : null;
-  if (!current || typeof ad.market_percent !== 'number' || !Number.isFinite(ad.market_percent) || market == null) return { score: null, buyPrice: current?.amount ?? null, marketPrice: market, sellPrice: null, profit: null, roi: null, currency: current?.currency ?? null, reasons: [] };
-
-  let score = 50;
-  const reasons: string[] = [];
-
-  if (typeof ad.market_percent === 'number' && ad.market_status) {
-    const discount = -ad.market_percent;
-    if (discount >= 35) { score += 35; reasons.push('сильно ниже рынка'); }
-    else if (discount >= 25) { score += 28; reasons.push('существенно ниже рынка'); }
-    else if (discount >= 15) { score += 20; reasons.push('ниже рынка'); }
-    else if (ad.market_status === 'above_market') { score -= 25; reasons.push('выше рынка'); }
-    else reasons.push('цена около рынка');
-  }
-
-  if (ad.is_company === false) { score += 5; reasons.push('частный продавец'); }
-  if (ad.condition === 'used') score += 2;
-  if (ad.condition === 'new') score += 4;
-
-  if (ad.published_at) {
-    const published = ad.published_at instanceof Date ? ad.published_at.getTime() : Date.parse(String(ad.published_at));
-    if (Number.isFinite(published)) {
-      const ageMinutes = Math.max(0, (Date.now() - published) / 60000);
-      if (ageMinutes <= 5) { score += 8; reasons.push('только что опубликовано'); }
-      else if (ageMinutes <= 30) score += 5;
-      else if (ageMinutes <= 120) score += 2;
-    }
-  }
-
-  const finalScore = Math.max(0, Math.min(100, Math.round(score)));
-  const sellPrice = market != null ? Number((market * 0.96).toFixed(2)) : null;
-  const profit = sellPrice != null ? Number((sellPrice - current.amount).toFixed(2)) : null;
-  const roi = profit != null && current.amount > 0 ? Number(((profit / current.amount) * 100).toFixed(1)) : null;
-
-  return { score: finalScore, buyPrice: current.amount, marketPrice: market, sellPrice, profit, roi, currency: current.currency, reasons: reasons.slice(0, 4) };
+export function analyzeDeal(ad:Ad):DealAnalysis{
+ const current=parseMarketPrice(ad.price);const market=Number.isFinite(ad.market_median)?Number(ad.market_median):null;
+ if(!current||market==null||!Number.isFinite(Number(ad.market_percent)))return{score:null,buyPrice:current?.amount??null,marketPrice:market,sellPrice:null,profit:null,roi:null,currency:current?.currency??null,reasons:[],confidence:(ad as any).market_confidence??null};
+ let score=40;const reasons:string[]=[];const pct=Number(ad.market_percent);const discount=-pct;
+ if(discount>=35){score+=32;reasons.push('сильно ниже рынка')}else if(discount>=25){score+=25;reasons.push('существенно ниже рынка')}else if(discount>=15){score+=18;reasons.push('ниже рынка')}else if(pct>0){score-=25;reasons.push('выше рынка')}else reasons.push('цена около рынка');
+ if((ad as any).market_quality>=70){score+=8;reasons.push('много похожих объявлений')}else if((ad as any).market_quality>=45)score+=4;
+ if(ad.is_company===false){score+=4;reasons.push('частный продавец')}if(ad.condition==='new')score+=4;else if(ad.condition==='used')score+=2;
+ if(ad.published_at){const t=ad.published_at instanceof Date?ad.published_at.getTime():Date.parse(String(ad.published_at));if(Number.isFinite(t)){const age=Math.max(0,(Date.now()-t)/60000);if(age<=5){score+=8;reasons.push('только что опубликовано')}else if(age<=30)score+=5;else if(age<=120)score+=2;}}
+ const sell=Number.isFinite((ad as any).sell_normal)?Number((ad as any).sell_normal):Number((market*.97).toFixed(2));const profit=Number((sell-current.amount).toFixed(2));const roi=current.amount>0?Number(((profit/current.amount)*100).toFixed(1)):null;
+ if(profit>0)score+=Math.min(8,Math.max(0,Math.round(roi??0)/5));else score-=8;
+ const finalScore=Math.max(0,Math.min(100,Math.round(score)));
+ return{score:finalScore,buyPrice:current.amount,marketPrice:market,sellPrice:sell,profit,roi,currency:current.currency,reasons:reasons.slice(0,4),confidence:(ad as any).market_confidence??null};
 }
