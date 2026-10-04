@@ -9,7 +9,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./styles.css?v=20261004-12">
 <link rel="stylesheet" href="./premium.css?v=20261004-12">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -26,10 +25,6 @@
       <button class="nav-item" data-scroll="feed-section"><span>▱</span>Товары</button>
       <button class="nav-item" data-scroll="drops-section"><span>◎</span>Сделки</button>
       <button class="nav-item" data-scroll="monitors-section"><span>◫</span>Задачи</button>
-      <button class="nav-item" data-scroll="monitors-section"><span>♙</span>Профили</button>
-      <button class="nav-item" data-scroll="drops-section"><span>⌁</span>Прокси</button>
-      <button class="nav-item" data-scroll="drops-section"><span>▥</span>Статистика</button>
-      <button class="nav-item" data-scroll="monitors-section"><span>⚙</span>Настройки</button>
     </nav>
 
     <div class="sidebar-spacer"></div>
@@ -37,27 +32,27 @@
     <div class="premium-side-card">
       <div class="premium-crown">♛</div>
       <strong>PREMIUM</strong>
-      <small>Активна до 28.10.2026</small>
-      <div class="side-metric"><span>Успешных покупок</span><b>247</b></div>
-      <div class="side-metric"><span>Общий профит</span><b>+312 450 ₽</b></div>
-      <div class="side-metric"><span>Средняя маржа</span><b>+34%</b></div>
+      <small>Тариф Premium</small>
+      <div class="side-metric"><span>Активных поисков</span><b id="side-active">—</b></div>
+      <div class="side-metric"><span>Найдено сегодня</span><b id="side-found">—</b></div>
+      <div class="side-metric"><span>Снижений сегодня</span><b id="side-drops">—</b></div>
     </div>
 
-    <button class="profile-card" type="button">
-      <span class="profile-avatar">p</span>
-      <span><b>pixelplay</b><small>Premium аккаунт</small></span>
+    <button class="profile-card" type="button" data-action="profile">
+      <span class="profile-avatar" id="profile-avatar">W</span>
+      <span><b id="profile-name">WellBOT</b><small>Premium аккаунт</small></span>
       <i>›</i>
     </button>
   </aside>
 
   <div class="workspace">
     <header class="topbar">
-      <div class="search-box"><span>⌕</span><input aria-label="Поиск" placeholder="Поиск по товарам, SKU, ссылкам..."><kbd>Ctrl + K</kbd></div>
+      <div class="search-box"><span>⌕</span><input id="global-search" aria-label="Поиск" autocomplete="off" placeholder="Поиск по товарам, SKU, ссылкам..."><kbd>Ctrl + K</kbd></div>
       <div class="top-actions">
-        <button class="top-icon" aria-label="Уведомления">♧</button>
-        <button class="top-icon" aria-label="Тема">☼</button>
+        <button class="top-icon" data-scroll="drops-section" aria-label="Уведомления">♧</button>
+        <button class="top-icon" data-action="refresh" aria-label="Обновить">↻</button>
         <span class="divider"></span>
-        <div class="bot-status"><i></i><span>Бот работает</span></div>
+        <div class="bot-status" title="Статус обновляется автоматически"><i></i><span>Бот работает</span></div>
         <button class="top-play" data-action="add" aria-label="Запустить поиск">▶</button>
       </div>
     </header>
@@ -78,14 +73,14 @@
               <div class="hero-box">W</div>
             </div>
             <div class="hero-stats">
-              <div><span>⌕</span><small>Найдено товаров</small><strong id="stat-active">—</strong></div>
-              <div><span>🛒</span><small>Успешных покупок</small><strong>247</strong></div>
-              <div><span>↗</span><small>Прибыль</small><strong>+312 450 ₽</strong></div>
+              <div><span>⌕</span><small>Найдено сегодня</small><strong id="stat-found">—</strong></div>
+              <div><span>◫</span><small>Активных поисков</small><strong id="stat-active-searches">—</strong></div>
+              <div><span>↓</span><small>Снижений сегодня</small><strong id="stat-drops">—</strong></div>
             </div>
           </section>
 
           <section class="section hot-section" id="feed-section">
-            <div class="section-head"><div><span class="label">LIVE MARKET</span><h2>Горячие товары</h2><p>Самые перспективные позиции прямо сейчас</p></div><button class="link-btn" data-action="refresh">Показать все →</button></div>
+            <div class="section-head"><div><span class="label">LIVE MARKET</span><h2>Горячие товары</h2><p>Самые перспективные позиции прямо сейчас</p></div><button class="link-btn" data-action="refresh">Обновить →</button></div>
             <div class="chips"><button class="chip active" data-filter="all">Все</button><button class="chip" data-filter="kufar">Kufar</button><button class="chip" data-filter="onliner">Onliner</button><button class="chip" data-filter="av">AV.BY</button></div>
             <div id="hot-find" hidden></div>
             <div id="feed"><div class="empty">Загружаю свежие объявления…</div></div>
@@ -104,21 +99,22 @@
 
         <aside class="right-rail">
           <section class="quick-launch">
-            <div class="rail-title"><span>♟</span><div><h3>Быстрый запуск</h3><p>Создай задачу за пару кликов</p></div></div>
-            <div class="launch-tabs"><button class="active">Товар</button><button>Ссылка</button><button>Скан</button></div>
-            <div class="launch-input">Название товара или SKU <span>⌕</span></div>
-            <div class="launch-row"><div>Размер <b>Любой⌄</b></div><div>Цена <b>До 30 000 ₽⌄</b></div></div>
-            <div class="launch-row"><div>Город <b>Вся Беларусь⌄</b></div><div>Регион <b>Все регионы⌄</b></div></div>
+            <div class="rail-title"><span>♟</span><div><h3>Быстрый запуск</h3><p>Каталог, город и фильтры — без ссылок</p></div></div>
+            <div class="launch-summary">
+              <span>КАТАЛОГ WELLBOT</span>
+              <b>Выбери категорию → задай цену → запусти</b>
+              <small>После запуска бот автоматически проверяет новые объявления.</small>
+            </div>
             <button class="launch-button" data-action="add">▶ Создать задачу</button>
           </section>
 
           <section class="rail-card">
-            <div class="rail-heading"><h3>Последние находки</h3><button data-action="refresh">Все →</button></div>
+            <div class="rail-heading"><h3>Последние находки</h3><button data-action="refresh">Обновить</button></div>
             <div id="recent-list"><div class="recent-placeholder">Загрузка…</div></div>
           </section>
 
           <section class="rail-premium">
-            <div><span class="crown">♛</span><strong>WELLBOT <b>PREMIUM</b></strong><p>Больше возможностей.<br>Больше прибыли.</p><button data-action="add">Узнать больше →</button></div>
+            <div><span class="crown">♛</span><strong>WELLBOT <b>PREMIUM</b></strong><p>Автоматический поиск и аналитика рынка.</p><button data-action="profile">Открыть профиль →</button></div>
             <span class="premium-orb">W</span>
           </section>
         </aside>
@@ -132,7 +128,7 @@
  function theme(w){try{w.setBackgroundColor&&w.setBackgroundColor("#07090d");w.setHeaderColor&&w.setHeaderColor("#07090d");w.setBottomBarColor&&w.setBottomBarColor("#07090d")}catch(_){}}
  function fail(m){if(started)return;started=true;document.querySelectorAll(".empty,.recent-placeholder").forEach(function(n){n.textContent=m;n.classList.add("error")})}
  function data(w){if(w&&w.initData)return w.initData;try{var x=window.Telegram&&window.Telegram.WebView&&window.Telegram.WebView.initParams&&window.Telegram.WebView.initParams.tgWebAppData;if(x)return x}catch(_){}try{for(var i=0;i<2;i++){var s=i===0?String(location.hash||""):String(location.search||"");var v=new URLSearchParams(s.replace(/^#|^\?/,"")).get("tgWebAppData");if(v)return v}}catch(_){}return ""}
- function start(){if(started)return;var w=window.Telegram&&window.Telegram.WebApp;if(!w)return Date.now()<deadline?setTimeout(start,50):fail("Не удалось открыть WellBOT внутри Telegram.");theme(w);try{w.ready();w.expand()}catch(_){}var d=data(w);if(!d)return Date.now()<deadline?setTimeout(start,100):fail("Открой WellBOT через кнопку в Telegram, а не обычной ссылкой.");window.__WELLBOT_INIT_DATA__=d;var s=document.createElement("script");s.src="./app.js?v=20261004-12";s.onerror=function(){fail("Не удалось загрузить WellBOT. Открой Mini App заново.")};document.body.appendChild(s);started=true}
+ function start(){if(started)return;var w=window.Telegram&&window.Telegram.WebApp;if(!w)return Date.now()<deadline?setTimeout(start,50):fail("Не удалось открыть WellBOT внутри Telegram.");theme(w);try{w.ready();w.expand()}catch(_){}var d=data(w);if(!d)return Date.now()<deadline?setTimeout(start,100):fail("Открой WellBOT через кнопку в Telegram, а не обычной ссылкой.");window.__WELLBOT_INIT_DATA__=d;var s=document.createElement("script");s.src="./app.js?v=20261004-14";s.onerror=function(){fail("Не удалось загрузить WellBOT. Открой Mini App заново.")};document.body.appendChild(s);started=true}
  start();
 })();
 </script>
