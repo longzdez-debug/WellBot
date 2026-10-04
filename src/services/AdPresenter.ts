@@ -53,12 +53,12 @@ export class AdPresenter {
     if (!description?.trim()) return null;
     const normalized = description.replace(/\u0000/g, '').replace(/\r?\n/g, '\n').trim();
     if (!normalized) return null;
-    const lines = normalized.split('\n').map(line => line.replace(/^[-•*]+\\s*/, '').replace(/\\s+/g, ' ').trim()).filter(Boolean);
+    const lines = normalized.split('\n').map(line => line.replace(/^[-•*]+\s*/, '').replace(/\s+/g, ' ').trim()).filter(Boolean);
     const important: string[] = [];
     const patterns = [
-      /\\b(состояни[ея]|состояние|идеальн|хорош|отличн|есть дефект|дефект|царапин|трещин|ремонт|не работает|рабоч)/i,
-      /\\b(комплект|комплектаци|коробк|зарядк|чек|гаранти|документ)/i,
-      /\\b(торг|обмен|срочно|забирать|доставка|самовывоз)/i,
+      /\b(состояни[ея]|состояние|идеальн|хорош|отличн|есть дефект|дефект|царапин|трещин|ремонт|не работает|рабоч)/i,
+      /\b(комплект|комплектаци|коробк|зарядк|чек|гаранти|документ)/i,
+      /\b(торг|обмен|срочно|забирать|доставка|самовывоз)/i,
     ];
     for (const line of lines) {
       if (patterns.some(pattern => pattern.test(line)) && !important.includes(line)) important.push(line);
