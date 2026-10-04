@@ -111,7 +111,7 @@ export class ParserScheduler {
       const configured=this.applyMonitorFilters(link,marketCandidates);
       const configuredIds=new Set(configured.map(ad=>ad.external_id));
       const ads=marketCandidates;
-      const marketUpdates:Array<{id:number;status:Ad['market_status'];percent:number|null;median:number|null;low:number|null;high:number|null;sellFast:number|null;sellNormal:number|null;sellMax:number|null;sampleSize:number|null;confidence:Ad['market_confidence'];quality:number|null}>=[];
+      const marketUpdates:Array<{id:number;status:NonNullable<Ad['market_status']>;percent:number|null;median:number|null;low:number|null;high:number|null;sellFast:number|null;sellNormal:number|null;sellMax:number|null;sampleSize:number|null;confidence:Ad['market_confidence'];quality:number|null}>=[];
       const baseline = !link.last_parsed_at;
       if (!baseline && rawAds.length > 0 && normalizedRaw.length === 0) {
         this.metrics.linkFailures += 1;
@@ -164,7 +164,7 @@ export class ParserScheduler {
             } else {
               priceUpdates.push({id:last.adId,price:adData.price});
             }
-            if (adData.market_median != null) marketUpdates.push({id:last.adId,status:adData.market_status??null,percent:adData.market_percent??null,median:adData.market_median,low:adData.market_low??null,high:adData.market_high??null,sellFast:adData.sell_fast??null,sellNormal:adData.sell_normal??null,sellMax:adData.sell_max??null,sampleSize:adData.market_sample_size??null,confidence:adData.market_confidence??null,quality:adData.market_quality??null});
+            if (adData.market_median != null) marketUpdates.push({id:last.adId,status:adData.market_status ?? null,percent:adData.market_percent??null,median:adData.market_median,low:adData.market_low??null,high:adData.market_high??null,sellFast:adData.sell_fast??null,sellNormal:adData.sell_normal??null,sellMax:adData.sell_max??null,sampleSize:adData.market_sample_size??null,confidence:adData.market_confidence??null,quality:adData.market_quality??null});
           }
           continue;
         }
