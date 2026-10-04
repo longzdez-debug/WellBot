@@ -6,6 +6,7 @@ import { DatabaseService } from '../database/DatabaseService';
 import { logger } from '../utils/logger';
 import { KUFAR_CATALOG, MonitorConfig, buildKufarSearchUrl, findCatalogNode, findCatalogCategory } from '../catalog/KufarCatalog';
 import { MARKETPLACE_CATALOGS, MARKETPLACES, MarketplaceSource, buildMarketplaceSearchUrl, findMarketplaceNode, findMarketplaceCategory } from '../catalog/MarketplaceCatalog';
+import { KUFAR_PHONE_BRANDS, KUFAR_PHONE_FILTERS, isKufarPhoneCategory } from '../catalog/KufarPhoneCatalog';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -16,6 +17,30 @@ const MAX_BODY = 16 * 1024;
 const MAX_INIT_DATA = 16 * 1024;
 const MAX_LINKS = 50;
 const AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
+const PHONE_MODEL_CACHE=new Map<string,{expires:number;models:{id:string;title:string;slug:string}[]}>();
+const PHONE_MODEL_TTL=30*60*1000;
+
+async function getKufarPhoneModels(brand:string){
+  const key=brand.toLowerCase();
+  const cached=PHONE_MODEL_CACHE.get(key);
+  if(cached&&cached.expires>Date.now()) return cached.models;
+  const response=await fetch('https://www.kufar.by/l/mobilnye-telefony/mt~'+encodeURIComponent(key),{headers:{'User-Agent':'WellBOT/2.0 catalog'}});
+  if(!response.ok) throw new Error('kufar_catalog_unavailable');
+  const html=await response.text();
+  const found=new Map<string,{id:string;title:string;slug:string}>();
+  const re=/href=["'](?:https?:\\/\\/www\\.kufar\\.by)?\\/l\\/mobilnye-telefony\\/mt~([^"'?#]+)["'][^>]*>([^<]{2,100})<\\/a>/gi;
+  let match;
+  while((match=re.exec(html))){
+    const raw=decodeURIComponent(match[1]).trim();
+    if(!raw.toLowerCase().startsWith(key+'-')) continue;
+    const slug=raw.slice(key.length+1);
+    const title=match[2].replace(/\\s+/g,' ').trim();
+    if(slug&&title) found.set(slug,{id:key+'-'+slug,title,slug});
+  }
+  const models=[...found.values()].sort((a,b)=>a.title.localeCompare(b.title,'ru'));
+  PHONE_MODEL_CACHE.set(key,{expires:Date.now()+PHONE_MODEL_TTL,models});
+  return models;
+}
 
 type AuthUser = { id: number; username?: string; first_name?: string; last_name?: string };
 type TelegramInitData = { user: AuthUser; authDate: number };
@@ -108,8 +133,16 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           return;
         }
 
+        if (requestPath === '/api/catalog/phone-models' && req.method === 'GET') {
+          const brand=String(requestUrl.searchParams.get('brand')||'').toLowerCase();
+          if(!KUFAR_PHONE_BRANDS.some(x=>x.id===brand)){json(res,400,{error:'invalid_brand',message:'Выберите производителя из каталога Kufar.'});return;}
+          try { json(res,200,{brand,models:await getKufarPhoneModels(brand)}); }
+          catch(error){ logger.warn('Kufar phone model catalog unavailable',{brand,error:error instanceof Error?error.message:String(error)}); json(res,200,{brand,models:[]}); }
+          return;
+        }
+
         if (requestPath === '/api/catalog' && req.method === 'GET') {
-          json(res, 200, { marketplaces: MARKETPLACES, catalogs: { kufar: KUFAR_CATALOG, onliner: MARKETPLACE_CATALOGS.onliner, av: MARKETPLACE_CATALOGS.av } });
+          json(res, 200, { marketplaces: MARKETPLACES, catalogs: { kufar: KUFAR_CATALOG, onliner: MARKETPLACE_CATALOGS.onliner, av: MARKETPLACE_CATALOGS.av }, phoneBrands: KUFAR_PHONE_BRANDS, phoneFilters: KUFAR_PHONE_FILTERS });
           return;
         }
 
@@ -132,6 +165,10 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           if (config.seller && config.seller!=='private' && config.seller!=='company') { json(res,400,{error:'invalid_seller'}); return; }
           if (config.minMarketDiscount!=null && (!Number.isFinite(Number(config.minMarketDiscount)) || Number(config.minMarketDiscount)<0 || Number(config.minMarketDiscount)>90)) { json(res,400,{error:'invalid_market_discount',message:'Минимальная скидка от рынка должна быть от 0 до 90%.'}); return; }
           if (config.mode && config.mode!=='normal' && config.mode!=='sniper') { json(res,400,{error:'invalid_mode'}); return; }
+          if (config.brand!=null && (typeof config.brand!=='string' || config.brand.length>60 || !KUFAR_PHONE_BRANDS.some(x=>x.id===String(config.brand).toLowerCase()))) { json(res,400,{error:'invalid_brand',message:'Производитель не найден в каталоге Kufar.'}); return; }
+          if (config.model!=null && (typeof config.model!=='string' || config.model.length>100)) { json(res,400,{error:'invalid_model',message:'Модель слишком длинная.'}); return; }
+          if ((config.brand||config.model||config.phoneFilters) && source!=='kufar') { json(res,400,{error:'phone_filters_only_kufar'}); return; }
+          if ((config.brand||config.model||config.phoneFilters) && !isKufarPhoneCategory(config.categoryId,config.subcategoryId)) { json(res,400,{error:'phone_filters_wrong_category',message:'Фильтры телефона доступны только для мобильных телефонов Kufar.'}); return; }
           if (config.query!=null && (typeof config.query!=='string' || config.query.length>120)) { json(res,400,{error:'invalid_query'}); return; }
           if (config.minPrice!=null && (!Number.isFinite(Number(config.minPrice)) || Number(config.minPrice)<0)) { json(res,400,{error:'invalid_min_price'}); return; }
           if (config.maxPrice!=null && (!Number.isFinite(Number(config.maxPrice)) || Number(config.maxPrice)<0)) { json(res,400,{error:'invalid_max_price'}); return; }
