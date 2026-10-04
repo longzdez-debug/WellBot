@@ -1,4 +1,5 @@
-import { KUFAR_CATALOG, findCatalogCategory, findCatalogNode } from './KufarCatalog';
+import { KUFAR_CATALOG, findCatalogCategory, findCatalogNode, buildKufarSearchUrl } from './KufarCatalog';
+import { KUFAR_PHONE_BRANDS, KUFAR_PHONE_FILTERS, isKufarPhoneCategory } from './KufarPhoneCatalog';
 
 describe('KufarCatalog', () => {
   test('contains current top-level Kufar sections used by WellBOT', () => {
@@ -33,5 +34,18 @@ describe('KufarCatalog', () => {
     expect(findCatalogNode('17010')?.title).toBe('Мобильные телефоны');
     expect(findCatalogCategory('17010')?.title).toBe('Телефоны и планшеты');
     expect(findCatalogNode('2010')?.title).toBe('Легковые автомобили');
+  });
+  test('supports live phone facets for every current Kufar phone brand', () => {
+    expect(KUFAR_PHONE_BRANDS.length).toBeGreaterThanOrEqual(30);
+    expect(new Set(KUFAR_PHONE_BRANDS.map(x=>x.id)).size).toBe(KUFAR_PHONE_BRANDS.length);
+    expect(KUFAR_PHONE_FILTERS.map(x=>x.id)).toEqual(expect.arrayContaining(['os','screen','memory','ram','sim','dualSim','nfc','fingerprint','memoryCard','wirelessCharging']));
+    expect(isKufarPhoneCategory('phones','17010')).toBe(true);
+    expect(isKufarPhoneCategory('electronics','17010')).toBe(false);
+  });
+
+  test('builds exact Kufar manufacturer/model paths', () => {
+    const url=buildKufarSearchUrl({source:'kufar',categoryId:'phones',subcategoryId:'17010',brand:'apple',model:'iPhone 17',query:'256GB'});
+    expect(url).toContain('/l/mobilnye-telefony/mt~apple-iphone-17');
+    expect(url).toContain('query=256GB');
   });
 });
