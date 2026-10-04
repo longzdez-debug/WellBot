@@ -16,8 +16,15 @@ export const AV_COMPLETE_CURRENT_SECTIONS=[
 export const MARKETPLACES:{id:MarketplaceSource;title:string;short:string}[]=[
 {id:'kufar',title:'Kufar',short:'Объявления'},{id:'onliner',title:'Onliner',short:'Барахолка'},{id:'av',title:'AV.BY',short:'Авто и запчасти'}];
 export function getMarketplaceCatalog(source:MarketplaceSource){return MARKETPLACE_CATALOGS[source]||[]}
-export function findMarketplaceNode(source:MarketplaceSource,id:string):MarketplaceNode|null{for(const n of getMarketplaceCatalog(source)){if(n.id===id)return n;const x=n.children?.find(v=>v.id===id);if(x)return x}return null}
-export function findMarketplaceCategory(source:MarketplaceSource,id:string):MarketplaceNode|null{const list=getMarketplaceCatalog(source);return list.find(n=>n.id===id)||list.find(n=>n.children?.some(x=>x.id===id))||null}
+export function findMarketplaceNode(source:MarketplaceSource,id:string):MarketplaceNode|null{
+ const walk=(nodes:MarketplaceNode[]):MarketplaceNode|null=>{for(const item of nodes){if(item.id===id)return item;const found=item.children?walk(item.children):null;if(found)return found;}return null};
+ return walk(getMarketplaceCatalog(source));
+}
+export function findMarketplaceCategory(source:MarketplaceSource,id:string):MarketplaceNode|null{
+ const list=getMarketplaceCatalog(source); const direct=list.find(n=>n.id===id); if(direct)return direct;
+ const walk=(nodes:MarketplaceNode[],root:MarketplaceNode):MarketplaceNode|null=>{for(const item of nodes){if(item.id===id)return root;const found=item.children?walk(item.children,root):null;if(found)return found;}return null};
+ for(const root of list){const found=walk(root.children||[],root);if(found)return found;} return null;
+}
 export function buildMarketplaceSearchUrl(source:MarketplaceSource,config:any):string{
  const category=findMarketplaceNode(source,config.subcategoryId||config.categoryId); const parts=[category?.title||'',String(config.query||'').trim()].filter(Boolean).join(' ');
  if(source==='onliner'){const real=String(config.categoryId)==='realestate';const u=new URL(real?'https://r.onliner.by/ak/apartments':'https://baraholka.onliner.by/search.php');if(parts)u.searchParams.set('query',parts);if(config.city)u.searchParams.set('city',String(config.city));if(config.minPrice!=null)u.searchParams.set('price[min]',String(config.minPrice));if(config.maxPrice!=null)u.searchParams.set('price[max]',String(config.maxPrice));return u.toString()}
