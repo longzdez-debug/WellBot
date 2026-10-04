@@ -84,11 +84,23 @@ export class ParserScheduler {
   private isValidAd(ad:Ad|null|undefined):ad is Ad{if(!ad)return false;const externalId=typeof ad.external_id==='string'?ad.external_id.trim():'';const title=typeof ad.title==='string'?ad.title.trim():'';const adUrl=typeof ad.ad_url==='string'?ad.ad_url.trim():'';if(!externalId||!title||!adUrl)return false;try{const parsed=new URL(adUrl);return parsed.protocol==='http:'||parsed.protocol==='https:';}catch{return false;}}
   private normalizeAds(rawAds:Ad[]):Ad[]{const valid:Ad[]=[];const seen=new Set<string>();for(const ad of rawAds){if(!this.isValidAd(ad))continue;const externalId=ad.external_id.trim();if(seen.has(externalId))continue;seen.add(externalId);valid.push({...ad,external_id:externalId,title:ad.title.trim(),ad_url:ad.ad_url.trim()});}return valid;}
   private async parseLink(link:ParseLink):Promise<ParseResult>{const newAds:Ad[]=[];const priceDrops:PriceDrop[]=[];let failureCount=Number(link.error_count||0);try{const parser=ParserFactory.getParser(link.platform);if(!parser){failureCount=await this.recordLinkFailure(link,`No parser configured for platform ${link.platform}`);return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}let rawAds:Ad[];try{rawAds=await this.withTimeout(parser.parseUrl(link.url),this.parseTimeoutMs,`Parse timeout after ${this.parseTimeoutMs} milliseconds`);}catch(error:unknown){const message=error instanceof Error?error.message:String(error);failureCount=await this.recordLinkFailure(link,message);return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}if(!Array.isArray(rawAds)){failureCount=await this.recordLinkFailure(link,'Parser returned a non-array result');return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}const normalizedRaw=this.normalizeAds(rawAds);
-      const marketAds = await this.db.getRecentMarketAds(link.id, 250);
-      const marketCandidates = normalizedRaw.map(ad => this.attachComparableMarket(ad, marketAds));
-      const configured = this.applyMonitorFilters(link, marketCandidates);
-      const configuredIds = new Set(configured.map(ad => ad.external_id));
-      const ads = marketCandidates;
+      const skipSlots=Math.min(100,Math.max(0,Math.floor(Number(link.config?.skipSlots||0))));
+      const scannedRaw=skipSlots>0?normalizedRaw.slice(skipSlots):normalizedRaw;
+      if(skipSlots>0) logger.debug('Skipping listing slots for monitor',{linkId:link.id,skipSlots,availableSlots:normalizedRaw.length});
+      const externalIds=scannedRaw.map(ad=>ad.external_id);
+      const state=await this.db.getExistingAdStatesForLink(link.id,externalIds);
+      const marketAds=await this.db.getRecentMarketAds(link.id,250);
+      const marketCandidates=scannedRaw.map(ad=>{
+        const last=state.prices.get(ad.external_id); const newPrice=parseMarketPrice(ad.price); const oldPrice=last?parseMarketPrice(last.price):null;
+        const unchanged=Boolean(last&&newPrice&&oldPrice&&newPrice.currency===oldPrice.currency&&newPrice.amount===oldPrice.amount);
+        const cached=state.market.get(ad.external_id);
+        if(state.existingIds.has(ad.external_id)&&unchanged&&cached) return {...ad,market_status:cached.status,market_percent:cached.percent,market_median:cached.median,market_low:cached.low,market_high:cached.high,sell_fast:cached.sellFast,sell_normal:cached.sellNormal,sell_max:cached.sellMax,market_sample_size:cached.sampleSize,market_confidence:cached.confidence,market_quality:cached.quality};
+        return this.attachComparableMarket(ad,marketAds);
+      });
+      const configured=this.applyMonitorFilters(link,marketCandidates);
+      const configuredIds=new Set(configured.map(ad=>ad.external_id));
+      const ads=marketCandidates;
+      const marketUpdates:Array<{id:number;status:Ad['market_status'];percent:number|null;median:number|null;low:number|null;high:number|null;sellFast:number|null;sellNormal:number|null;sellMax:number|null;sampleSize:number|null;confidence:Ad['market_confidence'];quality:number|null}>=[];
       const baseline = !link.last_parsed_at;
       if (!baseline && rawAds.length > 0 && normalizedRaw.length === 0) {
         this.metrics.linkFailures += 1;
@@ -114,7 +126,8 @@ export class ParserScheduler {
             quality: signal?.market_quality ?? null,
           };
         }).filter(signal => Number.isFinite(signal.id)));
-        await this.db.updateLastParsed(link.id);
+        if(marketUpdates.length) await this.db.updateAdMarketSignals(marketUpdates);
+      await this.db.updateLastParsed(link.id);
         if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
         logger.info('Baseline snapshot stored; no notifications sent', {
           linkId: link.id,
@@ -134,8 +147,6 @@ export class ParserScheduler {
         return { newAds, priceDrops, nextCheckDelayMs: this.computeNextCheckDelay(link, failureCount) };
       }
 
-      const externalIds = ads.map(ad => ad.external_id);
-      const state = await this.db.getExistingAdStatesForLink(link.id, externalIds);
       const existing = state.existingIds;
       const prices = state.prices;
       const processed = new Set<string>();
@@ -154,22 +165,7 @@ export class ParserScheduler {
             } else {
               await this.db.updateAdPrice(last.adId, adData.price);
             }
-            if (adData.market_median != null) {
-              await this.db.updateAdMarketSignals([{
-                id: last.adId,
-                status: adData.market_status ?? null,
-                percent: adData.market_percent ?? null,
-                median: adData.market_median,
-                low: adData.market_low ?? null,
-                high: adData.market_high ?? null,
-                sellFast: adData.sell_fast ?? null,
-                sellNormal: adData.sell_normal ?? null,
-                sellMax: adData.sell_max ?? null,
-                sampleSize: adData.market_sample_size ?? null,
-                confidence: adData.market_confidence ?? null,
-                quality: adData.market_quality ?? null,
-              }]);
-            }
+            if (adData.market_median != null) marketUpdates.push({id:last.adId,status:adData.market_status??null,percent:adData.market_percent??null,median:adData.market_median,low:adData.market_low??null,high:adData.market_high??null,sellFast:adData.sell_fast??null,sellNormal:adData.sell_normal??null,sellMax:adData.sell_max??null,sampleSize:adData.market_sample_size??null,confidence:adData.market_confidence??null,quality:adData.market_quality??null});
           }
           continue;
         }
@@ -181,6 +177,7 @@ export class ParserScheduler {
         const marketById = new Map(newCandidates.map(ad => [ad.external_id, ad]));
         const insertedRaw = await this.db.bulkCreateAdsReturning(link.id, newCandidates);
         const inserted = insertedRaw.map(ad => ({ ...ad, ...marketById.get(ad.external_id) }));
+        for(const row of inserted) marketUpdates.push({id:Number(row.id),status:row.market_status??null,percent:row.market_percent??null,median:row.market_median??null,low:row.market_low??null,high:row.market_high??null,sellFast:row.sell_fast??null,sellNormal:row.sell_normal??null,sellMax:row.sell_max??null,sampleSize:row.market_sample_size??null,confidence:row.market_confidence??null,quality:row.market_quality??null});
         const notifyCandidates = inserted.filter(ad => configuredIds.has(ad.external_id));
         const claimed = await this.db.claimNewAdsForUser(link.user_id, link.id, notifyCandidates);
 
