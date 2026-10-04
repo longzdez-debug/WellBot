@@ -145,7 +145,7 @@ export class FastKufarParser extends BaseParser {
       const cityCandidate = normalizedPart.match(/^r~(.+)$/i)?.[1] || '';
       if (cityCandidate && CITY_VARIANTS[cityCandidate]) requestedCitySlug = cityCandidate;
       if (CITY_VARIANTS[normalizedPart]) requestedCitySlug = normalizedPart;
-      if (CATEGORY_MAP[normalizedPart]) {
+      if (!explicitCategoryId && CATEGORY_MAP[normalizedPart]) {
         params.cat = CATEGORY_MAP[normalizedPart];
         continue;
       }
