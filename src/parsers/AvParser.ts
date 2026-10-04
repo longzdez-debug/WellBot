@@ -1,15 +1,10 @@
 import { BaseParser } from './BaseParser';
 import { Ad } from '../types';
 import { logger } from '../utils/logger';
-import { AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 
 export class AvParser extends BaseParser {
   platform = 'av' as const;
-
-  constructor(axiosInstance?: AxiosInstance) {
-    super(axiosInstance);
-  }
 
   async parseUrl(url: string): Promise<Ad[]> {
     logger.info('AV.by parsing started', { url });
