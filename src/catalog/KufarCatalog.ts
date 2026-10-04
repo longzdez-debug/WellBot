@@ -3,7 +3,7 @@ export interface MonitorConfig {
   source:'kufar'|'onliner'|'av'; categoryId:string; subcategoryId?:string; brand?:string; model?:string; phoneFilters?:Record<string,string|string[]|boolean>; region?:string; city?:string; query?:string;
   minPrice?:number; maxPrice?:number; condition?:'new'|'used'; seller?:'private'|'company'; minMarketDiscount?:number; skipSlots?:number; mode?:'normal'|'sniper';
 }
-const node=(id:string,title:string,slug:string,children:CatalogNode[]=[],searchable=true):CatalogNode=>({id,title,slug,...(children.length?{children}:{}),...(searchable?{}:{searchable:false})});
+const node=(id:string,title:string,slug:string,children:CatalogNode[]|CatalogNode[]=[],searchable:boolean|CatalogNode=true,...extraChildren:CatalogNode[]):CatalogNode=>{const list=Array.isArray(children)?children:[children as CatalogNode,...(typeof searchable==='object'?[searchable]:[]),...extraChildren];const isSearchable=typeof searchable==='boolean'?searchable:true;return {id,title,slug,...(list.length?{children:list}:{}),...(isSearchable?{}:{searchable:false})};}
 const child=(id:string,title:string,slug:string,...children:CatalogNode[]):CatalogNode=>({id,title,slug,...(children.length?{children}:{}),});
 
 export const KUFAR_CATALOG:CatalogNode[]=[
