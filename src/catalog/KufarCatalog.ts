@@ -34,9 +34,7 @@ node('travel','Путешествия — жильё на сутки','puteshest
 const REGION_SLUGS:Record<string,string>={minsk:'minsk',brest:'brest',vitebsk:'vitebsk',gomel:'gomel',grodno:'grodno',mogilev:'mogilev',minskaya_oblast:'minskaya-oblast',brestskaya_oblast:'brestskaya-oblast',vitebskaya_oblast:'vitebskaya-oblast',gomelskaya_oblast:'gomelskaya-oblast',grodnenskaya_oblast:'grodnenskaya-oblast',mogilevskaya_oblast:'mogilevskaya-oblast'};
 
 export function findCatalogNode(id:string):CatalogNode|null{for(const category of KUFAR_CATALOG){if(category.id===id)return category;const found=category.children?.find(item=>item.id===id);if(found)return found;}return null;}
-export function findCatalogCategory(id:string):CatalogNode|null{const direct=KUFAR_CATALOG.find(category=>category.id===id);if(direct)return direct;return KUFAR_CATALOG.find(category=>category.children?.some(item=>item.id===id))||null;}
-export function getCatalogLabel(id:string):string{return findCatalogNode(id)?.title||'Каталог';}
-export function buildKufarSearchUrl(config:MonitorConfig):string{
+export function findCatalogCategory(id:string):CatalogNode|null{const direct=KUFAR_CATALOG.find(category=>category.id===id);if(direct)return direct;return KUFAR_CATALOG.find(category=>category.children?.some(item=>item.id===id))||null;}export function buildKufarSearchUrl(config:MonitorConfig):string{
  const selected=findCatalogNode(config.subcategoryId||config.categoryId); const category=findCatalogCategory(config.categoryId); const slug=selected?.slug||category?.slug||'';
  const city=config.city?encodeURIComponent(config.city):''; const region=config.region?REGION_SLUGS[config.region]||config.region:'';
  const prefix=city?'/l/r~'+city+'/':region?'/l/r~'+region+'/':'/l/'; const url=new URL(prefix+slug,'https://www.kufar.by');
