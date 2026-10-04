@@ -55,7 +55,7 @@ describe('Parsing cycle with duck-typed store', () => {
 
   beforeEach(() => {
     store = new FakeStore();
-    presenter = new AdPresenter(null);
+    presenter = new AdPresenter();
   });
 
   test('parsing cycle detects new ads', async () => {
