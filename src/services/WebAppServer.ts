@@ -8,6 +8,8 @@ import { KUFAR_CATALOG, MonitorConfig, buildKufarSearchUrl, findCatalogNode, fin
 import { MARKETPLACE_CATALOGS, MARKETPLACES, MarketplaceSource, buildMarketplaceSearchUrl, findMarketplaceNode, findMarketplaceCategory } from '../catalog/MarketplaceCatalog';
 import { KUFAR_PHONE_BRANDS, KUFAR_PHONE_FILTERS, isKufarPhoneCategory } from '../catalog/KufarPhoneCatalog';
 
+const isCatalogDescendant=(id:string,root:{children?:Array<{id:string;children?:any[]}>}):boolean=>{const walk=(nodes:any[]):boolean=>nodes.some(n=>n.id===id||(n.children&&walk(n.children)));return walk(root.children||[])};
+
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
@@ -159,7 +161,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           if (node.children?.length && !config.subcategoryId) { json(res,400,{error:'subcategory_required',message:'Выберите подкатегорию.'}); return; }
           if (config.subcategoryId) {
             const child = source==='kufar' ? findCatalogNode(config.subcategoryId) : findMarketplaceNode(source,config.subcategoryId);
-            if (!child || child.searchable===false || !category || category.id!==config.categoryId || !(category.children||[]).some(x=>x.id===config.subcategoryId)) { json(res,400,{error:'invalid_subcategory',message:'Выберите подкатегорию из выбранной категории.'}); return; }
+            if (!child || child.searchable===false || !category || category.id!==config.categoryId || isCatalogDescendant(child.id, category)) { json(res,400,{error:'invalid_subcategory',message:'Выберите подкатегорию из выбранной категории.'}); return; }
           }
           if (config.condition && config.condition!=='new' && config.condition!=='used') { json(res,400,{error:'invalid_condition'}); return; }
           if (config.seller && config.seller!=='private' && config.seller!=='company') { json(res,400,{error:'invalid_seller'}); return; }
