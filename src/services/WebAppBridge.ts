@@ -3,24 +3,12 @@ import TelegramBot, { Message } from 'node-telegram-bot-api';
 import { BotHandler } from '../bot/BotHandler';
 import { logger } from '../utils/logger';
 
-interface TelegramApiResponse<T> {
-  ok: boolean;
-  result?: T;
-  description?: string;
-}
-
-interface TelegramMenuButton {
-  type: string;
-  text?: string;
-  web_app?: { url: string };
-}
+interface TelegramApiResponse<T> { ok: boolean; result?: T; description?: string; }
+interface TelegramMenuButton { type: string; text?: string; web_app?: { url: string }; }
 
 export function installWebAppBridge(handler: BotHandler): void {
   const bot = (handler as unknown as { bot: TelegramBot }).bot;
-  if (!bot) {
-    logger.warn('WellBOT WebApp bridge not installed: Telegram bot is unavailable');
-    return;
-  }
+  if (!bot) { logger.warn('WellBOT WebApp bridge not installed: Telegram bot is unavailable'); return; }
 
   const webAppUrl = (process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || process.env.MINI_APP_URL)?.trim();
   const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
@@ -33,37 +21,16 @@ export function installWebAppBridge(handler: BotHandler): void {
   }
 
   let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(webAppUrl);
-  } catch {
-    logger.error('WellBOT Mini App URL is invalid', { webAppUrl });
-    return;
-  }
-
-  if (parsedUrl.protocol !== 'https:') {
-    logger.error('WellBOT Mini App URL must use HTTPS', { webAppUrl });
-    return;
-  }
+  try { parsedUrl = new URL(webAppUrl); } catch { logger.error('WellBOT Mini App URL is invalid', { webAppUrl }); return; }
+  if (parsedUrl.protocol !== 'https:') { logger.error('WellBOT Mini App URL must use HTTPS', { webAppUrl }); return; }
 
   const normalizedWebAppUrl = parsedUrl.toString();
-  const menuButton = {
-    type: 'web_app' as const,
-    text: '⚡ HUNT',
-    web_app: { url: normalizedWebAppUrl },
-  };
+  const menuButton = { type: 'web_app' as const, text: '⚡ WellBOT', web_app: { url: normalizedWebAppUrl } };
 
   const telegramApiBase = ['https:', '', 'api.telegram.org'].join('/');
   const telegramApi = async <T>(method: string, body: Record<string, unknown>): Promise<T> => {
-    const response = await axios.post<TelegramApiResponse<T>>(
-      `${telegramApiBase}/bot${botToken}/${method}`,
-      body,
-      { timeout: 10000 },
-    );
-
-    if (!response.data.ok || response.data.result === undefined) {
-      throw new Error(response.data.description || `Telegram API ${method} failed`);
-    }
-
+    const response = await axios.post<TelegramApiResponse<T>>(`${telegramApiBase}/bot${botToken}/${method}`, body, { timeout: 10000 });
+    if (!response.data.ok || response.data.result === undefined) throw new Error(response.data.description || `Telegram API ${method} failed`);
     return response.data.result;
   };
 
@@ -71,70 +38,37 @@ export function installWebAppBridge(handler: BotHandler): void {
   const expectedUrl = normalizeUrl(normalizedWebAppUrl);
   const configuredChats = new Set<number>();
 
-  const verifyMenuButton = (current: TelegramMenuButton): boolean => (
-    current.type === 'web_app'
-    && current.text === menuButton.text
-    && normalizeUrl(current.web_app?.url || '') === expectedUrl
-  );
+  const verifyMenuButton = (current: TelegramMenuButton): boolean =>
+    current.type === 'web_app' && current.text === menuButton.text && normalizeUrl(current.web_app?.url || '') === expectedUrl;
 
   const configureMenuButton = async (chatId?: number): Promise<void> => {
     if (chatId !== undefined && configuredChats.has(chatId)) return;
-
     const scope = chatId === undefined ? {} : { chat_id: chatId };
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       try {
-        await telegramApi<boolean>('setChatMenuButton', {
-          ...scope,
-          menu_button: menuButton,
-        });
-
+        await telegramApi<boolean>('setChatMenuButton', { ...scope, menu_button: menuButton });
         const current = await telegramApi<TelegramMenuButton>('getChatMenuButton', scope);
-
         if (verifyMenuButton(current)) {
           if (chatId !== undefined) configuredChats.add(chatId);
           logger.info('WellBOT Mini App menu button verified', {
-            webAppUrl: normalizedWebAppUrl,
-            chatId,
-            scope: chatId === undefined ? 'default' : 'private_chat',
-            attempt,
+            webAppUrl: normalizedWebAppUrl, chatId, scope: chatId === undefined ? 'default' : 'private_chat', attempt,
           });
           return;
         }
-
-        logger.warn('WellBOT Mini App menu button verification mismatch', {
-          webAppUrl: normalizedWebAppUrl,
-          chatId,
-          attempt,
-          current,
-        });
+        logger.warn('WellBOT Mini App menu button verification mismatch', { webAppUrl: normalizedWebAppUrl, chatId, attempt, current });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        logger.error('Failed to configure WellBOT Mini App menu button', {
-          webAppUrl: normalizedWebAppUrl,
-          chatId,
-          attempt,
-          error: message,
-        });
+        logger.error('Failed to configure WellBOT Mini App menu button', { webAppUrl: normalizedWebAppUrl, chatId, attempt, error: message });
       }
-
-      if (attempt < 5) {
-        await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
-      }
+      if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
     }
   };
 
-  // Configure the default menu button as WellBOT so it exists even before a
-  // private chat has produced a message. Also configure concrete private chats
-  // to override any stale per-chat command-menu setting.
   void configureMenuButton();
-
   bot.on('message', (msg: Message) => {
-    if (msg.chat.type === 'private' && msg.from) {
-      void configureMenuButton(msg.chat.id);
-    }
+    if (msg.chat.type === 'private' && msg.from) void configureMenuButton(msg.chat.id);
   });
-
 
   logger.info('WellBOT WebApp bridge installed', { webAppUrl: normalizedWebAppUrl });
 }
