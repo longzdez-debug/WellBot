@@ -7,7 +7,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "test": "node --check web/app.js && jest"
+    "test": "node --check web/app.js && npm run check:web-ui && jest",
+    "check:web-ui": "node scripts/validate-web-ui.js"
   },
   "keywords": [
     "telegram",
