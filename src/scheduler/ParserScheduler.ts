@@ -79,9 +79,168 @@ export class ParserScheduler {
   private normalizeAds(rawAds:Ad[]):Ad[]{const valid:Ad[]=[];const seen=new Set<string>();for(const ad of rawAds){if(!this.isValidAd(ad))continue;const externalId=ad.external_id.trim();if(seen.has(externalId))continue;seen.add(externalId);valid.push({...ad,external_id:externalId,title:ad.title.trim(),ad_url:ad.ad_url.trim()});}return valid;}
   private async parseLink(link:ParseLink):Promise<ParseResult>{const newAds:Ad[]=[];const priceDrops:PriceDrop[]=[];let failureCount=Number(link.error_count||0);try{const parser=ParserFactory.getParser(link.platform);if(!parser){failureCount=await this.recordLinkFailure(link,`No parser configured for platform ${link.platform}`);return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}let rawAds:Ad[];try{rawAds=await this.withTimeout(parser.parseUrl(link.url),this.parseTimeoutMs,`Parse timeout after ${this.parseTimeoutMs} milliseconds`);}catch(error:unknown){const message=error instanceof Error?error.message:String(error);failureCount=await this.recordLinkFailure(link,message);return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}if(!Array.isArray(rawAds)){failureCount=await this.recordLinkFailure(link,'Parser returned a non-array result');return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}const normalizedRaw=this.normalizeAds(rawAds);
       const marketAds = await this.db.getRecentMarketAds(link.id, 250);
-      const withMarket = normalizedRaw.map(ad => this.attachComparableMarket(ad, marketAds));
-      const configured = this.applyMonitorFilters(link, withMarket);
-      const ads=configured;const baseline=!link.last_parsed_at;if(!baseline&&rawAds.length>0&&normalizedRaw.length===0){this.metrics.linkFailures+=1;failureCount=await this.recordLinkFailure(link,'Parser returned only invalid/malformed ads');return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}if(baseline){const insertedRaw=await this.db.bulkCreateAdsReturning(link.id,ads);await this.db.updateAdMarketSignals(insertedRaw.map(row=>{const signal=ads.find(ad=>ad.external_id===row.external_id);return {id:Number(row.id),status:signal?.market_status??null,percent:signal?.market_percent??null,median:signal?.market_median??null,low:signal?.market_low??null,high:signal?.market_high??null,sellFast:signal?.sell_fast??null,sellNormal:signal?.sell_normal??null,sellMax:signal?.sell_max??null,sampleSize:signal?.market_sample_size??null,confidence:signal?.market_confidence??null,quality:signal?.market_quality??null};}).filter(signal=>Number.isFinite(signal.id)));await this.db.updateLastParsed(link.id);if((link.error_count??0)>0)await this.db.resetErrorCount(link.id);logger.info('Baseline snapshot stored; no notifications sent',{linkId:link.id,adsFound:ads.length,adsInserted:insertedRaw.length,emptyResult:ads.length===0});return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}if(ads.length===0){logger.warn('Established monitor returned empty result; checkpoint preserved',{linkId:link.id,platform:link.platform,url:link.url,rawAdsCount:rawAds.length});return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}const externalIds=ads.map(ad=>ad.external_id);const state=await this.db.getExistingAdStatesForLink(link.id,externalIds);const existing=state.existingIds;const prices=state.prices;const processed=new Set<string>();const newCandidates:Ad[]=[];for(const adData of ads){const id=adData.external_id;if(processed.has(id))continue;processed.add(id);if(existing.has(id)){const last=prices.get(id);if(last&&adData.price){await this.processPriceDrop(last,id,adData.price,priceDrops,link.id,link.user_id);const comparable=getComparableMarketSignal(adData,marketAds);const signal=comparable.market_median!=null?{id:last.adId,status:comparable.market_status,percent:comparable.market_percent,median:comparable.market_median,low:comparable.market_low,high:comparable.market_high,sellFast:comparable.sell_fast,sellNormal:comparable.sell_normal,sellMax:comparable.sell_max,sampleSize:comparable.sample_size,confidence:comparable.confidence,quality:comparable.quality}:null;if(signal)await this.db.updateAdMarketSignals([signal]);}continue;}newCandidates.push(adData);}if(newCandidates.length){const candidatesWithMarket=newCandidates.map(ad=>this.attachComparableMarket(ad,marketAds));const marketById=new Map(candidatesWithMarket.map(ad=>[ad.external_id,ad]));const insertedRaw=await this.db.bulkCreateAdsReturning(link.id,candidatesWithMarket);const inserted=insertedRaw.map(ad=>({...ad,...marketById.get(ad.external_id)}));await this.db.updateAdMarketSignals(inserted.map(ad=>({id:Number(ad.id),status:ad.market_status??null,percent:ad.market_percent??null,median:ad.market_median??null,low:ad.market_low??null,high:ad.market_high??null,sellFast:ad.sell_fast??null,sellNormal:ad.sell_normal??null,sellMax:ad.sell_max??null,sampleSize:ad.market_sample_size??null,confidence:ad.market_confidence??null,quality:ad.market_quality??null})).filter(signal=>Number.isFinite(signal.id)));const claimed=await this.db.claimNewAdsForUser(link.user_id,link.id,inserted);for(const adData of inserted){const publishedAt=adData.published_at instanceof Date?adData.published_at:adData.published_at?new Date(adData.published_at):null;const ageSeconds=publishedAt&&!Number.isNaN(publishedAt.getTime())?Math.max(0,(Date.now()-publishedAt.getTime())/1000):null;if(!claimed.has(adData.external_id)){logger.debug('Duplicate ad across monitors suppressed',{linkId:link.id,userId:link.user_id,external_id:adData.external_id});continue;}if(ageSeconds!==null&&this.newAdMaxAgeSeconds>0&&ageSeconds>this.newAdMaxAgeSeconds){logger.warn('🕒 STALE AD FIRST SEEN; notification suppressed',{linkId:link.id,external_id:adData.external_id,title:adData.title,price:adData.price,publishedAt:publishedAt?.toISOString(),ageSeconds:Number(ageSeconds.toFixed(1)),maxAgeSeconds:this.newAdMaxAgeSeconds});continue;}newAds.push(adData);logger.info('📢 NEW AD DETECTED!',{linkId:link.id,external_id:adData.external_id,title:adData.title,price:adData.price,timestamp:new Date().toISOString(),publishedAt:publishedAt?.toISOString(),ageSeconds:ageSeconds!==null?Number(ageSeconds.toFixed(1)):undefined});}}await this.db.updateLastParsed(link.id);if((link.error_count??0)>0)await this.db.resetErrorCount(link.id);return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}catch(error:unknown){const message=error instanceof Error?error.message:String(error);const stack=error instanceof Error?error.stack:undefined;logger.error('Failed to parse link',{linkId:link.id,url:link.url,error:message,stack});try{failureCount=await this.recordLinkFailure(link,message);}catch(failureError:unknown){const failureMessage=failureError instanceof Error?failureError.message:String(failureError);logger.error('Failed to record link parse failure',{linkId:link.id,error:failureMessage});}return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}}
+      const marketCandidates = normalizedRaw.map(ad => this.attachComparableMarket(ad, marketAds));
+      const configured = this.applyMonitorFilters(link, marketCandidates);
+      const configuredIds = new Set(configured.map(ad => ad.external_id));
+      const ads = marketCandidates;
+      const baseline = !link.last_parsed_at;
+      if (!baseline && rawAds.length > 0 && normalizedRaw.length === 0) {
+        this.metrics.linkFailures += 1;
+        failureCount = await this.recordLinkFailure(link, 'Parser returned only invalid/malformed ads');
+        return { newAds, priceDrops, nextCheckDelayMs: this.computeNextCheckDelay(link, failureCount) };
+      }
+      if (baseline) {
+        const insertedRaw = await this.db.bulkCreateAdsReturning(link.id, ads);
+        await this.db.updateAdMarketSignals(insertedRaw.map(row => {
+          const signal = ads.find(ad => ad.external_id === row.external_id);
+          return {
+            id: Number(row.id),
+            status: signal?.market_status ?? null,
+            percent: signal?.market_percent ?? null,
+            median: signal?.market_median ?? null,
+            low: signal?.market_low ?? null,
+            high: signal?.market_high ?? null,
+            sellFast: signal?.sell_fast ?? null,
+            sellNormal: signal?.sell_normal ?? null,
+            sellMax: signal?.sell_max ?? null,
+            sampleSize: signal?.market_sample_size ?? null,
+            confidence: signal?.market_confidence ?? null,
+            quality: signal?.market_quality ?? null,
+          };
+        }).filter(signal => Number.isFinite(signal.id)));
+        await this.db.updateLastParsed(link.id);
+        if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
+        logger.info('Baseline snapshot stored; no notifications sent', {
+          linkId: link.id,
+          adsFound: ads.length,
+          adsInserted: insertedRaw.length,
+          emptyResult: ads.length === 0,
+        });
+        return { newAds, priceDrops, nextCheckDelayMs: this.computeNextCheckDelay(link, failureCount) };
+      }
+      if (ads.length === 0) {
+        logger.warn('Established monitor returned empty result; checkpoint preserved', {
+          linkId: link.id,
+          platform: link.platform,
+          url: link.url,
+          rawAdsCount: rawAds.length,
+        });
+        return { newAds, priceDrops, nextCheckDelayMs: this.computeNextCheckDelay(link, failureCount) };
+      }
+
+      const externalIds = ads.map(ad => ad.external_id);
+      const state = await this.db.getExistingAdStatesForLink(link.id, externalIds);
+      const existing = state.existingIds;
+      const prices = state.prices;
+      const processed = new Set<string>();
+      const newCandidates: Ad[] = [];
+
+      for (const adData of ads) {
+        const id = adData.external_id;
+        if (processed.has(id)) continue;
+        processed.add(id);
+
+        if (existing.has(id)) {
+          const last = prices.get(id);
+          if (last && adData.price) {
+            if (configuredIds.has(id)) {
+              await this.processPriceDrop(last, id, adData.price, priceDrops, link.id, link.user_id);
+            } else {
+              await this.db.updateAdPrice(last.adId, adData.price);
+            }
+            const comparable = getComparableMarketSignal(adData, marketAds);
+            if (comparable.market_median != null) {
+              await this.db.updateAdMarketSignals([{
+                id: last.adId,
+                status: comparable.market_status,
+                percent: comparable.market_percent,
+                median: comparable.market_median,
+                low: comparable.market_low,
+                high: comparable.market_high,
+                sellFast: comparable.sell_fast,
+                sellNormal: comparable.sell_normal,
+                sellMax: comparable.sell_max,
+                sampleSize: comparable.sample_size,
+                confidence: comparable.confidence,
+                quality: comparable.quality,
+              }]);
+            }
+          }
+          continue;
+        }
+
+        newCandidates.push(adData);
+      }
+
+      if (newCandidates.length) {
+        const marketById = new Map(newCandidates.map(ad => [ad.external_id, ad]));
+        const insertedRaw = await this.db.bulkCreateAdsReturning(link.id, newCandidates);
+        const inserted = insertedRaw.map(ad => ({ ...ad, ...marketById.get(ad.external_id) }));
+        const notifyCandidates = inserted.filter(ad => configuredIds.has(ad.external_id));
+        const claimed = await this.db.claimNewAdsForUser(link.user_id, link.id, notifyCandidates);
+
+        for (const adData of inserted) {
+          if (!configuredIds.has(adData.external_id)) continue;
+          if (!claimed.has(adData.external_id)) {
+            logger.debug('Duplicate ad across monitors suppressed', {
+              linkId: link.id,
+              userId: link.user_id,
+              external_id: adData.external_id,
+            });
+            continue;
+          }
+
+          const publishedAt = adData.published_at instanceof Date
+            ? adData.published_at
+            : adData.published_at
+              ? new Date(adData.published_at)
+              : null;
+          const ageSeconds = publishedAt && !Number.isNaN(publishedAt.getTime())
+            ? Math.max(0, (Date.now() - publishedAt.getTime()) / 1000)
+            : null;
+
+          if (ageSeconds !== null && this.newAdMaxAgeSeconds > 0 && ageSeconds > this.newAdMaxAgeSeconds) {
+            logger.warn('🕒 STALE AD FIRST SEEN; notification suppressed', {
+              linkId: link.id,
+              external_id: adData.external_id,
+              title: adData.title,
+              price: adData.price,
+              publishedAt: publishedAt?.toISOString(),
+              ageSeconds: Number(ageSeconds.toFixed(1)),
+              maxAgeSeconds: this.newAdMaxAgeSeconds,
+            });
+            continue;
+          }
+
+          newAds.push(adData);
+          logger.info('📢 NEW AD DETECTED!', {
+            linkId: link.id,
+            external_id: adData.external_id,
+            title: adData.title,
+            price: adData.price,
+            timestamp: new Date().toISOString(),
+            publishedAt: publishedAt?.toISOString(),
+            ageSeconds: ageSeconds !== null ? Number(ageSeconds.toFixed(1)) : undefined,
+          });
+        }
+      }
+
+      await this.db.updateLastParsed(link.id);
+      if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
+      return { newAds, priceDrops, nextCheckDelayMs: this.computeNextCheckDelay(link, failureCount) };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      logger.error('Failed to parse link', { linkId: link.id, url: link.url, error: message, stack });
+      try {
+        failureCount = await this.recordLinkFailure(link, message);
+      } catch (failureError: unknown) {
+        const failureMessage = failureError instanceof Error ? failureError.message : String(failureError);
+        logger.error('Failed to record link parse failure', { linkId: link.id, error: failureMessage });
+      }
+      return { newAds, priceDrops, nextCheckDelayMs: this.computeNextCheckDelay(link, failureCount) };
+    }
+  }
 
   private attachComparableMarket(ad:Ad, marketAds:Ad[]):Ad {
     const signal = getComparableMarketSignal(ad, marketAds);
