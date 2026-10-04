@@ -44,6 +44,6 @@ export function buildKufarSearchUrl(config:MonitorConfig):string{
  const min=config.minPrice!=null&&Number.isFinite(Number(config.minPrice))?Number(config.minPrice):undefined;
  const max=config.maxPrice!=null&&Number.isFinite(Number(config.maxPrice))?Number(config.maxPrice):undefined;
  if(min!=null||max!=null)url.searchParams.set('prc','r:'+(min??0)+','+(max??''));
- const identity=[config.source,config.categoryId,config.subcategoryId||'',config.region||'',config.city||'',config.query?.trim()||'',min??'',max??'',config.condition||'',config.seller||'',config.mode||'normal'].join('|');
+ const identity=[config.source,config.categoryId,config.subcategoryId||'',config.region||'',config.city||'',config.query?.trim()||'',min??'',max??'',config.condition||'',config.seller||'',config.mode||'normal',config.minMarketDiscount??''].join('|');
  url.searchParams.set('wb',identity); return url.toString();
 }
