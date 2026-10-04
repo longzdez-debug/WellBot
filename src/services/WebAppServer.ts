@@ -128,7 +128,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
             json(res, 400, { error: 'invalid_subcategory', message: 'Выберите подкатегорию из выбранной категории.' }); return;
           }
           if (config.condition && config.condition !== 'new' && config.condition !== 'used') { json(res, 400, { error: 'invalid_condition' }); return; }
-          if (config.seller && config.seller !== 'private' && config.seller !== 'company') { json(res, 400, { error: 'invalid_seller' }); return; }
+          if (config.seller && config.seller !== 'private' && config.seller !== 'company') { json(res, 400, { error: 'invalid_seller' }); return; }\n          if (config.minMarketDiscount != null && (!Number.isFinite(Number(config.minMarketDiscount)) || Number(config.minMarketDiscount) < 0 || Number(config.minMarketDiscount) > 90)) { json(res, 400, { error: 'invalid_market_discount', message: 'Минимальная скидка от рынка должна быть от 0 до 90%.' }); return; }
           if (config.mode && config.mode !== 'normal' && config.mode !== 'sniper') { json(res, 400, { error: 'invalid_mode' }); return; }
           if (config.query != null && (typeof config.query !== 'string' || config.query.length > 120)) {
             json(res, 400, { error: 'invalid_query' }); return;
