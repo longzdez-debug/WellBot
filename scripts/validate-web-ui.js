@@ -7,7 +7,7 @@ if(cssRefs.includes("styles.css"))throw new Error("Legacy stylesheet styles.css 
 const scriptRef=index.match(/src="\.\/app\.js\?v=([^"]+)"/)?.[1];
 const build=app.match(/const WELLBOT_BUILD="([^"]+)"/)?.[1];
 if(!scriptRef||!build)throw new Error("Could not determine Mini App build version.");
-if(scriptRef.replace(/\./g,"")!==build.replace(/\./g,""))throw new Error("Mini App cache-buster and app build version are out of sync.");
+if(scriptRef.replace(/[^0-9a-z]/gi,"")!==build.replace(/[^0-9a-z]/gi,""))throw new Error("Mini App cache-buster and app build version are out of sync.");
 const buttons=[...index.matchAll(/<button\b([^>]*)>/gi)].map(m=>m[1]);
 const allowedAttrs=["data-action","data-scroll","data-filter"];
 buttons.forEach((attrs,i)=>{if(!allowedAttrs.some(a=>new RegExp(a+"=").test(attrs)))throw new Error("Static button #"+(i+1)+" has no action contract.");});
