@@ -1,4 +1,4 @@
-const WELLBOT_BUILD="2026.10.04.5";
+const WELLBOT_BUILD="2026.10.04.6";
 const tg=window.Telegram?.WebApp;
 const state={data:null,catalog:null,filter:"all",loading:false,submitting:false,lastLoadedAt:0};
 
@@ -36,7 +36,7 @@ const renderCategories=needle=>{const q=(needle||"").trim().toLocaleLowerCase("r
 const submitMonitor=async()=>{if(state.submitting)return;error.textContent="";if(!category.value){error.textContent="Сначала выбери категорию.";return}const selected=categories.find(c=>c.id===category.value);if(selected?.children?.length&&!sub.value){error.textContent="Выбери подкатегорию.";return}if(min.value&&max.value&&Number(min.value)>Number(max.value)){error.textContent="Цена от не может быть выше цены до.";return}state.submitting=true;submit.disabled=true;submit.innerHTML="Запускаю…";haptic("light");const payload={source:"kufar",categoryId:category.value,subcategoryId:sub.value||undefined,city:city.value||undefined,query:query.value.trim()||undefined,minPrice:min.value?Number(min.value):undefined,maxPrice:max.value?Number(max.value):undefined,condition:condition.value||undefined,seller:seller.value||undefined,mode:mode.value||"normal"};try{const result=await api("/api/monitors",{method:"POST",body:JSON.stringify(payload)});modal.remove();state.submitting=false;await load();showSuccess(result.reactivated?"Поиск снова активен.":"Поиск запущен.");haptic("success")}catch(e){error.textContent=e.message;submit.disabled=false;submit.innerHTML='Запустить поиск <span>→</span>';state.submitting=false}};
 submit.onclick=submitMonitor;modal.querySelectorAll("input,select").forEach(x=>x.addEventListener("keydown",e=>{if(e.key==="Enter")submitMonitor();if(e.key==="Escape")close()}))}
 
-document.querySelectorAll("[data-action=add]").forEach(b=>b.addEventListener("click",showMonitorForm));
+const openSearch=()=>{try{void showMonitorForm()}catch(e){console.error("[WellBOT]",WELLBOT_BUILD,"open search failed",e);showError("Не удалось открыть форму поиска. Попробуй обновить Mini App.")}};document.querySelectorAll("[data-action=add]").forEach(b=>{b.type="button";b.onclick=openSearch});document.addEventListener("click",e=>{const b=e.target?.closest?.("[data-action=add]");if(b&&!b.disabled){e.preventDefault();openSearch()}});
 document.querySelectorAll("[data-action=refresh]").forEach(b=>b.addEventListener("click",()=>{haptic("light");load()}));
 document.querySelectorAll("[data-filter]").forEach(b=>b.addEventListener("click",()=>{state.filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));haptic("light");renderFeed()}));
 document.querySelectorAll("[data-scroll]").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));b.classList.add("active");haptic("light");document.getElementById(b.dataset.scroll)?.scrollIntoView({behavior:"smooth",block:"start"})}));
