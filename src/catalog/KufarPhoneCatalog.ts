@@ -27,7 +27,7 @@ export const KUFAR_PHONE_FILTERS=[
 ] as const;
 
 export function isKufarPhoneCategory(categoryId?:string,subcategoryId?:string):boolean{
-return categoryId==='phones' || subcategoryId==='17010';
+return categoryId==='phones' && (!subcategoryId || subcategoryId==='17010');
 }
 export function normalizeKufarSlug(value:string):string{
 return value.trim().toLocaleLowerCase('ru-RU').replace(/[^a-z0-9а-яё]+/gi,'-').replace(/^-+|-+$/g,'').replace(/[а-яё]/gi,ch=>({'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'j','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'c','ч':'ch','ш':'sh','щ':'sh','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya'}[ch]||ch));
