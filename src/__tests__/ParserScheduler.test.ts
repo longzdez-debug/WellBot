@@ -104,9 +104,47 @@ describe('ParserScheduler', () => {
 
     await new ParserScheduler(db as never, bot as never).runParsing();
 
-    expect(db.bulkCreateAdsReturning).toHaveBeenCalledWith(1, ads);
+    expect(db.bulkCreateAdsReturning).toHaveBeenCalledWith(1, expect.arrayContaining(ads.map(ad => expect.objectContaining(ad))));
     expect(db.enqueueNotifications).not.toHaveBeenCalled();
     expect(db.updateLastParsed).toHaveBeenCalledWith(1);
+  });
+
+  test('keeps market history independent from deal notification filters', async () => {
+    const link = makeLink(1, new Date());
+    link.config = { source: 'kufar', categoryId: 'phones', subcategoryId: '17010', minMarketDiscount: 20 };
+    const marketHistory: Ad[] = Array.from({ length: 8 }, (_, i) => ({
+      external_id: `market-${i}`,
+      title: 'iPhone 15 128GB',
+      price: '1000 BYN',
+      ad_url: `https://kufar.by/ad/market-${i}`,
+      location: 'Минск',
+      condition: 'used',
+    }));
+    const deal: Ad = {
+      external_id: 'deal-1',
+      title: 'iPhone 15 128GB',
+      price: '700 BYN',
+      ad_url: 'https://kufar.by/ad/deal-1',
+      location: 'Минск',
+      condition: 'used',
+    };
+    const ordinary: Ad = {
+      external_id: 'ordinary-1',
+      title: 'iPhone 15 128GB',
+      price: '950 BYN',
+      ad_url: 'https://kufar.by/ad/ordinary-1',
+      location: 'Минск',
+      condition: 'used',
+    };
+    parser.parseUrl.mockResolvedValue([deal, ordinary]);
+    const db = makeDb([link]);
+    db.getRecentMarketAds.mockResolvedValue(marketHistory);
+
+    await new ParserScheduler(db as never, bot as never).runParsing();
+
+    const stored = db.bulkCreateAdsReturning.mock.calls[0][1] as Ad[];
+    expect(stored).toHaveLength(2);
+    expect(stored.map(ad => ad.external_id)).toEqual(expect.arrayContaining(['deal-1', 'ordinary-1']));
   });
 
   test('queues only genuinely new ads after baseline', async () => {
