@@ -1,6 +1,6 @@
 export interface CatalogNode { id:string; title:string; slug:string; children?:CatalogNode[]; searchable?:boolean; }
 export interface MonitorConfig {
-  source:'kufar'|'onliner'|'av'; categoryId:string; subcategoryId?:string; region?:string; city?:string; query?:string;
+  source:'kufar'|'onliner'|'av'; categoryId:string; subcategoryId?:string; brand?:string; model?:string; phoneFilters?:Record<string,string|string[]|boolean>; region?:string; city?:string; query?:string;
   minPrice?:number; maxPrice?:number; condition?:'new'|'used'; seller?:'private'|'company'; minMarketDiscount?:number; mode?:'normal'|'sniper';
 }
 const node=(id:string,title:string,slug:string,children:CatalogNode[]=[],searchable=true):CatalogNode=>({id,title,slug,...(children.length?{children}:{}),...(searchable?{}:{searchable:false})});
@@ -35,13 +35,13 @@ const REGION_SLUGS:Record<string,string>={minsk:'minsk',brest:'brest',vitebsk:'v
 
 export function findCatalogNode(id:string):CatalogNode|null{for(const category of KUFAR_CATALOG){if(category.id===id)return category;const found=category.children?.find(item=>item.id===id);if(found)return found;}return null;}
 export function findCatalogCategory(id:string):CatalogNode|null{const direct=KUFAR_CATALOG.find(category=>category.id===id);if(direct)return direct;return KUFAR_CATALOG.find(category=>category.children?.some(item=>item.id===id))||null;}export function buildKufarSearchUrl(config:MonitorConfig):string{
- const selected=findCatalogNode(config.subcategoryId||config.categoryId); const category=findCatalogCategory(config.categoryId); const slug=selected?.slug||category?.slug||'';
+ const selected=findCatalogNode(config.subcategoryId||config.categoryId); const category=findCatalogCategory(config.categoryId); const baseSlug=selected?.slug||category?.slug||''; const phone=category?.id==='phones' || selected?.id==='17010'; const brand=phone&&config.brand?.trim()?config.brand.trim().toLocaleLowerCase('en-US').replace(/[^a-z0-9]+/g,'-'):''; const model=phone&&config.model?.trim()?config.model.trim().toLocaleLowerCase('ru-RU').replace(/[^a-z0-9а-яё]+/gi,'-').replace(/^-+|-+$/g,''):''; const slug=phone&&brand ? (brand+(model?'-'+model:'')) : baseSlug;
  const city=config.city?encodeURIComponent(config.city):''; const region=config.region?REGION_SLUGS[config.region]||config.region:'';
  const prefix=city?'/l/r~'+city+'/':region?'/l/r~'+region+'/':'/l/'; const url=new URL(prefix+slug,'https://www.kufar.by');
  if(config.query?.trim())url.searchParams.set('query',config.query.trim());
  const min=config.minPrice!=null&&Number.isFinite(Number(config.minPrice))?Number(config.minPrice):undefined;
  const max=config.maxPrice!=null&&Number.isFinite(Number(config.maxPrice))?Number(config.maxPrice):undefined;
  if(min!=null||max!=null)url.searchParams.set('prc','r:'+(min??0)+','+(max??''));
- const identity=[config.source,config.categoryId,config.subcategoryId||'',config.region||'',config.city||'',config.query?.trim()||'',min??'',max??'',config.condition||'',config.seller||'',config.mode||'normal',config.minMarketDiscount??''].join('|');
+ const identity=[config.source,config.categoryId,config.subcategoryId||'',config.brand||'',config.model||'',JSON.stringify(config.phoneFilters||{}),config.region||'',config.city||'',config.query?.trim()||'',min??'',max??'',config.condition||'',config.seller||'',config.mode||'normal',config.minMarketDiscount??''].join('|');
  url.searchParams.set('wb',identity); return url.toString();
 }
