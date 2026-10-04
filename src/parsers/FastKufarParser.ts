@@ -133,7 +133,7 @@ export class FastKufarParser extends BaseParser {
     const monitorIdentity = String(parsed.searchParams.get('wb') || '').split('|');
     const requestedCategoryId = monitorIdentity[1] || '';
     const requestedSubcategoryId = monitorIdentity[2] || '';
-    const explicitCategoryId = /^\\d+$/.test(requestedSubcategoryId)
+    const explicitCategoryId = /^\d+$/.test(requestedSubcategoryId)
       ? requestedSubcategoryId
       : /^\\d+$/.test(requestedCategoryId)
         ? requestedCategoryId
