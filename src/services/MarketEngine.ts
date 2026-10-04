@@ -3,8 +3,6 @@ export interface ParsedPrice {
   currency: string;
 }
 
-const CURRENCIES = 'BYN|USD|EUR|RUB|UAH|PLN';
-
 export function parseMarketPrice(value: string | null | undefined): ParsedPrice | null {
   if (!value) return null;
   const text = value.replace(/\s+/g, '').trim().toUpperCase();
