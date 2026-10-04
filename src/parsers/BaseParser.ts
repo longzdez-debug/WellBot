@@ -19,7 +19,7 @@ export abstract class BaseParser implements IParser {
       this.axiosInstance = axiosInstance;
     } else {
       this.axiosInstance = axios.create({
-        timeout: 7000,
+        timeout: 4500,
         headers: {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -44,14 +44,14 @@ export abstract class BaseParser implements IParser {
     return status === 408 || status === 425 || status === 429 || status >= 500;
   }
 
-  protected async fetchWithRetry(url: string, retries: number = 2): Promise<string> {
+  protected async fetchWithRetry(url: string, retries: number = 1): Promise<string> {
     const attempts = Math.max(1, Math.floor(retries));
     let lastError: unknown;
 
     for (let i = 0; i < attempts; i++) {
       try {
         const response = await this.axiosInstance.get(url, {
-          timeout: 6500,
+          timeout: 4200,
           headers: {
             'User-Agent': this.getRandomUserAgent(),
             'Host': new URL(url).hostname,
@@ -68,7 +68,7 @@ export abstract class BaseParser implements IParser {
           retryable,
         });
         if (!retryable || i >= attempts - 1) break;
-        await this.sleep(250 * (i + 1));
+        await this.sleep(150 * (i + 1));
       }
     }
 
