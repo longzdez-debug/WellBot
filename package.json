@@ -7,8 +7,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "test": "jest",
-    "test:location": "ts-node src/test-location.ts"
+    "test": "jest"
   },
   "keywords": [
     "telegram",
