@@ -5,6 +5,7 @@ import { extname, join, normalize } from 'node:path';
 import { DatabaseService } from '../database/DatabaseService';
 import { logger } from '../utils/logger';
 import { KUFAR_CATALOG, MonitorConfig, buildKufarSearchUrl, findCatalogNode, findCatalogCategory } from '../catalog/KufarCatalog';
+import { MARKETPLACE_CATALOGS, MARKETPLACES, MarketplaceSource, buildMarketplaceSearchUrl, findMarketplaceNode, findMarketplaceCategory } from '../catalog/MarketplaceCatalog';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -108,7 +109,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
         }
 
         if (requestPath === '/api/catalog' && req.method === 'GET') {
-          json(res, 200, { source: 'kufar', categories: KUFAR_CATALOG });
+          json(res, 200, { marketplaces: MARKETPLACES, catalogs: { kufar: KUFAR_CATALOG, onliner: MARKETPLACE_CATALOGS.onliner, av: MARKETPLACE_CATALOGS.av } });
           return;
         }
 
@@ -117,48 +118,41 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           try { body = await readJson(req); }
           catch (error: unknown) { json(res, error instanceof Error && error.message === 'body_too_large' ? 413 : 400, { error: 'invalid_json' }); return; }
           const config = body as unknown as MonitorConfig;
-          if (config.source !== 'kufar' || typeof config.categoryId !== 'string' || !findCatalogNode(config.categoryId) || findCatalogNode(config.categoryId)?.searchable === false) {
-            json(res, 400, { error: 'invalid_category', message: 'Выберите категорию из каталога WellBOT.' }); return;
+          const source = config.source as MarketplaceSource;
+          if (!['kufar','onliner','av'].includes(source)) { json(res,400,{error:'invalid_source',message:'Выберите площадку.'}); return; }
+          const node = source==='kufar' ? findCatalogNode(config.categoryId) : findMarketplaceNode(source,config.categoryId);
+          if (typeof config.categoryId!=='string' || !node || node.searchable===false) { json(res,400,{error:'invalid_category',message:'Выберите категорию из каталога WellBOT.'}); return; }
+          const category = source==='kufar' ? findCatalogCategory(config.categoryId) : findMarketplaceCategory(source,config.categoryId);
+          if (node.children?.length && !config.subcategoryId) { json(res,400,{error:'subcategory_required',message:'Выберите подкатегорию.'}); return; }
+          if (config.subcategoryId) {
+            const child = source==='kufar' ? findCatalogNode(config.subcategoryId) : findMarketplaceNode(source,config.subcategoryId);
+            if (!child || child.searchable===false || !category || category.id!==config.categoryId || !(category.children||[]).some(x=>x.id===config.subcategoryId)) { json(res,400,{error:'invalid_subcategory',message:'Выберите подкатегорию из выбранной категории.'}); return; }
           }
-          const selectedCategory = findCatalogNode(config.categoryId);
-          if (selectedCategory?.children?.length && !config.subcategoryId) {
-            json(res, 400, { error: 'subcategory_required', message: 'Для этой категории выберите подкатегорию — так поиск будет привязан к реальному разделу Kufar.' }); return;
-          }
-          if (config.subcategoryId && (!findCatalogNode(config.subcategoryId) || findCatalogNode(config.subcategoryId)?.searchable === false || !findCatalogCategory(config.subcategoryId) || findCatalogCategory(config.subcategoryId)?.id !== config.categoryId)) {
-            json(res, 400, { error: 'invalid_subcategory', message: 'Выберите подкатегорию из выбранной категории.' }); return;
-          }
-          if (config.condition && config.condition !== 'new' && config.condition !== 'used') { json(res, 400, { error: 'invalid_condition' }); return; }
-          if (config.seller && config.seller !== 'private' && config.seller !== 'company') { json(res, 400, { error: 'invalid_seller' }); return; }
-          if (config.minMarketDiscount != null && (!Number.isFinite(Number(config.minMarketDiscount)) || Number(config.minMarketDiscount) < 0 || Number(config.minMarketDiscount) > 90)) { json(res, 400, { error: 'invalid_market_discount', message: 'Минимальная скидка от рынка должна быть от 0 до 90%.' }); return; }
-          if (config.mode && config.mode !== 'normal' && config.mode !== 'sniper') { json(res, 400, { error: 'invalid_mode' }); return; }
-          if (config.query != null && (typeof config.query !== 'string' || config.query.length > 120)) {
-            json(res, 400, { error: 'invalid_query' }); return;
-          }
-          if (config.minPrice != null && (!Number.isFinite(Number(config.minPrice)) || Number(config.minPrice) < 0)) {
-            json(res, 400, { error: 'invalid_min_price' }); return;
-          }
-          if (config.maxPrice != null && (!Number.isFinite(Number(config.maxPrice)) || Number(config.maxPrice) < 0)) {
-            json(res, 400, { error: 'invalid_max_price' }); return;
-          }
-          if (config.minPrice != null && config.maxPrice != null && Number(config.minPrice) > Number(config.maxPrice)) { json(res, 400, { error: 'invalid_price_range' }); return; }
-          const links = await db.getUserLinks(user.id);
-          const url = buildKufarSearchUrl(config);
-          const existing = links.find(link => link.url === url);
-          if (existing) {
-            if (!existing.is_active) {
-              const activeLinks = links.filter(link => link.is_active);
-              if (activeLinks.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} активных поисков.` }); return; }
-              const reactivated = await db.createLink(user.id, url, 'kufar', config);
-              if (!reactivated) { json(res, 404, { error: 'not_found' }); return; }
-              json(res, 200, { link: reactivated, reactivated: true }); return;
+          if (config.condition && config.condition!=='new' && config.condition!=='used') { json(res,400,{error:'invalid_condition'}); return; }
+          if (config.seller && config.seller!=='private' && config.seller!=='company') { json(res,400,{error:'invalid_seller'}); return; }
+          if (config.minMarketDiscount!=null && (!Number.isFinite(Number(config.minMarketDiscount)) || Number(config.minMarketDiscount)<0 || Number(config.minMarketDiscount)>90)) { json(res,400,{error:'invalid_market_discount',message:'Минимальная скидка от рынка должна быть от 0 до 90%.'}); return; }
+          if (config.mode && config.mode!=='normal' && config.mode!=='sniper') { json(res,400,{error:'invalid_mode'}); return; }
+          if (config.query!=null && (typeof config.query!=='string' || config.query.length>120)) { json(res,400,{error:'invalid_query'}); return; }
+          if (config.minPrice!=null && (!Number.isFinite(Number(config.minPrice)) || Number(config.minPrice)<0)) { json(res,400,{error:'invalid_min_price'}); return; }
+          if (config.maxPrice!=null && (!Number.isFinite(Number(config.maxPrice)) || Number(config.maxPrice)<0)) { json(res,400,{error:'invalid_max_price'}); return; }
+          if (config.minPrice!=null && config.maxPrice!=null && Number(config.minPrice)>Number(config.maxPrice)) { json(res,400,{error:'invalid_price_range'}); return; }
+          const links=await db.getUserLinks(user.id);
+          const url=source==='kufar' ? buildKufarSearchUrl(config) : buildMarketplaceSearchUrl(source,config);
+          const existing=links.find(link=>link.url===url);
+          if(existing){
+            if(!existing.is_active){
+              const activeLinks=links.filter(link=>link.is_active);
+              if(activeLinks.length>=MAX_LINKS){json(res,409,{error:'limit_reached',message:`Достигнут лимит в ${MAX_LINKS} активных поисков.`});return;}
+              const reactivated=await db.createLink(user.id,url,source,config);
+              json(res,200,{link:reactivated,reactivated:true});return;
             }
-            json(res, 409, { error: 'duplicate', message: 'Такой поиск уже добавлен.' }); return;
+            json(res,409,{error:'duplicate',message:'Такой поиск уже добавлен.'});return;
           }
-          const activeLinks = links.filter(link => link.is_active); if (activeLinks.length >= MAX_LINKS) { json(res, 409, { error: 'limit_reached', message: `Достигнут лимит в ${MAX_LINKS} активных поисков.` }); return; }
-          const link = await db.createLink(user.id, url, 'kufar', config);
-          logger.info('WellBOT catalog monitor created', { telegramId: auth.user.id, dbUserId: user.id, linkId: link.id, categoryId: config.categoryId, subcategoryId: config.subcategoryId || null });
-          json(res, 201, { link, config });
-          return;
+          const activeLinks=links.filter(link=>link.is_active);
+          if(activeLinks.length>=MAX_LINKS){json(res,409,{error:'limit_reached',message:`Достигнут лимит в ${MAX_LINKS} активных поисков.`});return;}
+          const link=await db.createLink(user.id,url,source,config);
+          logger.info('WellBOT marketplace monitor created',{telegramId:auth.user.id,dbUserId:user.id,linkId:link.id,source,categoryId:config.categoryId,subcategoryId:config.subcategoryId||null});
+          json(res,201,{link,config});return;
         }
 
         if (requestPath === '/api/links' && req.method === 'POST') {
