@@ -75,36 +75,6 @@ export class DatabaseService {
 
   async getExistingAdExternalIdsForUser(userId:number,externalIds:string[]):Promise<Set<string>>{if(!externalIds.length)return new Set();const r=await this.pool.query<{external_id:string}>('SELECT DISTINCT a.external_id FROM ads a JOIN links l ON a.link_id=l.id WHERE l.user_id=$1 AND a.external_id=ANY($2::text[])',[userId,externalIds]);return new Set(r.rows.map(x=>x.external_id));}
   async getLastPricesForAds(linkId:number,externalIds:string[]):Promise<Map<string,{price:string;adId:number}>>{if(!externalIds.length)return new Map();const r=await this.pool.query<{external_id:string;price:string;ad_id:number}>('SELECT DISTINCT ON (external_id) external_id,price,id as ad_id FROM ads WHERE link_id=$1 AND external_id=ANY($2::text[]) ORDER BY external_id,updated_at DESC NULLS LAST,id DESC',[linkId,externalIds]);return new Map(r.rows.filter(x=>x.price!=null).map(x=>[x.external_id,{price:x.price,adId:x.ad_id}]));}
-  async getRecentMarketPrices(linkId:number,limit=250):Promise<string[]>{const safeLimit=Math.min(Math.max(Math.floor(limit),20),1000);const r=await this.pool.query<{price:string}>('SELECT price FROM ads WHERE link_id=$1 AND price IS NOT NULL AND price <> \'\' ORDER BY COALESCE(published_at,created_at) DESC,id DESC LIMIT $2',[linkId,safeLimit]);return r.rows.map(x=>x.price).filter(Boolean);}
-  async getRecentMarketAds(linkId:number,limit=250):Promise<Ad[]>{const safeLimit=Math.min(Math.max(Math.floor(limit),20),1000);const r=await this.pool.query<Ad>('SELECT id,link_id,external_id,title,description,price,image_url,ad_url,location,address,published_at,updated_at,created_at FROM ads WHERE link_id=$1 AND price IS NOT NULL AND price <> \'\' ORDER BY COALESCE(published_at,created_at) DESC,id DESC LIMIT $2',[linkId,safeLimit]);return r.rows;}
-  async getUserAdsCount(userId:number):Promise<{linkId:number;linkPlatform:string;count:number}[]>{const r=await this.pool.query('SELECT l.id as "linkId",l.platform as "linkPlatform",COUNT(a.id) as "count" FROM links l LEFT JOIN ads a ON a.link_id=l.id WHERE l.user_id=$1 GROUP BY l.id ORDER BY l.id',[userId]);return r.rows;}
-  async clearAdsByUserId(userId:number):Promise<number>{const r=await this.pool.query<{id:number}>('SELECT id FROM links WHERE user_id=$1',[userId]);if(!r.rows.length)return 0;const d=await this.pool.query('DELETE FROM ads WHERE link_id=ANY($1::int[])',[r.rows.map(x=>x.id)]);await this.pool.query('DELETE FROM user_ad_seen WHERE user_id=$1',[userId]);return d.rowCount||0;}
-  async getDashboardAds(userId:number,limit=50):Promise<DashboardAd[]>{const safeLimit=Math.min(Math.max(Math.floor(limit),1),100);const r=await this.pool.query<DashboardAd>('SELECT a.*,l.platform AS link_platform,l.url AS link_url FROM ads a JOIN links l ON l.id=a.link_id WHERE l.user_id=$1 ORDER BY COALESCE(a.published_at,a.created_at) DESC,a.id DESC LIMIT $2',[userId,safeLimit]);return r.rows;}
-  async getDashboardPriceDrops(userId:number,limit=30):Promise<DashboardPriceDrop[]>{const safeLimit=Math.min(Math.max(Math.floor(limit),1),50);const r=await this.pool.query<DashboardPriceDrop>('SELECT ph.id,ph.external_id,ph.old_price,ph.new_price,ph.price_change_percent,ph.created_at,a.title,a.image_url,a.ad_url,l.platform AS link_platform FROM price_history ph JOIN ads a ON a.id=ph.ad_id JOIN links l ON l.id=a.link_id WHERE ph.user_id=$1 ORDER BY ph.created_at DESC,ph.id DESC LIMIT $2',[userId,safeLimit]);return r.rows;}
-  async getDashboardStats(userId:number):Promise<{activeLinks:number;totalLinks:number;adsToday:number;priceDropsToday:number}>{const r=await this.pool.query<{active_links:string;total_links:string;ads_today:string;drops_today:string}>('SELECT COUNT(*) FILTER (WHERE is_active) AS active_links,COUNT(*) AS total_links,(SELECT COUNT(*) FROM ads a JOIN links l ON a.link_id=l.id WHERE l.user_id=$1 AND a.created_at>=CURRENT_DATE) AS ads_today,(SELECT COUNT(*) FROM price_history ph WHERE ph.user_id=$1 AND ph.created_at>=CURRENT_DATE) AS drops_today FROM links WHERE user_id=$1',[userId]);const row=r.rows[0];return{activeLinks:Number(row?.active_links||0),totalLinks:Number(row?.total_links||0),adsToday:Number(row?.ads_today||0),priceDropsToday:Number(row?.drops_today||0)};}
-  async getLastPriceForAd(linkId:number,externalId:string):Promise<{price:string;adId:number}|null>{const r=await this.pool.query('SELECT a.price,a.id as ad_id FROM ads a WHERE a.link_id=$1 AND a.external_id=$2 ORDER BY a.updated_at DESC NULLS LAST,a.id DESC LIMIT 1',[linkId,externalId]);return r.rows[0]||null;}
-  parsePriceToNumber(priceStr:string|null|undefined):number|null{if(!priceStr)return null;const normalized=priceStr.replace(/\s+/g,'').replace(',','.');const m=normalized.match(/(\d+(?:\.\d+)?)/);if(!m)return null;const n=Number(m[1]);return Number.isFinite(n)?n:null;}
-  async createPriceDropRecord(userId:number,adId:number,externalId:string,oldPrice:string,newPrice:string,changePercent:number):Promise<boolean>{try{const r=await this.pool.query('INSERT INTO price_history (ad_id,user_id,external_id,old_price,new_price,price_change_percent,notified_at) VALUES ($1,$2,$3,$4,$5,$6,NULL) ON CONFLICT (user_id,external_id,old_price,new_price) DO NOTHING',[adId,userId,externalId,oldPrice,newPrice,changePercent]);return(r.rowCount||0)>0;}catch(error:unknown){const message=error instanceof Error?error.message:String(error);logger.warn('Price drop record insert failed',{error:message});return false;}}
-  async updateAdMarketSignals(signals:Array<{id:number;status:'below_market'|'market'|'above_market'|null;percent:number|null;median:number|null;low:number|null;high:number|null;sellFast:number|null;sellNormal:number|null;sellMax:number|null;sampleSize:number|null;confidence:'low'|'medium'|'high'|null;quality:number|null}>):Promise<void>{
-    if(!signals.length)return;
-    await this.pool.query(
-      `UPDATE ads a
-       SET market_status=x.status,
-           market_percent=x.percent,
-           market_median=x.median,
-           market_low=x.low,
-           market_high=x.high,
-           sell_fast=x.sell_fast,
-           sell_normal=x.sell_normal,
-           sell_max=x.sell_max,
-           market_sample_size=x.sample_size,
-           market_confidence=x.confidence,
-           market_quality=x.quality
-       FROM jsonb_to_recordset($1::jsonb) AS x(id int,status text,percent numeric,median numeric,low numeric,high numeric,sell_fast numeric,sell_normal numeric,sell_max numeric,sample_size int,confidence text,quality numeric)
-       WHERE a.id=x.id`,
-      [JSON.stringify(signals.map(s=>({id:s.id,status:s.status,percent:s.percent,median:s.median,low:s.low,high:s.high,sell_fast:s.sellFast,sell_normal:s.sellNormal,sell_max:s.sellMax,sample_size:s.sampleSize,confidence:s.confidence,quality:s.quality})))],
-    );
-  }
 
   async updateAdPrice(adId:number,newPrice:string):Promise<void>{await this.pool.query('UPDATE ads SET price=$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2',[newPrice,adId]);}
   async enqueueNotification(kind:NotificationKind,chatId:number,dedupeKey:string,payload:Record<string,unknown>):Promise<boolean>{const r=await this.pool.query('INSERT INTO notification_outbox (kind,chat_id,dedupe_key,payload) VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT (dedupe_key) DO NOTHING RETURNING id',[kind,chatId,dedupeKey,JSON.stringify(payload)]);return(r.rowCount||0)>0;}
