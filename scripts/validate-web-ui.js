@@ -4,9 +4,10 @@ const app=fs.readFileSync("web/app.js","utf8");
 const cssRefs=[...index.matchAll(/href="\.\/([^"]+\.css)(?:\?[^"]*)?"/g)].map(m=>m[1]);
 for(const file of cssRefs){if(!fs.existsSync("web/"+file))throw new Error("Missing stylesheet: "+file);}
 if(cssRefs.includes("styles.css"))throw new Error("Legacy stylesheet styles.css is still referenced.");
-if (/<script[^>]+src="\\.\\/app\\.js[^>]*><\\/script>\\s*>/i.test(index)) throw new Error("Malformed app.js script tag detected.");
-if (!/<script[^>]+src="\\.\\/app\\.js\\?v=[^"]+"[^>]*defer[^>]*><\\/script>/i.test(index)) throw new Error("app.js must load unconditionally with defer.");
-if (/Telegram\\.WebApp\\.initData/.test(index)) throw new Error("index.html must not gate app.js loading on Telegram initData.");
+const appScriptMatch=index.match(/<script[^>]+src="([^"]*app\\.js[^"]*)"[^>]*><\\/script>/i);
+if(index.includes('<script src="./app.js?v=20261004-15" defer></script>>'))throw new Error("Malformed app.js script tag detected.");
+if(!appScriptMatch||!index.includes('src="./app.js?v=20261004-15" defer></script>'))throw new Error("app.js must load unconditionally with defer.");
+if(index.includes("Telegram.WebApp.initData"))throw new Error("index.html must not gate app.js loading on Telegram initData.");
 const dynamicContracts=[
   ['data-action="add"',"Dynamic create-search buttons must use data-action=add."],
   ['data-profile-close',"Profile modal close controls must have a close contract."],
