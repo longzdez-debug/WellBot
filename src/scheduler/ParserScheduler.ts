@@ -81,7 +81,7 @@ export class ParserScheduler {
       const marketAds = await this.db.getRecentMarketAds(link.id, 250);
       const withMarket = normalizedRaw.map(ad => {
         const comparable = getComparableMarketSignal(ad, marketAds);
-        if (comparable.market_median != null) return {...ad, market_status: comparable.market_status, market_percent: comparable.market_percent, market_median: comparable.market_median};
+        if (comparable.market_median != null) return {...ad, market_status: comparable.market_status, market_percent: comparable.market_percent, market_median: comparable.market_median, market_low: comparable.market_low, market_high: comparable.market_high, sell_fast: comparable.sell_fast, sell_normal: comparable.sell_normal, sell_max: comparable.sell_max, market_sample_size: comparable.sample_size, market_confidence: comparable.confidence, market_quality: comparable.quality};
         return {...ad, ...calculateMarketSignal(ad.price, marketAds.map(item => item.price || '').filter(Boolean))};
       });
       const configured = this.applyMonitorFilters(link, withMarket);
