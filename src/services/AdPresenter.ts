@@ -1,5 +1,4 @@
 import { Ad } from '../types';
-import { LocationService } from './LocationService';
 import { analyzeDeal } from './DealScoreEngine';
 
 export interface FormattedAd {
@@ -9,16 +8,10 @@ export interface FormattedAd {
   externalId?: string;
   publishedAt?: string;
   createdAt?: string;
-  location?: { lat: number; lon: number; title: string; address: string };
 }
 
 export class AdPresenter {
-  private locationService: LocationService | null;
   private readonly MAX_DESCRIPTION_LENGTH = 430;
-
-  constructor(locationService: LocationService | null = null) {
-    this.locationService = locationService;
-  }
 
   private escapeHtml(str: string): string {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -128,17 +121,9 @@ export class AdPresenter {
     const media: string[] = [];
     if (ad.image_url) media.push(ad.image_url);
 
-    let location: FormattedAd['location'];
-    if (fullAddress && this.locationService) {
-      try {
-        const coords = await this.locationService.getCoordinates(ad.address, fullAddress, ad.location);
-        if (coords) location = { lat: coords.lat, lon: coords.lon, title: ad.title, address: fullAddress };
-      } catch {}
-    }
-
     const publishedAt = ad.published_at instanceof Date ? ad.published_at.toISOString() : ad.published_at ? new Date(ad.published_at).toISOString() : undefined;
     const createdAt = ad.created_at instanceof Date ? ad.created_at.toISOString() : ad.created_at ? new Date(ad.created_at).toISOString() : undefined;
 
-    return { text: lines.join('\n'), media, url: ad.ad_url, externalId: ad.external_id, publishedAt, createdAt, location };
+    return { text: lines.join('\n'), media, url: ad.ad_url, externalId: ad.external_id, publishedAt, createdAt };
   }
 }
