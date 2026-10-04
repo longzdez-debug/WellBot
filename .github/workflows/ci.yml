@@ -21,4 +21,4 @@ jobs:
       - name: Validate Dockerfile
         run: docker build --check .
       - name: Build production Docker image
-        run: docker build --tag hunt-ci:latest .
+        run: docker build --tag wellbot-ci:latest .
