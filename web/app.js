@@ -1,278 +1,44 @@
-const WELLBOT_BUILD = '2026.10.04.1';
-const tg = window.Telegram?.WebApp;
-const state = { data: null, metrics: null, filter: 'all', loading: false, submitting: false, lastLoadedAt: 0 };
+const WELLBOT_BUILD="2026.10.04.5";
+const tg=window.Telegram?.WebApp;
+const state={data:null,catalog:null,filter:"all",loading:false,submitting:false,lastLoadedAt:0};
 
-function applyTelegramTheme() {
-  if (!tg) return;
-  const p = tg.themeParams || {};
-  const root = document.documentElement;
-  if (p.bg_color) root.style.setProperty('--tg-bg', p.bg_color);
-  if (p.text_color) root.style.setProperty('--tg-text', p.text_color);
-  try {
-    tg.ready(); tg.expand();
-    tg.setHeaderColor(p.bg_color || '#07090b');
-    tg.setBackgroundColor(p.bg_color || '#07090b');
-    tg.onEvent?.('themeChanged', applyTelegramTheme);
-    tg.enableClosingConfirmation?.();
-  } catch {}
-}
+function applyTelegramTheme(){if(!tg)return;const p=tg.themeParams||{};document.documentElement.style.setProperty("--tg-bg",p.bg_color||"#080a0d");document.documentElement.style.setProperty("--tg-text",p.text_color||"#f4f6f5");try{tg.ready();tg.expand();tg.setHeaderColor?.(p.bg_color||"#080a0d");tg.setBackgroundColor?.(p.bg_color||"#080a0d");tg.onEvent?.("themeChanged",applyTelegramTheme)}catch{}}
 applyTelegramTheme();
 
-function getTelegramInitData() {
-  if (tg?.initData) return tg.initData;
-  try { const internal = window.Telegram?.WebView?.initParams?.tgWebAppData; if (internal) return internal; } catch {}
-  try {
-    for (const source of [String(window.location.hash || ''), String(window.location.search || '')]) {
-      const raw = source.replace(/^#|^\?/, '');
-      const value = new URLSearchParams(raw).get('tgWebAppData');
-      if (value) return value;
-    }
-  } catch {}
-  return '';
-}
+function getTelegramInitData(){if(tg?.initData)return tg.initData;try{const v=window.Telegram?.WebView?.initParams?.tgWebAppData;if(v)return v}catch{}try{for(const source of [String(location.hash||""),String(location.search||"")]){const v=new URLSearchParams(source.replace(/^#|^\?/,"")).get("tgWebAppData");if(v)return v}}catch{}return ""}
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const platformLabel=p=>({kufar:"Kufar",onliner:"Onliner",av:"AV.BY"}[p]||String(p||"").toUpperCase());
+const platformIcon=p=>({kufar:"K",onliner:"O",av:"A"}[p]||"W");
+const fmtDate=v=>{if(!v)return"—";const d=new Date(v);return Number.isNaN(d.getTime())?"—":d.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})};
+const price=v=>v!==null&&v!==undefined&&v!==""?esc(v):"Цена не указана";
+async function api(path,options={}){const initData=getTelegramInitData();if(!initData)throw new Error("Открой WellBOT через Telegram.");const r=await fetch(path,{...options,cache:"no-store",headers:{"Content-Type":"application/json","X-Telegram-Init-Data":initData,...(options.headers||{})}});const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(p.message||({unauthorized:"Сессия Telegram недействительна. Открой WellBOT заново.",user_not_registered:"Сначала нажми /start в боте.",duplicate:"Такой поиск уже есть.",limit_reached:"Достигнут лимит активных поисков."}[p.error])||"Не удалось выполнить действие.");return p}
+function haptic(type="light"){try{tg?.HapticFeedback?.impactOccurred(type)}catch{}}
+function setLiveStatus(text,active=true){const p=document.querySelector(".live-pill");if(!p)return;p.classList.toggle("stale",!active);p.querySelector("span").textContent=text}
+function updateFreshness(){if(!state.lastLoadedAt)return;const sec=Math.max(0,Math.round((Date.now()-state.lastLoadedAt)/1000));const el=document.querySelector("#hero-sync");if(el)el.textContent=sec<10?"Только что обновлено":"Обновлено "+sec+"с назад";setLiveStatus(sec<90?"ОНЛАЙН":"СИНХРОНИЗАЦИЯ",sec<90)}
+function renderStats(stats){const active=Number(stats?.activeLinks||0),fresh=Number(stats?.adsToday||0),below=(state.data?.ads||[]).filter(a=>a.market_status==="below_market").length;document.querySelector("#stat-active").textContent=active;document.querySelector("#stat-new").textContent=fresh;document.querySelector("#stat-deals").textContent=below;const u=state.data?.user?.username;if(u)document.querySelector("#hero-copy").textContent="@"+u+" — WellBOT ищет новые лоты и отправляет самые интересные прямо в Telegram."}
+function marketMarkup(a){if(a.market_status==="below_market"){const pct=a.market_percent!=null?Math.abs(Number(a.market_percent)).toFixed(0)+"%":"ниже";return '<span class="deal-badge"><b>↓ '+pct+"</b> ниже рынка</span>"}if(a.market_status==="above_market"){const pct=a.market_percent!=null?Number(a.market_percent).toFixed(0)+"%":"";return '<span class="market-badge above">↑ '+pct+" выше рынка</span>"}if(a.market_status==="market")return '<span class="market-badge fair">≈ рынок</span>';return ""}
+function listingMarkup(a,compact=false){const image=esc(a.image_url||""),title=esc(a.title||"Без названия"),location=esc([a.location,a.address].filter(Boolean).join(" · "))||"Беларусь",platform=a.link_platform||"",market=marketMarkup(a);return '<article class="listing '+(compact?"listing-compact":"")+'" data-url="'+esc(a.ad_url)+'" tabindex="0" role="link" aria-label="'+title+'"><div class="listing-image"><img src="'+image+'" alt="" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'"><span class="source-badge">'+platformIcon(platform)+" · "+platformLabel(platform)+'</span></div><div class="listing-body"><div class="listing-top"><span>'+fmtDate(a.published_at||a.created_at)+"</span>"+market+'</div><h3>'+title+"</h3><p>"+location+'</p><div class="listing-bottom"><strong class="price">'+price(a.price)+'</strong><span class="open-hint">Открыть ↗</span></div></div></article>'}
+function bindListingLinks(root){root.querySelectorAll("[data-url]").forEach(card=>{const open=()=>{const url=card.dataset.url;if(!url)return;haptic("light");tg?.openLink?tg.openLink(url):window.open(url,"_blank","noopener")};card.addEventListener("click",open);card.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();open()}})})}
+function renderHotFind(){const root=document.querySelector("#hot-find"),ads=[...(state.data?.ads||[])];const hot=ads.sort((a,b)=>{const da=a.market_status==="below_market"?Math.abs(Number(a.market_percent||0)):0,db=b.market_status==="below_market"?Math.abs(Number(b.market_percent||0)):0;return db-da})[0]||ads[0];if(!hot){root.hidden=true;root.innerHTML="";return}root.hidden=false;const deal=hot.market_status==="below_market",pct=hot.market_percent!=null?Math.abs(Number(hot.market_percent)).toFixed(0)+"%":"",title=esc(hot.title||"Новая находка"),location=esc([hot.location,hot.address].filter(Boolean).join(" · "))||"Беларусь",image=esc(hot.image_url||"");root.innerHTML='<div class="hot-head"><div><span class="hot-kicker">'+(deal?"★ ВЫГОДНАЯ НАХОДКА":"● НОВАЯ НАХОДКА")+'</span><h2>'+(deal?"Стоит забрать":"Свежий лот")+'</h2></div><span class="hot-time">'+fmtDate(hot.published_at||hot.created_at)+'</span></div><div class="hot-body"><div class="hot-image-wrap"><img src="'+image+'" alt="" loading="eager" onerror="this.style.visibility='hidden'"><span class="hot-platform">'+platformLabel(hot.link_platform)+'</span>'+(deal?'<span class="hot-deal">−'+pct+" от рынка</span>":"")+'</div><div class="hot-info"><h3>'+title+"</h3><p>"+location+'</p><strong>'+price(hot.price)+'</strong><div class="hot-market">'+marketMarkup(hot)+'</div><button class="hot-open" type="button">Открыть объявление <span>↗</span></button></div></div>';const open=()=>{if(!hot.ad_url)return;haptic("medium");tg?.openLink?tg.openLink(hot.ad_url):window.open(hot.ad_url,"_blank","noopener")};root.querySelector(".hot-open")?.addEventListener("click",open);root.querySelector(".hot-image-wrap")?.addEventListener("click",open)}
+function renderFeed(){const all=state.data?.ads||[],ads=state.filter==="all"?all:all.filter(a=>a.link_platform===state.filter),feed=document.querySelector("#feed");if(!ads.length){feed.innerHTML='<div class="empty"><strong>Пока тихо.</strong><br>Как только появится подходящий лот — он будет здесь.</div>';return}feed.innerHTML=ads.map(a=>listingMarkup(a)).join("");bindListingLinks(feed)}
+function catalogLabel(id){for(const c of state.catalog?.categories||[]){if(c.id===id)return c.title;const child=(c.children||[]).find(x=>x.id===id);if(child)return child.title}return id||"Каталог"}
+function renderMonitors(){const links=state.data?.links||[],counts=new Map((state.data?.statsByLink||[]).map(x=>[Number(x.linkId),Number(x.count)])),root=document.querySelector("#monitors");if(!links.length){root.innerHTML='<div class="empty empty-search"><strong>Первый поиск за 30 секунд.</strong><br>Выбери категорию, город и цену — остальное сделает WellBOT.<br><button class="inline-add" data-action="add">＋ Создать поиск</button></div>';root.querySelector("[data-action=add]")?.addEventListener("click",showMonitorForm);return}root.innerHTML=links.map(l=>{const c=l.config||{},scope=[c.city,c.region].filter(Boolean).join(" · ")||"Вся Беларусь",filters=[c.query,c.minPrice!=null?"от "+c.minPrice:"",c.maxPrice!=null?"до "+c.maxPrice:"",c.condition==="new"?"Новое":c.condition==="used"?"Б/у":"",c.seller==="company"?"Компания":c.seller==="private"?"Частное лицо":""].filter(Boolean).join(" · "),categoryTitle=c.subcategoryId?catalogLabel(c.subcategoryId):catalogLabel(c.categoryId),mode=c.mode==="sniper";return '<div class="monitor '+(mode?"sniper":"")+'"><span class="monitor-icon">'+platformIcon(l.platform)+'</span><div class="monitor-main"><div class="monitor-title"><strong>'+esc(categoryTitle)+'</strong><span class="monitor-status '+(l.is_active?"on":"")+'">'+(l.is_active?"РАБОТАЕТ":"ПАУЗА")+'</span></div><small>'+esc(scope)+(filters?" · "+esc(filters):"")+'</small><em>'+(mode?"⚡ Быстрый режим":"Автоматический мониторинг")+'</em></div><span class="count">'+(counts.get(l.id)||0)+'</span><button class="switch '+(l.is_active?"on":"")+'" data-toggle="'+l.id+'" aria-label="'+(l.is_active?"Поставить на паузу":"Возобновить")+'" aria-pressed="'+!!l.is_active+'"></button><button class="delete-link" data-delete="'+l.id+'" aria-label="Удалить">×</button></div>'}).join("");root.querySelectorAll("[data-toggle]").forEach(btn=>btn.addEventListener("click",async()=>{const id=Number(btn.dataset.toggle),link=links.find(x=>x.id===id);if(!link)return;haptic("light");btn.disabled=true;try{await api("/api/links/"+id,{method:"PATCH",body:JSON.stringify({is_active:!link.is_active})});await load(true)}catch(e){showError(e.message)}finally{btn.disabled=false}}));root.querySelectorAll("[data-delete]").forEach(btn=>btn.addEventListener("click",async()=>{const id=Number(btn.dataset.delete);if(!confirm("Удалить этот поиск?"))return;haptic("medium");btn.disabled=true;try{await api("/api/links/"+id,{method:"DELETE"});await load(true)}catch(e){showError(e.message)}finally{btn.disabled=false}}))}
+function renderDrops(){const drops=state.data?.priceDrops||[],root=document.querySelector("#drops");if(!drops.length){root.innerHTML='<div class="empty">Когда продавец снизит цену, здесь появится лот.</div>';return}root.innerHTML=drops.map(d=>'<article class="listing drop" data-url="'+esc(d.ad_url)+'" tabindex="0" role="link"><div class="listing-image"><img src="'+esc(d.image_url||"")+'" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><span class="source-badge">↓ ЦЕНА</span></div><div class="listing-body"><div class="listing-top"><span>'+fmtDate(d.created_at)+'</span><span class="drop-percent">−'+(d.price_change_percent!=null?esc(Number(d.price_change_percent).toFixed(0)):"?")+'%</span></div><h3>'+esc(d.title||"Без названия")+"</h3><p>"+esc(platformLabel(d.link_platform))+'</p><div class="listing-bottom"><strong class="price">'+price(d.new_price)+'</strong><span class="old-price">'+price(d.old_price)+"</span></div></div></article>").join("");bindListingLinks(root)}
+function renderSkeleton(){const skeleton='<div class="skeleton-list"><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div></div>';["#feed","#monitors"].forEach(s=>{const n=document.querySelector(s);if(n&&!state.data)n.innerHTML=skeleton})}
+async function load(){if(state.loading)return;state.loading=true;document.body.classList.add("is-loading");if(!state.data)renderSkeleton();setLiveStatus("ЗАГРУЗКА",true);try{const [data,catalog]=await Promise.all([api("/api/bootstrap"),state.catalog?Promise.resolve(state.catalog):api("/api/catalog")]);const hadData=!!state.data,previous=new Set((state.data?.ads||[]).map(a=>String(a.id??a.ad_id??a.ad_url)));state.catalog=catalog;state.data=data;state.lastLoadedAt=Date.now();renderStats(data.stats);renderHotFind();renderFeed();renderMonitors();renderDrops();const newCount=(data.ads||[]).filter(a=>!previous.has(String(a.id??a.ad_id??a.ad_url))).length;setLiveStatus("ОНЛАЙН",true);updateFreshness();if(hadData&&newCount>0){haptic("success");document.querySelector("#stat-new")?.classList.add("pulse-value");setTimeout(()=>document.querySelector("#stat-new")?.classList.remove("pulse-value"),900)}console.info("[WellBOT]",WELLBOT_BUILD,"ok",{links:data.links?.length||0,ads:data.ads?.length||0,newCount})}catch(e){console.error("[WellBOT]",WELLBOT_BUILD,"load failed",e);setLiveStatus("ОШИБКА",false);if(!state.data){document.querySelector("#feed").innerHTML='<div class="empty error"><strong>Не удалось загрузить WellBOT</strong><br>'+esc(e.message)+'<br><button class="link-btn" data-action="refresh">Повторить</button></div>';document.querySelector("#monitors").innerHTML='<div class="empty error">Данные временно недоступны.</div>';document.querySelector("#drops").innerHTML='<div class="empty">Данные временно недоступны.</div>';document.querySelectorAll("[data-action=refresh]").forEach(x=>x.addEventListener("click",()=>load()))}else showError("Не удалось обновить данные: "+e.message)}finally{state.loading=false;document.body.classList.remove("is-loading");updateFreshness()}}
+function showError(message){if(tg?.showAlert)tg.showAlert(message);else alert(message)}
+function showSuccess(message){if(tg?.showPopup)tg.showPopup({title:"WellBOT",message,buttons:[{type:"ok"}]});else alert(message)}
 
-const esc = (value) => String(value ?? '').replace(/[&<>\"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
-const platformLabel = (p) => ({ kufar: 'KUFAR', onliner: 'ONLINER', av: 'AV.BY' }[p] || String(p || '').toUpperCase());
-const platformIcon = (p) => ({ kufar: '▣', onliner: '◈', av: '🚗' }[p] || '⌖');
-const fmtDate = (value) => { if (!value) return '—'; const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); };
-const price = (value) => value !== null && value !== undefined && value !== '' ? esc(value) : 'Цена не указана';
+async function showMonitorForm(){if(state.submitting)return;document.querySelector("#wellbot-monitor-modal")?.remove();if(!state.catalog){try{state.catalog=await api("/api/catalog")}catch(e){showError(e.message);return}}const categories=state.catalog.categories||[],modal=document.createElement("div");modal.id="wellbot-monitor-modal";modal.className="wellbot-modal";modal.innerHTML='<div class="modal-card catalog-modal" role="dialog" aria-modal="true"><button class="modal-close" id="wellbot-monitor-x" type="button">×</button><div class="modal-kicker">НОВЫЙ МОНИТОР</div><h2>Что ищем?</h2><p class="modal-subtitle">Выбери товар и условия. Ссылки с площадок не нужны.</p><div class="form-step"><span>01</span><div><b>Товар</b><small>Категория и подкатегория</small></div></div><label class="modal-label">Категория</label><input id="catalog-category-search" type="search" maxlength="80" placeholder="Например, телефоны"><select id="catalog-category"><option value="">Выберите категорию</option></select><label class="modal-label" id="subcategory-label" hidden>Подкатегория</label><select id="catalog-subcategory" hidden><option value="">Выберите подкатегорию</option></select><div class="form-step"><span>02</span><div><b>Где и за сколько</b><small>Сузь поток до нужных объявлений</small></div></div><label class="modal-label">Город</label><select id="catalog-city"><option value="">Вся Беларусь</option><option value="minsk">Минск</option><option value="brest">Брест</option><option value="vitebsk">Витебск</option><option value="gomel">Гомель</option><option value="grodno">Гродно</option><option value="mogilev">Могилёв</option></select><div class="catalog-grid"><div><label class="modal-label">Цена от</label><input id="catalog-min" type="number" min="0" placeholder="0"></div><div><label class="modal-label">Цена до</label><input id="catalog-max" type="number" min="0" placeholder="Без лимита"></div></div><label class="modal-label">Ключевые слова <span class="muted">необязательно</span></label><input id="catalog-query" type="text" maxlength="120" placeholder="Например: iPhone 15 Pro"><div class="form-step"><span>03</span><div><b>Точность</b><small>Отсеки ненужные варианты</small></div></div><label class="modal-label">Состояние</label><select id="catalog-condition"><option value="">Любое</option><option value="new">Новое</option><option value="used">Б/у</option></select><label class="modal-label">Продавец</label><select id="catalog-seller"><option value="">Любой</option><option value="private">Частное лицо</option><option value="company">Компания</option></select><label class="modal-label">Скорость</label><select id="catalog-mode"><option value="normal">Обычный — экономный мониторинг</option><option value="sniper">⚡ Быстрый — максимум частоты</option></select><div id="wellbot-monitor-error" class="modal-error" role="alert"></div><div class="modal-actions"><button id="wellbot-monitor-cancel" class="modal-secondary" type="button">Отмена</button><button id="wellbot-monitor-submit" class="modal-primary" type="button">Запустить поиск <span>→</span></button></div></div>';document.body.appendChild(modal);
+const qSearch=modal.querySelector("#catalog-category-search"),category=modal.querySelector("#catalog-category"),sub=modal.querySelector("#catalog-subcategory"),subLabel=modal.querySelector("#subcategory-label"),city=modal.querySelector("#catalog-city"),min=modal.querySelector("#catalog-min"),max=modal.querySelector("#catalog-max"),query=modal.querySelector("#catalog-query"),condition=modal.querySelector("#catalog-condition"),seller=modal.querySelector("#catalog-seller"),mode=modal.querySelector("#catalog-mode"),error=modal.querySelector("#wellbot-monitor-error"),submit=modal.querySelector("#wellbot-monitor-submit");
+const close=()=>{if(!state.submitting)modal.remove()};modal.querySelector("#wellbot-monitor-cancel").onclick=close;modal.querySelector("#wellbot-monitor-x").onclick=close;modal.onclick=e=>{if(e.target===modal)close()};
+const renderCategories=needle=>{const q=(needle||"").trim().toLocaleLowerCase("ru-RU"),matches=categories.filter(c=>c.searchable!==false&&(!q||c.title.toLocaleLowerCase("ru-RU").includes(q)||(c.children||[]).some(x=>x.title.toLocaleLowerCase("ru-RU").includes(q))));category.innerHTML='<option value="">Выберите категорию</option>'+matches.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.title)+"</option>").join("")};qSearch.oninput=()=>renderCategories(qSearch.value);category.onchange=()=>{const node=categories.find(c=>c.id===category.value),children=node?.children||[];sub.innerHTML=(children.length?'<option value="">Выберите подкатегорию</option>':'<option value="">Вся категория</option>')+children.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.title)+"</option>").join("");sub.hidden=!children.length;subLabel.hidden=!children.length};renderCategories("");
+const submitMonitor=async()=>{if(state.submitting)return;error.textContent="";if(!category.value){error.textContent="Сначала выбери категорию.";return}const selected=categories.find(c=>c.id===category.value);if(selected?.children?.length&&!sub.value){error.textContent="Выбери подкатегорию.";return}if(min.value&&max.value&&Number(min.value)>Number(max.value)){error.textContent="Цена от не может быть выше цены до.";return}state.submitting=true;submit.disabled=true;submit.innerHTML="Запускаю…";haptic("light");const payload={source:"kufar",categoryId:category.value,subcategoryId:sub.value||undefined,city:city.value||undefined,query:query.value.trim()||undefined,minPrice:min.value?Number(min.value):undefined,maxPrice:max.value?Number(max.value):undefined,condition:condition.value||undefined,seller:seller.value||undefined,mode:mode.value||"normal"};try{const result=await api("/api/monitors",{method:"POST",body:JSON.stringify(payload)});modal.remove();state.submitting=false;await load();showSuccess(result.reactivated?"Поиск снова активен.":"Поиск запущен.");haptic("success")}catch(e){error.textContent=e.message;submit.disabled=false;submit.innerHTML='Запустить поиск <span>→</span>';state.submitting=false}};
+submit.onclick=submitMonitor;modal.querySelectorAll("input,select").forEach(x=>x.addEventListener("keydown",e=>{if(e.key==="Enter")submitMonitor();if(e.key==="Escape")close()}))}
 
-async function api(path, options = {}) {
-  const initData = getTelegramInitData();
-  if (!initData) throw new Error('WellBOT нужно открыть кнопкой внутри Telegram. Открой WellBOT заново из бота.');
-  const response = await fetch(path, { ...options, cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData, ...(options.headers || {}) } });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = payload.message || ({ unauthorized: 'Сессия Telegram недействительна. Закройте WellBOT и откройте заново.', user_not_registered: 'Сначала нажмите /start в боте.', duplicate: 'Эта ссылка уже добавлена.', limit_reached: 'Достигнут лимит в 50 поисков.', unsupported_url: 'Ссылка не поддерживается.' }[payload.error]) || `HTTP ${response.status}`;
-    throw new Error(message);
-  }
-  return payload;
-}
-
-function haptic(type = 'light') { try { tg?.HapticFeedback?.impactOccurred(type); } catch {} }
-function setLiveStatus(text, active = true) { const pill = document.querySelector('.live-pill'); if (!pill) return; pill.innerHTML = `<i></i> ${esc(text)}`; pill.classList.toggle('stale', !active); }
-function updateFreshness() { if (!state.lastLoadedAt) return; const seconds = Math.max(0, Math.round((Date.now() - state.lastLoadedAt) / 1000)); setLiveStatus(seconds < 20 ? 'LIVE' : `SYNC ${seconds}s`, seconds < 90); }
-
-function renderPerformance(metrics) { const scheduler=metrics?.scheduler||{}; const notifications=metrics?.notifications||{}; const set=(id,value)=>{const el=document.querySelector(id);if(el)el.textContent=value;}; set('#metric-p50',`${scheduler.cycleDurationMs?.p50??0}ms`); set('#metric-p95',`${scheduler.cycleDurationMs?.p95??0}ms`); set('#metric-p99',`${scheduler.cycleDurationMs?.p99??0}ms`); set('#metric-overruns',String(scheduler.cycleOverruns??0)); set('#metric-link-failures',String(scheduler.linkFailures??0)); set('#metric-active',String(scheduler.activeLinks??0)); const freshness=Number(scheduler.freshnessLagMs?.oldest||0); set('#metric-freshness',freshness?`${Math.round(freshness/1000)}s`:'—'); set('#metric-ads-minute',String(scheduler.adsPerMinute??0)); set('#metric-sent',String(notifications.sent??0)); set('#metric-duplicates',String(metrics.duplicateNotifications??0)); set('#metric-pending',String(notifications.pending??0)); const age=Number(notifications.oldestAgeMs||0); set('#metric-oldest',age?`${Math.round(age/1000)}s`:'—'); set('#metric-notify-p95',`${notifications.latencyMs?.p95??0}ms`); const health=document.querySelector('#performance-health'); if(health){const degraded=(notifications.pending??0)>100||(notifications.oldestAgeMs??0)>30000||freshness>120000||scheduler.cycleOverruns>5; health.textContent=degraded?'DEGRADED':'HEALTHY'; health.classList.toggle('bad',degraded);}}
-function renderStats(stats) {
-  document.querySelector('#stat-active').textContent = stats?.activeLinks ?? 0;
-  document.querySelector('#stat-new').textContent = stats?.adsToday ?? 0;
-  document.querySelector('#stat-drops').textContent = stats?.priceDropsToday ?? 0;
-  document.querySelector('#overview-count').textContent = stats?.adsToday ?? 0;
-  const inlineActive = document.querySelector('#stat-active-inline');
-  if (inlineActive) inlineActive.textContent = stats?.activeLinks ?? 0;
-  const username = state.data?.user?.username;
-  if (username) document.querySelector('#hero-copy').textContent = `@${esc(username)} — цели под контролем. Новая цель сразу приходит в Telegram.`;
-}
-
-function listingMarkup(a, compact = false) {
-  const image = esc(a.image_url || '');
-  const title = esc(a.title || 'Без названия');
-  const location = esc([a.location, a.address].filter(Boolean).join(' · ')) || 'Беларусь';
-  const platform = a.link_platform || '';
-  const market = a.market_status === 'below_market' ? `<span class="market-badge below">↓ НИЖЕ ${a.market_percent != null ? Math.abs(Number(a.market_percent)).toFixed(1) + '%' : ''}</span>` : a.market_status === 'above_market' ? `<span class="market-badge above">↑ ВЫШЕ ${a.market_percent != null ? Number(a.market_percent).toFixed(1) + '%' : ''}</span>` : a.market_status === 'market' ? `<span class="market-badge fair">≈ РЫНОК</span>` : '';
-  return `<article class="listing ${compact ? 'listing-compact' : ''}" data-url="${esc(a.ad_url)}" tabindex="0" role="link" aria-label="${title}"><img src="${image}" alt="" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'"><div class="listing-body"><div class="listing-top"><span class="tag ${platform === 'onliner' ? 'target' : ''}">${platformLabel(platform)}</span><time>${fmtDate(a.published_at || a.created_at)}</time></div><h3>${title}</h3><p>${location}</p><div class="listing-bottom"><span class="price">${price(a.price)}</span><span>${market}</span></div></div></article>`;
-}
-
-function bindListingLinks(root) {
-  root.querySelectorAll('[data-url]').forEach(card => {
-    const open = () => { const url = card.dataset.url; if (!url) return; haptic('light'); tg?.openLink ? tg.openLink(url) : window.open(url, '_blank', 'noopener'); };
-    card.addEventListener('click', open);
-    card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
-  });
-}
-
-function renderHotFind() {
-  const root = document.querySelector('#hot-find');
-  const ads = state.data?.ads || [];
-  if (!root) return;
-  const hot = ads[0];
-  if (!hot) { root.hidden = true; root.innerHTML = ''; return; }
-  root.hidden = false;
-  const title = esc(hot.title || 'Новая находка');
-  const location = esc([hot.location, hot.address].filter(Boolean).join(' · ')) || 'Беларусь';
-  const image = esc(hot.image_url || '');
-  root.innerHTML = `<div class="hot-head"><div><span class="hot-kicker">⚡ HOT FIND</span><h2>Свежая цель</h2></div><span class="hot-time">${fmtDate(hot.published_at || hot.created_at)}</span></div><div class="hot-body"><div class="hot-image-wrap"><img src="${image}" alt="" loading="eager" onerror="this.style.visibility='hidden'"><span class="hot-platform">${platformLabel(hot.link_platform)}</span></div><div class="hot-info"><h3>${title}</h3><p>${location}</p><strong>${price(hot.price)}</strong><button class="hot-open" type="button">Открыть объявление <span>↗</span></button></div></div>`;
-  const open = () => { if (!hot.ad_url) return; haptic('medium'); tg?.openLink ? tg.openLink(hot.ad_url) : window.open(hot.ad_url, '_blank', 'noopener'); };
-  root.querySelector('.hot-open')?.addEventListener('click', open);
-  root.querySelector('.hot-image-wrap')?.addEventListener('click', open);
-}
-
-function renderFeed() {
-  const all = state.data?.ads || [];
-  const ads = state.filter === 'all' ? all : all.filter(a => a.link_platform === state.filter);
-  const feed = document.querySelector('#feed');
-  if (!ads.length) { feed.innerHTML = `<div class="empty"><strong>Лента чиста.</strong><br>Новых объявлений по этому фильтру пока нет.</div>`; return; }
-  feed.innerHTML = ads.map(a => listingMarkup(a)).join('');
-  bindListingLinks(feed);
-}
-
-function catalogLabel(id) {
-  const categories = state.catalog?.categories || [];
-  for (const category of categories) {
-    if (category.id === id) return category.title;
-    const child = (category.children || []).find(item => item.id === id);
-    if (child) return child.title;
-  }
-  return id || 'Каталог';
-}
-
-function renderMonitors() {
-  const links = state.data?.links || [];
-  const counts = new Map((state.data?.statsByLink || []).map(x => [Number(x.linkId), Number(x.count)]));
-  const root = document.querySelector('#monitors');
-  if (!links.length) { root.innerHTML = '<div class="empty"><strong>Первый поиск ещё не создан.</strong><br>Выберите категорию и фильтры — WellBOT начнёт поиск.</div>'; return; }
-  root.innerHTML = links.map(l => { const c=l.config||{}; const scope=[c.city,c.region].filter(Boolean).join(' · ')||'Вся Беларусь'; const filters=[c.query,c.minPrice!=null?`от ${c.minPrice}`:'',c.maxPrice!=null?`до ${c.maxPrice}`:'',c.condition==='new'?'Новое':c.condition==='used'?'Б/у':'',c.seller==='company'?'Компания':c.seller==='private'?'Частное лицо':''].filter(Boolean).join(' · '); const categoryTitle=c.subcategoryId?catalogLabel(c.subcategoryId):catalogLabel(c.categoryId); const mode=c.mode==='sniper'?'SNIPER':'NORMAL'; return `<div class="monitor"><span class="monitor-icon">${platformIcon(l.platform)}</span><div><strong>${platformLabel(l.platform)} <span class="monitor-status ${l.is_active ? 'on' : ''}">${l.is_active ? 'LIVE' : 'PAUSED'}</span></strong><small>📂 ${esc(categoryTitle)} · 📍 ${esc(scope)}${filters?` · 🔎 ${esc(filters)}`:''} · ⚡ ${mode}</small></div><span class="count">${counts.get(l.id) || 0}</span><button class="switch ${l.is_active ? 'on' : ''}" data-toggle="${l.id}" aria-label="Переключить" aria-pressed="${!!l.is_active}"></button><button class="delete-link" data-delete="${l.id}" aria-label="Удалить">×</button></div>`; }).join('');
-  root.querySelectorAll('[data-toggle]').forEach(btn => btn.addEventListener('click', async () => {
-    const id = Number(btn.dataset.toggle); const link = links.find(x => x.id === id); if (!link) return;
-    haptic('light'); btn.disabled = true;
-    try { await api(`/api/links/${id}`, { method:'PATCH', body: JSON.stringify({ is_active: !link.is_active }) }); await load(true); }
-    catch (e) { showError(e.message); } finally { btn.disabled = false; }
-  }));
-  root.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', async () => {
-    const id = Number(btn.dataset.delete); if (!confirm('Удалить этот поиск?')) return;
-    haptic('medium'); btn.disabled = true;
-    try { await api(`/api/links/${id}`, { method:'DELETE' }); await load(true); }
-    catch (e) { showError(e.message); } finally { btn.disabled = false; }
-  }));
-}
-
-function renderDrops() {
-  const drops = state.data?.priceDrops || [];
-  const root = document.querySelector('#drops');
-  if (!drops.length) { root.innerHTML = '<div class="empty">Новых снижений цены пока нет.</div>'; return; }
-  root.innerHTML = drops.map(d => `<article class="listing drop" data-url="${esc(d.ad_url)}" tabindex="0" role="link"><img src="${esc(d.image_url || '')}" alt="" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'"><div class="listing-body"><div class="listing-top"><span class="tag target">↓ ${d.price_change_percent != null ? esc(Number(d.price_change_percent).toFixed(1)) + '%' : 'PRICE DROP'}</span><time>${fmtDate(d.created_at)}</time></div><h3>${esc(d.title || 'Без названия')}</h3><p>${esc(platformLabel(d.link_platform))}</p><div class="listing-bottom"><span class="price">${price(d.new_price)}</span><span class="discount">было ${price(d.old_price)}</span></div></div></article>`).join('');
-  bindListingLinks(root);
-}
-
-function renderSkeleton() {
-  const skeleton = '<div class="skeleton-list"><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div></div>';
-  ['#feed','#monitors'].forEach(selector => { const node = document.querySelector(selector); if (node && !state.data) node.innerHTML = skeleton; });
-}
-
-async function load(force = false) {
-  if (state.loading) return;
-  state.loading = true;
-  document.body.classList.add('is-loading');
-  if (!state.data) renderSkeleton();
-  setLiveStatus('SYNC', true);
-  try {
-    const [data, catalog, metrics] = await Promise.all([api('/api/bootstrap'), state.catalog ? Promise.resolve(state.catalog) : api('/api/catalog'), api('/api/metrics')]);
-    state.catalog = catalog; state.metrics = metrics;
-    const hadData = !!state.data;
-    const previousAds = new Set((state.data?.ads || []).map(a => String(a.id ?? a.ad_id ?? a.ad_url)));
-    state.data = data; state.lastLoadedAt = Date.now();
-    renderStats(data.stats); renderPerformance(metrics); renderHotFind(); renderFeed(); renderMonitors(); renderDrops();
-    const newCount = (data.ads || []).filter(a => !previousAds.has(String(a.id ?? a.ad_id ?? a.ad_url))).length;
-    setLiveStatus('LIVE', true);
-    if (hadData && newCount > 0) {
-      haptic('success');
-      const badge = document.querySelector('#overview-count');
-      badge?.classList.add('pulse-value'); setTimeout(() => badge?.classList.remove('pulse-value'), 900);
-    }
-    console.info('[WellBOT]', WELLBOT_BUILD, 'bootstrap ok', { links: data.links?.length || 0, ads: data.ads?.length || 0, newCount });
-  } catch (e) {
-    console.error('[WellBOT]', WELLBOT_BUILD, 'bootstrap failed', e);
-    setLiveStatus('OFFLINE', false);
-    if (!state.data) {
-      document.querySelector('#feed').innerHTML = `<div class="empty error"><strong>WellBOT ${WELLBOT_BUILD}</strong><br>${esc(e.message)}<br><button class="link-btn" data-action="refresh">Повторить</button></div>`;
-      document.querySelector('#monitors').innerHTML = `<div class="empty error">${esc(e.message)}</div>`;
-      document.querySelector('#drops').innerHTML = '<div class="empty">Данные временно недоступны.</div>';
-      document.querySelector('#hot-find').hidden = true;
-      document.querySelectorAll('[data-action="refresh"]').forEach(x => x.addEventListener('click', () => load(true)));
-    } else showError(`Не удалось обновить данные: ${e.message}`);
-  } finally {
-    state.loading = false;
-    document.body.classList.remove('is-loading');
-    updateFreshness();
-  }
-}
-
-function showError(message) { if (tg?.showAlert) tg.showAlert(message); else alert(message); }
-function showSuccess(message) { if (tg?.showPopup) tg.showPopup({ title: 'WellBOT', message, buttons: [{ type: 'ok' }] }); else alert(message); }
-
-async function showMonitorForm() {
-  if (state.submitting) return;
-  document.querySelector('#wellbot-monitor-modal')?.remove();
-  state.catalog = state.catalog || null;
-  if (!state.catalog) {
-    try { state.catalog = await api('/api/catalog'); }
-    catch (e) { showError(e.message); return; }
-  }
-  const categories = state.catalog.categories || [];
-  const modal = document.createElement('div'); modal.id='wellbot-monitor-modal'; modal.className='wellbot-modal';
-  modal.innerHTML = `<div class="modal-card catalog-modal" role="dialog" aria-modal="true">
-    <button class="modal-close" id="wellbot-monitor-x" type="button">×</button>
-    <div class="modal-kicker">NEW SEARCH</div>
-    <h2>Создать поиск</h2>
-    <p>Выберите категорию и фильтры. Ссылки Kufar больше не нужны.</p>
-    <label class="modal-label">Категория</label>
-    <input id="catalog-category-search" type="search" maxlength="80" placeholder="Найти категорию…">
-    <select id="catalog-category"><option value="">Выберите категорию</option>${categories.map(c=>`<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('')}</select>
-    <label class="modal-label" id="subcategory-label" hidden>Подкатегория</label>
-    <select id="catalog-subcategory" hidden><option value="">Все в категории</option></select>
-    <label class="modal-label">Город</label>
-    <select id="catalog-city"><option value="">Вся Беларусь</option><option value="minsk">Минск</option><option value="brest">Брест</option><option value="vitebsk">Витебск</option><option value="gomel">Гомель</option><option value="grodno">Гродно</option><option value="mogilev">Могилёв</option></select>
-    <div class="catalog-grid">
-      <div><label class="modal-label">Цена от</label><input id="catalog-min" type="number" min="0" placeholder="0"></div>
-      <div><label class="modal-label">Цена до</label><input id="catalog-max" type="number" min="0" placeholder="Без лимита"></div>
-    </div>
-    <label class="modal-label">Ключевые слова <span class="muted">необязательно</span></label>
-    <input id="catalog-query" type="text" maxlength="120" placeholder="Например: iPhone 15 Pro">
-    <label class="modal-label">Состояние</label>
-    <select id="catalog-condition"><option value="">Любое</option><option value="new">Новое</option><option value="used">Б/у</option></select>
-    <label class="modal-label">Продавец</label>
-    <select id="catalog-seller"><option value="">Любой</option><option value="private">Частное лицо</option><option value="company">Компания</option></select>
-    <label class="modal-label">Режим</label>
-    <select id="catalog-mode"><option value="normal">Обычный — стандартная нагрузка</option><option value="sniper">SNIPER — максимально частая проверка</option></select>
-    <div id="wellbot-monitor-error" class="modal-error" role="alert"></div>
-    <div class="modal-actions"><button id="wellbot-monitor-cancel" class="modal-secondary" type="button">Отмена</button><button id="wellbot-monitor-submit" class="modal-primary" type="button">Создать поиск <span>→</span></button></div>
-  </div>`;
-  document.body.appendChild(modal);
-  const categorySearch=modal.querySelector('#catalog-category-search'), category=modal.querySelector('#catalog-category'), sub=modal.querySelector('#catalog-subcategory'), subLabel=modal.querySelector('#subcategory-label');
-  const city=modal.querySelector('#catalog-city'), min=modal.querySelector('#catalog-min'), max=modal.querySelector('#catalog-max'), query=modal.querySelector('#catalog-query'), condition=modal.querySelector('#catalog-condition'), seller=modal.querySelector('#catalog-seller'), mode=modal.querySelector('#catalog-mode');
-  const error=modal.querySelector('#wellbot-monitor-error'), submit=modal.querySelector('#wellbot-monitor-submit');
-  const close=()=>{if(!state.submitting)modal.remove();};
-  modal.querySelector('#wellbot-monitor-cancel').onclick=close; modal.querySelector('#wellbot-monitor-x').onclick=close; modal.onclick=e=>{if(e.target===modal)close();};
-  const renderCategories=(needle='')=>{
-    const q=needle.trim().toLocaleLowerCase('ru-RU');
-    const matches=categories.filter(c=>c.searchable !== false && (!q || c.title.toLocaleLowerCase('ru-RU').includes(q) || (c.children||[]).some(x=>x.title.toLocaleLowerCase('ru-RU').includes(q))));
-    category.innerHTML='<option value="">Выберите категорию</option>'+matches.map(c=>'<option value="'+esc(c.id)+'">'+esc(c.title)+'</option>').join('');
-    if (category.value) category.dispatchEvent(new Event('change'));
-  };
-  categorySearch.oninput=()=>renderCategories(categorySearch.value);
-  category.onchange=()=>{
-    const node=categories.find(c=>c.id===category.value);
-    const children=node?.children||[];
-    sub.innerHTML=(children.length?'<option value="">Выберите подкатегорию</option>':'<option value="">Все в категории</option>')+children.map(c=>`<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('');
-    sub.hidden=!children.length; subLabel.hidden=!children.length;
-  };
-  renderCategories();
-  const submitMonitor=async()=>{
-    if(state.submitting)return;
-    error.textContent='';
-    if(!category.value){error.textContent='Выберите категорию.';return;}
-    const selectedCategory=categories.find(c=>c.id===category.value);
-    if(selectedCategory?.children?.length && !sub.value){error.textContent='Выберите подкатегорию.';return;}
-    if(min.value && max.value && Number(min.value)>Number(max.value)){error.textContent='Минимальная цена не может быть выше максимальной.';return;}
-    state.submitting=true; submit.disabled=true; submit.textContent='Запускаю…'; haptic('light');
-    const payload={source:'kufar',categoryId:category.value,subcategoryId:sub.value||undefined,city:city.value||undefined,query:query.value.trim()||undefined,minPrice:min.value?Number(min.value):undefined,maxPrice:max.value?Number(max.value):undefined,condition:condition.value||undefined,seller:seller.value||undefined,mode:mode.value||'normal'};
-    try { const result=await api('/api/monitors',{method:'POST',body:JSON.stringify(payload)}); modal.remove(); state.submitting=false; await load(true); showSuccess(result.reactivated?'Поиск снова активен.':'Поиск создан. WellBOT уже начал проверку.'); haptic('success'); }
-    catch(e){error.textContent=e.message;submit.disabled=false;submit.textContent='Создать поиск →';state.submitting=false;}
-  };
-  submit.onclick=submitMonitor;
-  modal.querySelectorAll('input,select').forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter')submitMonitor();if(e.key==='Escape')close();}));
-}
-
-document.querySelectorAll('[data-action="add"]').forEach(btn => btn.addEventListener('click', showMonitorForm));
-document.querySelectorAll('[data-action="refresh"]').forEach(btn => btn.addEventListener('click', () => { haptic('light'); load(true); }));
-document.querySelectorAll('[data-filter]').forEach(btn => btn.addEventListener('click', () => { state.filter = btn.dataset.filter; document.querySelectorAll('[data-filter]').forEach(x => x.classList.toggle('active', x === btn)); haptic('light'); renderFeed(); }));
-document.querySelectorAll('[data-scroll]').forEach(btn => btn.addEventListener('click', () => { document.querySelectorAll('.nav-item').forEach(x => x.classList.remove('active')); btn.classList.add('active'); haptic('light'); document.getElementById(btn.dataset.scroll)?.scrollIntoView({ behavior:'smooth', block:'start' }); }));
-
-let scrollTimer;
-window.addEventListener('scroll', () => { clearTimeout(scrollTimer); scrollTimer = setTimeout(() => { const sections = [...document.querySelectorAll('main > section[id]')]; const y = window.scrollY + 120; let active = sections[0]?.id; sections.forEach(section => { if (section.offsetTop <= y) active = section.id; }); document.querySelectorAll('.nav-item').forEach(btn => btn.classList.toggle('active', btn.dataset.scroll === active)); }, 80); }, { passive: true });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) load(true); });
-window.addEventListener('online', () => load(true));
-window.addEventListener('offline', () => setLiveStatus('OFFLINE', false));
-setInterval(() => { if (!document.hidden) load(); updateFreshness(); }, 2000);
-load();
+document.querySelectorAll("[data-action=add]").forEach(b=>b.addEventListener("click",showMonitorForm));
+document.querySelectorAll("[data-action=refresh]").forEach(b=>b.addEventListener("click",()=>{haptic("light");load()}));
+document.querySelectorAll("[data-filter]").forEach(b=>b.addEventListener("click",()=>{state.filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));haptic("light");renderFeed()}));
+document.querySelectorAll("[data-scroll]").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));b.classList.add("active");haptic("light");document.getElementById(b.dataset.scroll)?.scrollIntoView({behavior:"smooth",block:"start"})}));
+let scrollTimer;window.addEventListener("scroll",()=>{clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{const sections=[...document.querySelectorAll("main > section[id]")],y=scrollY+120;let active=sections[0]?.id;sections.forEach(s=>{if(s.offsetTop<=y)active=s.id});document.querySelectorAll(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.scroll===active))},80)},{passive:true});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)load()});window.addEventListener("online",()=>load());window.addEventListener("offline",()=>setLiveStatus("ОФЛАЙН",false));setInterval(()=>{if(!document.hidden)load();updateFreshness()},3000);load();
