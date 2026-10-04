@@ -34,7 +34,7 @@ async function getKufarPhoneModels(brand:string){
     const raw=decodeURIComponent(match[1]).trim();
     if(!raw.toLowerCase().startsWith(key+'-')) continue;
     const slug=raw.slice(key.length+1);
-    const title=match[2].replace(/\\s+/g,' ').trim();
+    const title=match[2].replace(/\s+/g,' ').trim();
     if(slug&&title) found.set(slug,{id:key+'-'+slug,title,slug});
   }
   const models=[...found.values()].sort((a,b)=>a.title.localeCompare(b.title,'ru'));
