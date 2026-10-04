@@ -1,4 +1,4 @@
-const WELLBOT_BUILD="2026.10.04.14";
+const WELLBOT_BUILD="2026.10.04.15";
 const tg=window.Telegram?.WebApp;
 const state={data:null,catalog:null,filter:"all",search:"",loading:false,submitting:false,lastLoadedAt:0};
 
