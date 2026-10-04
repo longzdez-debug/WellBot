@@ -22,10 +22,13 @@ export function installWebAppBridge(handler: BotHandler): void {
     return;
   }
 
-  const webAppUrl = process.env.WELLBOT_WEBAPP_URL?.trim();
+  const webAppUrl = (process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || process.env.MINI_APP_URL)?.trim();
   const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
   if (!webAppUrl || !botToken) {
-    logger.info('WellBOT Mini App configuration is incomplete; menu button is disabled');
+    logger.error('WellBOT Mini App configuration is incomplete; menu button is disabled', {
+      missing: [!botToken ? 'TELEGRAM_BOT_TOKEN' : null, !webAppUrl ? 'WELLBOT_WEBAPP_URL' : null].filter(Boolean),
+      supportedWebAppVariables: ['WELLBOT_WEBAPP_URL', 'WEBAPP_URL', 'PUBLIC_URL', 'MINI_APP_URL'],
+    });
     return;
   }
 
