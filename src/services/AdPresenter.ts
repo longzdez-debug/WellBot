@@ -1,5 +1,6 @@
 import { Ad } from '../types';
 import { LocationService } from './LocationService';
+import { analyzeDeal } from './DealScoreEngine';
 
 export interface FormattedAd {
   text: string;
@@ -82,6 +83,16 @@ export class AdPresenter {
 
     const marketBlock = this.getMarketBlock(ad);
     if (marketBlock) lines.push(marketBlock);
+
+    const deal = analyzeDeal(ad);
+    if (deal.score !== null && deal.score >= 65) {
+      lines.push('🎯 <b>Deal Score: ' + deal.score + '/100</b>');
+      if (deal.profit !== null && deal.profit > 0 && deal.sellPrice !== null) {
+        const currency = deal.currency || '';
+        lines.push('💰 Ориентир продажи: ~' + Math.round(deal.sellPrice).toLocaleString('ru-RU') + ' ' + currency + ' · потенциал: <b>+' + Math.round(deal.profit).toLocaleString('ru-RU') + ' ' + currency + '</b>');
+      }
+      if (deal.reasons.length) lines.push('💡 ' + deal.reasons.map(reason => this.escapeHtml(reason)).join(' · '));
+    }
 
     const meta: string[] = [];
     if (ad.location) meta.push('📍 ' + this.escapeHtml(ad.location));
