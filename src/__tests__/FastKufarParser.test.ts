@@ -29,6 +29,23 @@ describe('FastKufarParser catalog/search behavior', () => {
     expect(ads.map(ad => ad.external_id)).toEqual(['1']);
   });
 
+  test('uses numeric catalog id from monitor identity', async () => {
+    const calls: any[] = [];
+    const axiosMock = {
+      get: jest.fn(async (_url: string, config: any) => {
+        calls.push(config);
+        return { data: { ads: [], pagination: { pages: [] } } };
+      }),
+    } as any;
+
+    const parser = new FastKufarParser(axiosMock);
+    await parser.parseUrl(
+      'https://www.kufar.by/l/telefony-i-planshety/wb?wb=kufar%7C17010%7C17050%7C%7Cminsk%7C%7C0%7C2000%7Cnew%7Cprivate%7Cnormal',
+    );
+
+    expect(calls[0].params.cat).toBe('17050');
+  });
+
   test('applies city, price, condition and seller filters together', async () => {
     const axiosMock = {
       get: jest.fn(async () => ({
