@@ -15,7 +15,7 @@ export interface DealAnalysis {
 export function analyzeDeal(ad: Ad): DealAnalysis {
   const current = parseMarketPrice(ad.price);
   const market = typeof ad.market_median === 'number' && Number.isFinite(ad.market_median) ? ad.market_median : null;
-  if (!current) return { score: null, buyPrice: null, marketPrice: market, sellPrice: null, profit: null, roi: null, currency: null, reasons: [] };
+  if (!current || typeof ad.market_percent !== 'number' || !Number.isFinite(ad.market_percent) || market == null) return { score: null, buyPrice: current?.amount ?? null, marketPrice: market, sellPrice: null, profit: null, roi: null, currency: current?.currency ?? null, reasons: [] };
 
   let score = 50;
   const reasons: string[] = [];
@@ -44,9 +44,9 @@ export function analyzeDeal(ad: Ad): DealAnalysis {
   }
 
   const finalScore = Math.max(0, Math.min(100, Math.round(score)));
-  const sellPrice = market != null ? Number((market * 0.97).toFixed(2)) : null;
+  const sellPrice = market != null ? Number((market * 0.96).toFixed(2)) : null;
   const profit = sellPrice != null ? Number((sellPrice - current.amount).toFixed(2)) : null;
   const roi = profit != null && current.amount > 0 ? Number(((profit / current.amount) * 100).toFixed(1)) : null;
 
-  return { score: finalScore, buyPrice: current.amount, marketPrice: market, sellPrice, profit, roi, currency: current.currency, reasons: reasons.slice(0, 3) };
+  return { score: finalScore, buyPrice: current.amount, marketPrice: market, sellPrice, profit, roi, currency: current.currency, reasons: reasons.slice(0, 4) };
 }
