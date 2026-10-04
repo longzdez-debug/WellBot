@@ -1,7 +1,7 @@
 export interface CatalogNode { id:string; title:string; slug:string; children?:CatalogNode[]; searchable?:boolean; }
 export interface MonitorConfig {
   source:'kufar'|'onliner'|'av'; categoryId:string; subcategoryId?:string; brand?:string; model?:string; phoneFilters?:Record<string,string|string[]|boolean>; region?:string; city?:string; query?:string;
-  minPrice?:number; maxPrice?:number; condition?:'new'|'used'; seller?:'private'|'company'; minMarketDiscount?:number; mode?:'normal'|'sniper';
+  minPrice?:number; maxPrice?:number; condition?:'new'|'used'; seller?:'private'|'company'; minMarketDiscount?:number; skipSlots?:number; mode?:'normal'|'sniper';
 }
 const node=(id:string,title:string,slug:string,children:CatalogNode[]=[],searchable=true):CatalogNode=>({id,title,slug,...(children.length?{children}:{}),...(searchable?{}:{searchable:false})});
 const child=(id:string,title:string,slug:string):CatalogNode=>({id,title,slug});
@@ -42,6 +42,6 @@ export function findCatalogCategory(id:string):CatalogNode|null{const direct=KUF
  const min=config.minPrice!=null&&Number.isFinite(Number(config.minPrice))?Number(config.minPrice):undefined;
  const max=config.maxPrice!=null&&Number.isFinite(Number(config.maxPrice))?Number(config.maxPrice):undefined;
  if(min!=null||max!=null)url.searchParams.set('prc','r:'+(min??0)+','+(max??''));
- const identity=[config.source,config.categoryId,config.subcategoryId||'',config.brand||'',config.model||'',JSON.stringify(config.phoneFilters||{}),config.region||'',config.city||'',config.query?.trim()||'',min??'',max??'',config.condition||'',config.seller||'',config.mode||'normal',config.minMarketDiscount??''].join('|');
+ const identity=[config.source,config.categoryId,config.subcategoryId||'',config.brand||'',config.model||'',JSON.stringify(config.phoneFilters||{}),config.region||'',config.city||'',config.query?.trim()||'',min??'',max??'',config.condition||'',config.seller||'',config.mode||'normal',config.minMarketDiscount??'',config.skipSlots??0].join('|');
  url.searchParams.set('wb',identity); return url.toString();
 }
