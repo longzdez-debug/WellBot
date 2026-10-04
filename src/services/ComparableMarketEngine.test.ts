@@ -15,11 +15,13 @@ describe('ComparableMarketEngine',()=>{
     expect(signal.market_median).toBeGreaterThan(900);
     expect(signal.market_percent).toBeLessThan(-20);
   });
-  test('falls back when there are not enough comparable samples',()=>{
+  test('refuses valuation when there are not enough comparable samples',()=>{
     const current=ad('x','PlayStation 5 Slim','900 BYN');
     const history=Array.from({length:9},(_,i)=>ad(String(i),i<2?'PlayStation 5 Slim':'Телевизор LG',String(1000+i*10)+' BYN'));
     const signal=getComparableMarketSignal(current,history);
-    expect(signal.market_median).not.toBeNull();
-    expect(signal.sample_size).toBeGreaterThanOrEqual(8);
+    expect(signal.market_median).toBeNull();
+    expect(signal.market_status).toBeNull();
+    expect(signal.sample_size).toBe(0);
+    expect(signal.comparable_count).toBe(2);
   });
 });
