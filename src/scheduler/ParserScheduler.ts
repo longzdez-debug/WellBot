@@ -126,9 +126,7 @@ export class ParserScheduler {
             quality: signal?.market_quality ?? null,
           };
         }).filter(signal => Number.isFinite(signal.id)));
-        if(priceUpdates.length) await this.db.bulkUpdateAdPrices(priceUpdates);
-      if(marketUpdates.length) await this.db.updateAdMarketSignals(marketUpdates);
-      await this.db.updateLastParsed(link.id);
+        await this.db.updateLastParsed(link.id);
         if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
         logger.info('Baseline snapshot stored; no notifications sent', {
           linkId: link.id,
@@ -229,6 +227,8 @@ export class ParserScheduler {
         }
       }
 
+      if(priceUpdates.length) await this.db.bulkUpdateAdPrices(priceUpdates);
+      if(marketUpdates.length) await this.db.updateAdMarketSignals(marketUpdates);
       await this.db.updateLastParsed(link.id);
       if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
       return { newAds, priceDrops, nextCheckDelayMs: this.computeNextCheckDelay(link, failureCount) };
