@@ -28,7 +28,7 @@ async function getKufarPhoneModels(brand:string){
   if(!response.ok) throw new Error('kufar_catalog_unavailable');
   const html=await response.text();
   const found=new Map<string,{id:string;title:string;slug:string}>();
-  const re=new RegExp('href=["\\'](?:https?:\\/\\/www\\.kufar\\.by)?\\/l\\/mobilnye-telefony\\/mt~([^"'?#]+)["\\'][^>]*>([^<]{2,100})<\\/a>','gi');
+  const re=new RegExp("href=[\"'](?:https?:\\/\\/www\\.kufar\\.by)?\\/l\\/mobilnye-telefony\\/mt~([^\"'?#]+)[\"'][^>]*>([^<]{2,100})<\\/a>","gi");
   let match;
   while((match=re.exec(html))){
     const raw=decodeURIComponent(match[1]).trim();
