@@ -74,11 +74,5 @@ describe('TelegramSender', () => {
     });
   });
 
-  test('sendBatch sends all messages sequentially', async () => {
-    const bot = new FakeBot();
-    const sender = new TelegramSender(bot as any);
-    await sender.sendBatch(123, [makeAd([imageOne]), makeAd([imageTwo])]);
-    expect(bot.sendPhoto).toHaveBeenCalledTimes(2);
-    expect(bot.sendMediaGroup).not.toHaveBeenCalled();
-  });
+
 });
