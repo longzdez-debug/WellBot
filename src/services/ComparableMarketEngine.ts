@@ -67,8 +67,8 @@ export function getComparableMarketSignal(current:Ad,history:Ad[],minimumSampleS
   if(values.length<minimumSampleSize)return {...empty,comparable_count:ranked.length};
   const median=percentile(values,.5)!; const low=percentile(values,.25)!; const high=percentile(values,.75)!;
   const percent=Number((((cp.amount-median)/median)*100).toFixed(1));
-  const status=percent<=-15?'below_market':percent>=15?'above_market':'market';
   const confidence=values.length>=25&&ranked[0].s>=0.65?'high':values.length>=12?'medium':'low';
+  const status=confidence==='low'?null:(percent<=-15?'below_market':percent>=15?'above_market':'market');
   const avgScore=selected.reduce((sum,x)=>sum+x.s,0)/selected.length;
   const spread=median>0?Math.min(1,(high-low)/median):1;
   const quality=Math.round(Math.min(100,values.length*1.7+avgScore*45-spread*18));
