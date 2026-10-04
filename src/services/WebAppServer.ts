@@ -128,7 +128,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
             db.getUserLinks(user.id), db.getDashboardAds(user.id, 50), db.getDashboardPriceDrops(user.id, 30),
             db.getDashboardStats(user.id), db.getUserAdsCount(user.id),
           ]);
-          logger.info('WellBOT bootstrap', { telegramId: auth.user.id, dbUserId: user.id, links: links.length, ads: ads.length, priceDrops: priceDrops.length, totalLinks: stats.totalLinks, activeLinks: stats.activeLinks });
+          logger.info('WellBOT bootstrap', { telegramId: auth.user.id, dbUserId: user.id, links: links.length, activeLinksFromLinks: links.filter(link => link.is_active).length, inactiveLinksFromLinks: links.filter(link => !link.is_active).length, ads: ads.length, priceDrops: priceDrops.length, totalLinks: stats.totalLinks, activeLinks: stats.activeLinks });
           json(res, 200, { user: { id: user.id, telegramId: user.telegram_id, username: user.username }, links, ads, priceDrops, stats, statsByLink, serverTime: new Date().toISOString() });
           return;
         }
@@ -211,7 +211,10 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           json(res, ok ? 200 : 404, ok ? { ok: true } : { error: 'not_found' }); return;
         }
         if (linkMatch && req.method === 'DELETE') {
-          const ok = await db.deleteLink(Number(linkMatch[1]), user.id);
+          const linkId = Number(linkMatch[1]);
+          const linkBeforeDelete = await db.getLinkForUser(linkId, user.id);
+          const ok = await db.deleteLink(linkId, user.id);
+          logger.info('WellBOT monitor delete requested', { telegramId: auth.user.id, dbUserId: user.id, linkId, existed: Boolean(linkBeforeDelete), deleted: ok });
           json(res, ok ? 200 : 404, ok ? { ok: true } : { error: 'not_found' }); return;
         }
         json(res, 404, { error: 'not_found' }); return;
