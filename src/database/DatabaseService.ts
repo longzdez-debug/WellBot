@@ -85,16 +85,24 @@ export class DatabaseService {
   async getLastPriceForAd(linkId:number,externalId:string):Promise<{price:string;adId:number}|null>{const r=await this.pool.query('SELECT a.price,a.id as ad_id FROM ads a WHERE a.link_id=$1 AND a.external_id=$2 ORDER BY a.updated_at DESC NULLS LAST,a.id DESC LIMIT 1',[linkId,externalId]);return r.rows[0]||null;}
   parsePriceToNumber(priceStr:string|null|undefined):number|null{if(!priceStr)return null;const normalized=priceStr.replace(/\s+/g,'').replace(',','.');const m=normalized.match(/(\d+(?:\.\d+)?)/);if(!m)return null;const n=Number(m[1]);return Number.isFinite(n)?n:null;}
   async createPriceDropRecord(userId:number,adId:number,externalId:string,oldPrice:string,newPrice:string,changePercent:number):Promise<boolean>{try{const r=await this.pool.query('INSERT INTO price_history (ad_id,user_id,external_id,old_price,new_price,price_change_percent,notified_at) VALUES ($1,$2,$3,$4,$5,$6,NULL) ON CONFLICT (user_id,external_id,old_price,new_price) DO NOTHING',[adId,userId,externalId,oldPrice,newPrice,changePercent]);return(r.rowCount||0)>0;}catch(error:unknown){const message=error instanceof Error?error.message:String(error);logger.warn('Price drop record insert failed',{error:message});return false;}}
-  async updateAdMarketSignals(signals:Array<{id:number;status:'below_market'|'market'|'above_market'|null;percent:number|null;median:number|null}>):Promise<void>{
+  async updateAdMarketSignals(signals:Array<{id:number;status:'below_market'|'market'|'above_market'|null;percent:number|null;median:number|null;low:number|null;high:number|null;sellFast:number|null;sellNormal:number|null;sellMax:number|null;sampleSize:number|null;confidence:'low'|'medium'|'high'|null;quality:number|null}>):Promise<void>{
     if(!signals.length)return;
     await this.pool.query(
       `UPDATE ads a
        SET market_status=x.status,
            market_percent=x.percent,
-           market_median=x.median
-       FROM jsonb_to_recordset($1::jsonb) AS x(id int,status text,percent numeric,median numeric)
+           market_median=x.median,
+           market_low=x.low,
+           market_high=x.high,
+           sell_fast=x.sell_fast,
+           sell_normal=x.sell_normal,
+           sell_max=x.sell_max,
+           market_sample_size=x.sample_size,
+           market_confidence=x.confidence,
+           market_quality=x.quality
+       FROM jsonb_to_recordset($1::jsonb) AS x(id int,status text,percent numeric,median numeric,low numeric,high numeric,sell_fast numeric,sell_normal numeric,sell_max numeric,sample_size int,confidence text,quality numeric)
        WHERE a.id=x.id`,
-      [JSON.stringify(signals.map(s=>({id:s.id,status:s.status,percent:s.percent,median:s.median})))],
+      [JSON.stringify(signals.map(s=>({id:s.id,status:s.status,percent:s.percent,median:s.median,low:s.low,high:s.high,sell_fast:s.sellFast,sell_normal:s.sellNormal,sell_max:s.sellMax,sample_size:s.sampleSize,confidence:s.confidence,quality:s.quality})))],
     );
   }
 
