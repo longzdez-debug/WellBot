@@ -44,15 +44,18 @@ export function buildMarketplaceSearchUrl(source:MarketplaceSource,config:any):s
   const category=findMarketplaceNode(source,config.subcategoryId||config.categoryId);
   const parts=[category?.title||'',q].filter(Boolean).join(' ').trim();
   if(source==='onliner'){
-    const u=new URL('https://baraholka.onliner.by/search.php');
+    const isRealEstate=config.categoryId==='realestate'||String(config.subcategoryId||'').includes('apartment');
+    const u=new URL(isRealEstate?'https://r.onliner.by/ak/apartments':'https://baraholka.onliner.by/search.php');
     if(parts)u.searchParams.set('query',parts);
     if(config.city)u.searchParams.set('city',String(config.city));
+    if(config.minPrice!=null)u.searchParams.set('price[min]',String(config.minPrice));
+    if(config.maxPrice!=null)u.searchParams.set('price[max]',String(config.maxPrice));
     return u.toString();
   }
-  const u=new URL('https://av.by/');
-  if(parts)u.searchParams.set('search',parts);
+  const u=new URL('https://cars.av.by/search/');
+  if(parts)u.searchParams.set('q',parts);
   if(config.city)u.searchParams.set('location',String(config.city));
-  if(config.minPrice!=null)u.searchParams.set('price_min',String(config.minPrice));
-  if(config.maxPrice!=null)u.searchParams.set('price_max',String(config.maxPrice));
+  if(config.minPrice!=null)u.searchParams.set('price[min]',String(config.minPrice));
+  if(config.maxPrice!=null)u.searchParams.set('price[max]',String(config.maxPrice));
   return u.toString();
 }
