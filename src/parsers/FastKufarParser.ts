@@ -154,9 +154,6 @@ export class FastKufarParser extends BaseParser {
       if (brandSlug && BRAND_MAP[brandSlug]) requestedBrandSlug = brandSlug;
     }
 
-    // Market valuation must not inherit monitor price/query filters: those filters bias the sample and can make the median artificially low/high. The scheduler applies them to notifications after the broad category/city pool is stored.
-    delete params.query;
-    delete params.prc;
     const requestedQuery = String(parsed.searchParams.get('query') || '').trim();
     const requestedCondition = monitorIdentity[8] === 'new' || monitorIdentity[8] === 'used' ? monitorIdentity[8] : '';
     const requestedSeller = monitorIdentity[9] === 'private' || monitorIdentity[9] === 'company' ? monitorIdentity[9] : '';
@@ -227,7 +224,17 @@ export class FastKufarParser extends BaseParser {
       const ads = rawAds.filter((ad: any) => {
         if (!ad?.ad_id) return false;
         if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return false;
-        // Keep the category/city market pool broad. Monitor-specific query, brand, condition, seller and price filters are applied later by ParserScheduler.
+        const text = adSearchText(ad);
+        if (!queryMatchesAd(text)) return false;
+        if (normalizedBrandTerms.length > 0 && !normalizedBrandTerms.some(term => text.includes(term))) return false;
+        const condition = normalizeSearchText(adCondition(ad));
+        if (requestedCondition === 'new' && !/(new|нов|новое|новая|новый)/.test(condition)) return false;
+        if (requestedCondition === 'used' && /(new|нов|новое|новая|новый)/.test(condition)) return false;
+        if (requestedSeller === 'company' && !adIsCompany(ad)) return false;
+        if (requestedSeller === 'private' && adIsCompany(ad)) return false;
+        const rawPrice = ad.price_byn != null ? Number(ad.price_byn) / 100 : ad.price_usd != null ? Number(ad.price_usd) / 100 : undefined;
+        if (requestedMinPrice != null && Number.isFinite(requestedMinPrice) && (rawPrice == null || rawPrice < requestedMinPrice)) return false;
+        if (requestedMaxPrice != null && Number.isFinite(requestedMaxPrice) && (rawPrice == null || rawPrice > requestedMaxPrice)) return false;
         return true;
       });
 
@@ -309,7 +316,17 @@ export class FastKufarParser extends BaseParser {
 
       return [...unique.values()].map((ad: any) => {
         if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return null;
-        // Rendered-page fallback remains a filtered source; API hot path is the preferred broad market source.
+        const text = adSearchText(ad);
+        if (!queryMatchesAd(text)) return null;
+        if (normalizedBrandTerms.length && !normalizedBrandTerms.some(term => text.includes(term))) return null;
+        const condition = normalizeSearchText(adCondition(ad));
+        if (requestedCondition === 'new' && !/(new|нов|новое|новая|новый)/.test(condition)) return null;
+        if (requestedCondition === 'used' && /(new|нов|новое|новая|новый)/.test(condition)) return null;
+        if (requestedSeller === 'company' && !adIsCompany(ad)) return null;
+        if (requestedSeller === 'private' && adIsCompany(ad)) return null;
+        const rawPrice = ad.price_byn != null ? Number(ad.price_byn) / 100 : ad.price_usd != null ? Number(ad.price_usd) / 100 : undefined;
+        if (requestedMinPrice != null && Number.isFinite(requestedMinPrice) && (rawPrice == null || rawPrice < requestedMinPrice)) return null;
+        if (requestedMaxPrice != null && Number.isFinite(requestedMaxPrice) && (rawPrice == null || rawPrice > requestedMaxPrice)) return null;
         let price = 'Договорная';
         if (ad.price_byn != null) price = `${(Number(ad.price_byn) / 100).toFixed(2)} BYN`;
         else if (ad.price_usd != null) price = `${(Number(ad.price_usd) / 100).toFixed(2)} USD`;
