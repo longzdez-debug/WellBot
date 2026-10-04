@@ -122,15 +122,6 @@
     </main>
   </div>
 </div>
-<script>
-(function(){
- var started=false,deadline=Date.now()+15000;
- function theme(w){try{w.setBackgroundColor&&w.setBackgroundColor("#07090d");w.setHeaderColor&&w.setHeaderColor("#07090d");w.setBottomBarColor&&w.setBottomBarColor("#07090d")}catch(_){}}
- function fail(m){if(started)return;started=true;document.querySelectorAll(".empty,.recent-placeholder").forEach(function(n){n.textContent=m;n.classList.add("error")})}
- function data(w){if(w&&w.initData)return w.initData;try{var x=window.Telegram&&window.Telegram.WebView&&window.Telegram.WebView.initParams&&window.Telegram.WebView.initParams.tgWebAppData;if(x)return x}catch(_){}try{for(var i=0;i<2;i++){var s=i===0?String(location.hash||""):String(location.search||"");var v=new URLSearchParams(s.replace(/^#|^\?/,"")).get("tgWebAppData");if(v)return v}}catch(_){}return ""}
- function start(){if(started)return;var w=window.Telegram&&window.Telegram.WebApp;if(!w)return Date.now()<deadline?setTimeout(start,50):fail("Не удалось открыть WellBOT внутри Telegram.");theme(w);try{w.ready();w.expand()}catch(_){}var d=data(w);if(!d)return Date.now()<deadline?setTimeout(start,100):fail("Открой WellBOT через кнопку в Telegram, а не обычной ссылкой.");window.__WELLBOT_INIT_DATA__=d;var s=document.createElement("script");s.src="./app.js?v=20261004-14";s.onerror=function(){fail("Не удалось загрузить WellBOT. Открой Mini App заново.")};document.body.appendChild(s);started=true}
- start();
-})();
-</script>
+<script src="./app.js?v=20261004-15" defer></script>>
 </body>
 </html>
