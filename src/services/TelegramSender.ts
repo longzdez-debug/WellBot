@@ -86,5 +86,4 @@ export class TelegramSender {
       }
     }
   }
-  async sendBatch(chatId: number, ads: FormattedAd[]): Promise<void> { for (const ad of ads) await this.send(chatId, ad); }
 }
