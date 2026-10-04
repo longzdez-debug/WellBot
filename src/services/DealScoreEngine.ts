@@ -15,5 +15,5 @@ export function analyzeDeal(ad:Ad):DealAnalysis{
  const sell=Number.isFinite(ad.sell_normal)?Number((ad as any).sell_normal):Number((market*.97).toFixed(2));const profit=Number((sell-current.amount).toFixed(2));const roi=current.amount>0?Number(((profit/current.amount)*100).toFixed(1)):null;
  if(profit>0)score+=Math.min(8,Math.max(0,Math.round((roi??0)/5)));else score-=8;
  const finalScore=Math.max(0,Math.min(100,Math.round(score)));
- return{score:finalScore,buyPrice:current.amount,marketPrice:market,sellPrice:sell,profit,roi,currency:current.currency,reasons:reasons.slice(0,4),confidence:(ad as any).market_confidence??null};
+ return{score:finalScore,buyPrice:current.amount,marketPrice:market,sellPrice:sell,profit,roi,currency:current.currency,reasons:reasons.slice(0,4),confidence:ad.market_confidence??null};
 }
