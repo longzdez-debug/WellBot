@@ -126,7 +126,8 @@ export class ParserScheduler {
             quality: signal?.market_quality ?? null,
           };
         }).filter(signal => Number.isFinite(signal.id)));
-        if(marketUpdates.length) await this.db.updateAdMarketSignals(marketUpdates);
+        if(priceUpdates.length) await this.db.bulkUpdateAdPrices(priceUpdates);
+      if(marketUpdates.length) await this.db.updateAdMarketSignals(marketUpdates);
       await this.db.updateLastParsed(link.id);
         if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
         logger.info('Baseline snapshot stored; no notifications sent', {
@@ -150,6 +151,7 @@ export class ParserScheduler {
       const existing = state.existingIds;
       const prices = state.prices;
       const processed = new Set<string>();
+      const priceUpdates:Array<{id:number;price:string}>=[];
       const newCandidates: Ad[] = [];
 
       for (const adData of ads) {
@@ -163,7 +165,7 @@ export class ParserScheduler {
             if (configuredIds.has(id)) {
               await this.processPriceDrop(last, id, adData.price, priceDrops, link.id, link.user_id);
             } else {
-              await this.db.updateAdPrice(last.adId, adData.price);
+              priceUpdates.push({id:last.adId,price:adData.price});
             }
             if (adData.market_median != null) marketUpdates.push({id:last.adId,status:adData.market_status??null,percent:adData.market_percent??null,median:adData.market_median,low:adData.market_low??null,high:adData.market_high??null,sellFast:adData.sell_fast??null,sellNormal:adData.sell_normal??null,sellMax:adData.sell_max??null,sampleSize:adData.market_sample_size??null,confidence:adData.market_confidence??null,quality:adData.market_quality??null});
           }
