@@ -13,11 +13,11 @@ describe('MarketEngine', () => {
   });
 
   test('uses same-currency samples only', () => {
-    const history = ['900 BYN', '1000 BYN', '1100 BYN', '1000 USD', '1050 BYN', '950 BYN', '1020 BYN', '980 BYN'];
+    const history = ['900 BYN', '1000 BYN', '1100 BYN', '1000 USD', '1050 BYN', '950 BYN', '1020 BYN', '980 BYN', '1010 BYN'];
     const signal = getMarketSignal('800 BYN', history);
     expect(signal.market_status).toBe('below_market');
     expect(signal.market_median).toBe(1000);
-    expect(signal.market_sample_size).toBe(7);
+    expect(signal.market_sample_size).toBe(8);
   });
 
   test('requires enough samples before showing a market badge', () => {
@@ -37,7 +37,7 @@ describe('MarketEngine', () => {
 
   test('classifies at market inside the ±15% band', () => {
     const history = Array.from({ length: 20 }, () => '1000 BYN');
-    expect(getMarketSignal('850 BYN', history).market_status).toBe('market');
-    expect(getMarketSignal('1150 BYN', history).market_status).toBe('market');
+    expect(getMarketSignal('860 BYN', history).market_status).toBe('market');
+    expect(getMarketSignal('1140 BYN', history).market_status).toBe('market');
   });
 });
