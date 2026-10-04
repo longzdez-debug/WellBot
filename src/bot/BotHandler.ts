@@ -94,9 +94,7 @@ export class BotHandler {
   async sendNotification(telegramId: number, ad: Ad): Promise<void> {
     try {
       const formatted = await this.adPresenter.format(ad);
-      const market = ad.market_status === 'below_market' ? `🟢 НИЖЕ РЫНКА${ad.market_percent != null ? ` · ${Math.abs(ad.market_percent).toFixed(1)}%` : ''}` : ad.market_status === 'above_market' ? `🔴 ВЫШЕ РЫНКА${ad.market_percent != null ? ` · +${ad.market_percent.toFixed(1)}%` : ''}` : ad.market_status === 'market' ? `⚪ В РЫНКЕ${ad.market_percent != null ? ` · ${ad.market_percent >= 0 ? '+' : ''}${ad.market_percent.toFixed(1)}%` : ''}` : '';
-      const marketLine = market ? `\n${market}${ad.market_median != null ? ` · медиана ${ad.market_median}` : ''}` : '';
-      await this.telegramSender.send(telegramId, { ...formatted, text: `📢 Новое объявление!${marketLine}\n\n${formatted.text}` });
+      await this.telegramSender.send(telegramId, { ...formatted, text: `📢 Новое объявление!\n\n${formatted.text}` });
     } catch (error: any) {
       if (error?.response?.statusCode === 403) { logger.warn('User blocked bot', { telegramId }); return; }
       logger.error('Failed to send notification', { telegramId, adId: ad.id, error: error?.message || String(error) });
@@ -104,9 +102,9 @@ export class BotHandler {
     }
   }
 
-  async sendPriceDropNotification(telegramId: number, priceDrop: any, userId?: number): Promise<void> {
+  async sendPriceDropNotification(telegramId: number, priceDrop: any, userId: number): Promise<void> {
     try {
-      const ad = userId != null ? await this.db.getAdByIdForUser(priceDrop.adId, userId) : await this.db.getAdByExternalId(priceDrop.externalId);
+      const ad = await this.db.getAdByIdForUser(priceDrop.adId, userId ?? 0);
       if (!ad) return;
       const formatted = await this.adPresenter.format(ad);
       await this.telegramSender.send(telegramId, { ...formatted, text: `💰 СНИЖЕНИЕ ЦЕНЫ!\n\n${formatted.text}\n\n💸 Было: ${priceDrop.oldPrice}\n🆕 Стало: ${priceDrop.newPrice}\n📉 Изменение: ${priceDrop.changePercent}%` });
