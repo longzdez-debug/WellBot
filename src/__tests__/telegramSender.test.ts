@@ -13,7 +13,7 @@ const imageOne = ['https:', '', 'img.test', '1'].join('/');
 const imageTwo = ['https:', '', 'img.test', '2'].join('/');
 
 function makeAd(media: string[] = [], url = adUrl): FormattedAd {
-  return { text: `test ad\n🔗 ${url}`, media };
+  return { text: '<b>test ad</b>\n<b>💰 100 BYN</b>', media, url };
 }
 
 describe('TelegramSender', () => {
@@ -22,9 +22,9 @@ describe('TelegramSender', () => {
     const sender = new TelegramSender(bot as any);
     await sender.send(123, makeAd([imageOne]));
     expect(bot.sendPhoto).toHaveBeenCalledWith(123, imageOne, {
-      caption: `test ad\n🔗 ${adUrl}`,
+      caption: '<b>test ad</b>\n<b>💰 100 BYN</b>',
       parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: [[{ text: '⚡ Открыть объявление', url: adUrl }]] },
+      reply_markup: { inline_keyboard: [[{ text: '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', url: adUrl }]] },
     });
     expect(bot.sendMediaGroup).not.toHaveBeenCalled();
     expect(bot.sendMessage).not.toHaveBeenCalled();
@@ -35,11 +35,11 @@ describe('TelegramSender', () => {
     const sender = new TelegramSender(bot as any);
     await sender.send(123, makeAd([imageOne, imageTwo]));
     expect(bot.sendMediaGroup).toHaveBeenCalledWith(123, [
-      { type: 'photo', media: imageOne, caption: `test ad\n🔗 ${adUrl}`, parse_mode: 'HTML' },
+      { type: 'photo', media: imageOne, caption: '<b>test ad</b>\n<b>💰 100 BYN</b>', parse_mode: 'HTML' },
       { type: 'photo', media: imageTwo, caption: undefined, parse_mode: undefined },
     ]);
-    expect(bot.sendMessage).toHaveBeenCalledWith(123, '🔗 Ссылка на объявление', {
-      reply_markup: { inline_keyboard: [[{ text: '⚡ Открыть объявление', url: adUrl }]] },
+    expect(bot.sendMessage).toHaveBeenCalledWith(123, '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', {
+      reply_markup: { inline_keyboard: [[{ text: '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', url: adUrl }]] },
     });
   });
 
@@ -47,9 +47,9 @@ describe('TelegramSender', () => {
     const bot = new FakeBot();
     const sender = new TelegramSender(bot as any);
     await sender.send(123, makeAd([]));
-    expect(bot.sendMessage).toHaveBeenCalledWith(123, `test ad\n🔗 ${adUrl}`, {
+    expect(bot.sendMessage).toHaveBeenCalledWith(123, '<b>test ad</b>\n<b>💰 100 BYN</b>', {
       parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: [[{ text: '⚡ Открыть объявление', url: adUrl }]] },
+      reply_markup: { inline_keyboard: [[{ text: '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', url: adUrl }]] },
     });
     expect(bot.sendPhoto).not.toHaveBeenCalled();
     expect(bot.sendMediaGroup).not.toHaveBeenCalled();
@@ -59,7 +59,7 @@ describe('TelegramSender', () => {
     const bot = new FakeBot();
     const sender = new TelegramSender(bot as any);
     await sender.send(123, makeAd([], 'not-a-url'));
-    expect(bot.sendMessage).toHaveBeenCalledWith(123, 'test ad\n🔗 not-a-url', { parse_mode: 'HTML', reply_markup: undefined });
+    expect(bot.sendMessage).toHaveBeenCalledWith(123, '<b>test ad</b>\n<b>💰 100 BYN</b>', { parse_mode: 'HTML', reply_markup: undefined });
   });
 
   test('falls back to text when a media group is rejected', async () => {
@@ -68,9 +68,9 @@ describe('TelegramSender', () => {
     const sender = new TelegramSender(bot as any);
     await sender.send(123, makeAd([imageOne, imageTwo]));
     expect(bot.sendMediaGroup).toHaveBeenCalledTimes(1);
-    expect(bot.sendMessage).toHaveBeenCalledWith(123, `test ad\n🔗 ${adUrl}`, {
+    expect(bot.sendMessage).toHaveBeenCalledWith(123, '<b>test ad</b>\n<b>💰 100 BYN</b>', {
       parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: [[{ text: '⚡ Открыть объявление', url: adUrl }]] },
+      reply_markup: { inline_keyboard: [[{ text: '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', url: adUrl }]] },
     });
   });
 
