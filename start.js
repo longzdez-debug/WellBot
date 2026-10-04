@@ -3,7 +3,7 @@ const { copyFileSync, mkdirSync } = require('node:fs');
 const { join } = require('node:path');
 
 function run(command, args) {
-  console.log(`[HUNT] ${command} ${args.join(' ')}`);
+  console.log(`[WellBOT] ${command} ${args.join(' ')}`);
   execFileSync(command, args, { stdio: 'inherit', cwd: __dirname });
 }
 
@@ -14,9 +14,9 @@ try {
     join(__dirname, 'src', 'database', 'schema.sql'),
     join(__dirname, 'dist', 'database', 'schema.sql'),
   );
-  console.log('[HUNT] Build complete. Starting application...');
+  console.log('[WellBOT] Build complete. Starting application...');
   require('./dist/index.js');
 } catch (error) {
-  console.error('[HUNT] Startup failed:', error);
+  console.error('[WellBOT] Startup failed:', error);
   process.exit(1);
 }
