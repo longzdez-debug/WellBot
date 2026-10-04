@@ -16,7 +16,7 @@ describe('MarketEngine', () => {
     const history = ['900 BYN', '1000 BYN', '1100 BYN', '1000 USD', '1050 BYN', '950 BYN', '1020 BYN', '980 BYN', '1010 BYN'];
     const signal = getMarketSignal('800 BYN', history);
     expect(signal.market_status).toBe('below_market');
-    expect(signal.market_median).toBe(1000);
+    expect(signal.market_median).toBe(1005);
     expect(signal.market_sample_size).toBe(8);
   });
 
