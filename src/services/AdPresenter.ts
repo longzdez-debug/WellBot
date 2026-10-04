@@ -113,11 +113,6 @@ export class AdPresenter {
     const description = this.formatDescription(ad.description);
     if (description) lines.push('\n<b>Описание</b>\n' + this.escapeHtml(description));
 
-    const addressParts: string[] = [];
-    if (ad.location) addressParts.push(ad.location);
-    if (ad.address) addressParts.push(ad.address);
-    const fullAddress = addressParts.join(', ');
-
     const media: string[] = [];
     if (ad.image_url) media.push(ad.image_url);
 
