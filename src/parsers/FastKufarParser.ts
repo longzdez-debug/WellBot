@@ -209,7 +209,7 @@ export class FastKufarParser extends BaseParser {
       const requestStartedAt = Date.now();
       const response = await this.axiosInstance.get(endpoint, {
         params,
-        timeout: 3500,
+        timeout: 2600,
         headers: {
           Host: new URL(endpoint).host,
           'User-Agent': this.getRandomUserAgent(),
@@ -272,7 +272,7 @@ export class FastKufarParser extends BaseParser {
     const requestHtml = async (): Promise<Ad[]> => {
       const started = Date.now();
       const response = await this.axiosInstance.get(url, {
-        timeout: 4500,
+        timeout: 3200,
         headers: {
           'User-Agent': this.getRandomUserAgent(),
           Accept: 'text/html,application/xhtml+xml',
