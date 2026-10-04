@@ -48,7 +48,7 @@ export function installWebAppBridge(handler: BotHandler): void {
   const normalizedWebAppUrl = parsedUrl.toString();
   const menuButton = {
     type: 'web_app' as const,
-    text: '⚡ WellBOT',
+    text: '⚡ HUNT',
     web_app: { url: normalizedWebAppUrl },
   };
 
