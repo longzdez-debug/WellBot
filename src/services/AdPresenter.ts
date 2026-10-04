@@ -51,10 +51,23 @@ export class AdPresenter {
 
   private formatDescription(description?: string | null): string | null {
     if (!description?.trim()) return null;
-    const normalized = description.replace(/\s+/g, ' ').replace(/\u0000/g, '').trim();
+    const normalized = description.replace(/\u0000/g, '').replace(/\\r?\\n/g, '\\n').trim();
     if (!normalized) return null;
-    if (normalized.length <= this.MAX_DESCRIPTION_LENGTH) return normalized;
-    return normalized.slice(0, this.MAX_DESCRIPTION_LENGTH).trimEnd() + '…';
+    const lines = normalized.split('\\n').map(line => line.replace(/^[-•*]+\\s*/, '').replace(/\\s+/g, ' ').trim()).filter(Boolean);
+    const important: string[] = [];
+    const patterns = [
+      /\\b(состояни[ея]|состояние|идеальн|хорош|отличн|есть дефект|дефект|царапин|трещин|ремонт|не работает|рабоч)/i,
+      /\\b(комплект|комплектаци|коробк|зарядк|чек|гаранти|документ)/i,
+      /\\b(торг|обмен|срочно|забирать|доставка|самовывоз)/i,
+    ];
+    for (const line of lines) {
+      if (patterns.some(pattern => pattern.test(line)) && !important.includes(line)) important.push(line);
+    }
+    const compact = important.slice(0, 3);
+    if (compact.length) return compact.join(' · ');
+    const oneLine = lines.join(' ');
+    if (oneLine.length <= this.MAX_DESCRIPTION_LENGTH) return oneLine;
+    return oneLine.slice(0, this.MAX_DESCRIPTION_LENGTH).trimEnd() + '…';
   }
 
   private getMarketBlock(ad: Ad): string | null {
