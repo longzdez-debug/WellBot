@@ -108,24 +108,12 @@ export class ParserScheduler {
         return { newAds, priceDrops, nextCheckDelayMs: this.computeNextCheckDelay(link, failureCount) };
       }
       if (baseline) {
-        const insertedRaw = await this.db.bulkCreateAdsReturning(link.id, ads);
-        await this.db.updateAdMarketSignals(insertedRaw.map(row => {
-          const signal = ads.find(ad => ad.external_id === row.external_id);
-          return {
-            id: Number(row.id),
-            status: signal?.market_status ?? null,
-            percent: signal?.market_percent ?? null,
-            median: signal?.market_median ?? null,
-            low: signal?.market_low ?? null,
-            high: signal?.market_high ?? null,
-            sellFast: signal?.sell_fast ?? null,
-            sellNormal: signal?.sell_normal ?? null,
-            sellMax: signal?.sell_max ?? null,
-            sampleSize: signal?.market_sample_size ?? null,
-            confidence: signal?.market_confidence ?? null,
-            quality: signal?.market_quality ?? null,
-          };
-        }).filter(signal => Number.isFinite(signal.id)));
+        const marketById=new Map(ads.map(ad=>[ad.external_id,ad]));
+        const insertedRaw=await this.db.bulkCreateAdsReturning(link.id,ads);
+        await this.db.updateAdMarketSignals(insertedRaw.map(row=>{
+          const signal=marketById.get(row.external_id);
+          return {id:Number(row.id),status:signal?.market_status??null,percent:signal?.market_percent??null,median:signal?.market_median??null,low:signal?.market_low??null,high:signal?.market_high??null,sellFast:signal?.sell_fast??null,sellNormal:signal?.sell_normal??null,sellMax:signal?.sell_max??null,sampleSize:signal?.market_sample_size??null,confidence:signal?.market_confidence??null,quality:signal?.market_quality??null};
+        }).filter(signal=>Number.isFinite(signal.id)));
         await this.db.updateLastParsed(link.id);
         if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
         logger.info('Baseline snapshot stored; no notifications sent', {
