@@ -62,7 +62,18 @@ export class ParserScheduler {
     const min = config.minPrice != null ? Number(config.minPrice) : undefined;
     const max = config.maxPrice != null ? Number(config.maxPrice) : undefined;
     const condition = config.condition === 'new' ? ['new','новое','новый','новая'] : config.condition === 'used' ? ['used','б/у','б\u002fu','бу','бывший в употреблении'] : [];
+    const normalizeFilterText=(value:string)=>String(value||'').toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/gi,' ').replace(/\s+/g,' ').trim();
+    const brandAliases:Record<string,string[]>={
+      apple:['apple','iphone','айфон'],samsung:['samsung','самсунг'],xiaomi:['xiaomi','сяоми','ксиаоми'],huawei:['huawei','хуавей'],honor:['honor','хонор'],google:['google','pixel'],oneplus:['oneplus','one plus']
+    };
+    const queryTerms=normalizeFilterText(config.query||'').split(' ').filter(x=>x.length>=2);
+    const brandTerms=String(config.brand||'').trim()?brandAliases[String(config.brand).toLowerCase()]||[normalizeFilterText(String(config.brand))]:[];
+    const modelTerm=normalizeFilterText(String(config.model||''));
     return ads.filter(ad => {
+      const searchText=normalizeFilterText([ad.title,ad.description].filter(Boolean).join(' '));
+      if(queryTerms.length&&!queryTerms.every(term=>searchText.includes(term))) return false;
+      if(brandTerms.length&&!brandTerms.some(term=>searchText.includes(term))) return false;
+      if(modelTerm&&!searchText.includes(modelTerm)) return false;
       if (condition.length) {
         const value = String(ad.condition || '').trim().toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
         if (!value || !condition.some(token => value.includes(token))) return false;
