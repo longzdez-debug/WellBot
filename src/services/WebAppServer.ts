@@ -153,7 +153,9 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           const link=await db.createLink(user.id,url,source,config);
           logger.info('WellBOT marketplace monitor created',{telegramId:auth.user.id,dbUserId:user.id,linkId:link.id,source,categoryId:config.categoryId,subcategoryId:config.subcategoryId||null});
           json(res,201,{link,config});return;
-          if (requestPath === '/api/links' && req.method === 'POST') {
+        }
+
+        if (requestPath === '/api/links' && req.method === 'POST') {
           json(res, 410, { error: 'url_monitors_disabled', message: 'Создание поиска по ссылке отключено. Используйте каталог WellBOT.' });
           return;
         }
