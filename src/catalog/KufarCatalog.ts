@@ -33,8 +33,15 @@ node('travel','Путешествия — жильё на сутки','puteshest
 
 const REGION_SLUGS:Record<string,string>={minsk:'minsk',brest:'brest',vitebsk:'vitebsk',gomel:'gomel',grodno:'grodno',mogilev:'mogilev',minskaya_oblast:'minskaya-oblast',brestskaya_oblast:'brestskaya-oblast',vitebskaya_oblast:'vitebskaya-oblast',gomelskaya_oblast:'gomelskaya-oblast',grodnenskaya_oblast:'grodnenskaya-oblast',mogilevskaya_oblast:'mogilevskaya-oblast'};
 
-export function findCatalogNode(id:string):CatalogNode|null{for(const category of KUFAR_CATALOG){if(category.id===id)return category;const found=category.children?.find(item=>item.id===id);if(found)return found;}return null;}
-export function findCatalogCategory(id:string):CatalogNode|null{const direct=KUFAR_CATALOG.find(category=>category.id===id);if(direct)return direct;return KUFAR_CATALOG.find(category=>category.children?.some(item=>item.id===id))||null;}export function buildKufarSearchUrl(config:MonitorConfig):string{
+export function findCatalogNode(id:string):CatalogNode|null{
+ const walk=(nodes:CatalogNode[]):CatalogNode|null=>{for(const item of nodes){if(item.id===id)return item;const found=item.children?walk(item.children):null;if(found)return found;}return null};
+ return walk(KUFAR_CATALOG);
+}
+export function findCatalogCategory(id:string):CatalogNode|null{
+ const walk=(nodes:CatalogNode[],root:CatalogNode):CatalogNode|null=>{for(const item of nodes){if(item.id===id)return root;const found=item.children?walk(item.children,root):null;if(found)return found;}return null};
+ const direct=KUFAR_CATALOG.find(category=>category.id===id); if(direct)return direct;
+ for(const root of KUFAR_CATALOG){const found=walk(root.children||[],root);if(found)return found;} return null;
+}export function buildKufarSearchUrl(config:MonitorConfig):string{
  const selected=findCatalogNode(config.subcategoryId||config.categoryId); const category=findCatalogCategory(config.categoryId); const baseSlug=selected?.slug||category?.slug||''; const rentalPaths:Record<string,string>={'1011':'/l/belarus/snyat/kvartiru','1012':'/l/belarus/snyat/kvartiru-na-sutki','1021':'/l/belarus/snyat/dom','1022':'/l/belarus/snyat/dom-na-sutki','1041':'/l/belarus/snyat/komnatu','1051':'/l/belarus/snyat/kommercheskuyu-nedvizhimost','1031':'/l/belarus/snyat/garazh'}; const phone=category?.id==='phones' || selected?.id==='17010'; const brand=phone&&config.brand?.trim()?config.brand.trim().toLocaleLowerCase('en-US').replace(/[^a-z0-9]+/g,'-'):''; const model=phone&&config.model?.trim()?config.model.trim().toLocaleLowerCase('ru-RU').replace(/[^a-z0-9а-яё]+/gi,'-').replace(/^-+|-+$/g,''):''; const slug=phone&&brand ? ('mobilnye-telefony/mt~'+brand+(model?'-'+model:'')) : baseSlug;
  const city=config.city?encodeURIComponent(config.city):''; const region=config.region?REGION_SLUGS[config.region]||config.region:'';
  const rentalPath=config.subcategoryId&&rentalPaths[config.subcategoryId]?rentalPaths[config.subcategoryId]:''; const prefix=city?'/l/r~'+city+'/':region?'/l/r~'+region+'/':'/l/'; const url=rentalPath?new URL(rentalPath,'https://re.kufar.by'):new URL(prefix+slug,'https://www.kufar.by');
