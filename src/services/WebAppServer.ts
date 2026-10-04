@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { DatabaseService } from '../database/DatabaseService';
 import { logger } from '../utils/logger';
-import { KUFAR_CATALOG, MonitorConfig, findCatalogNode, findCatalogCategory } from '../catalog/KufarCatalog';
+import { KUFAR_CATALOG, MonitorConfig, buildKufarSearchUrl, findCatalogNode, findCatalogCategory } from '../catalog/KufarCatalog';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -128,7 +128,8 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
             json(res, 400, { error: 'invalid_subcategory', message: 'Выберите подкатегорию из выбранной категории.' }); return;
           }
           if (config.condition && config.condition !== 'new' && config.condition !== 'used') { json(res, 400, { error: 'invalid_condition' }); return; }
-          if (config.seller && config.seller !== 'private' && config.seller !== 'company') { json(res, 400, { error: 'invalid_seller' }); return; }\n          if (config.minMarketDiscount != null && (!Number.isFinite(Number(config.minMarketDiscount)) || Number(config.minMarketDiscount) < 0 || Number(config.minMarketDiscount) > 90)) { json(res, 400, { error: 'invalid_market_discount', message: 'Минимальная скидка от рынка должна быть от 0 до 90%.' }); return; }
+          if (config.seller && config.seller !== 'private' && config.seller !== 'company') { json(res, 400, { error: 'invalid_seller' }); return; }
+          if (config.minMarketDiscount != null && (!Number.isFinite(Number(config.minMarketDiscount)) || Number(config.minMarketDiscount) < 0 || Number(config.minMarketDiscount) > 90)) { json(res, 400, { error: 'invalid_market_discount', message: 'Минимальная скидка от рынка должна быть от 0 до 90%.' }); return; }
           if (config.mode && config.mode !== 'normal' && config.mode !== 'sniper') { json(res, 400, { error: 'invalid_mode' }); return; }
           if (config.query != null && (typeof config.query !== 'string' || config.query.length > 120)) {
             json(res, 400, { error: 'invalid_query' }); return;
@@ -141,7 +142,6 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           }
           if (config.minPrice != null && config.maxPrice != null && Number(config.minPrice) > Number(config.maxPrice)) { json(res, 400, { error: 'invalid_price_range' }); return; }
           const links = await db.getUserLinks(user.id);
-          const { buildKufarSearchUrl } = await import('../catalog/KufarCatalog.js');
           const url = buildKufarSearchUrl(config);
           const existing = links.find(link => link.url === url);
           if (existing) {
