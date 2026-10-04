@@ -154,21 +154,20 @@ export class ParserScheduler {
             } else {
               await this.db.updateAdPrice(last.adId, adData.price);
             }
-            const comparable = getComparableMarketSignal(adData, marketAds);
-            if (comparable.market_median != null) {
+            if (adData.market_median != null) {
               await this.db.updateAdMarketSignals([{
                 id: last.adId,
-                status: comparable.market_status,
-                percent: comparable.market_percent,
-                median: comparable.market_median,
-                low: comparable.market_low,
-                high: comparable.market_high,
-                sellFast: comparable.sell_fast,
-                sellNormal: comparable.sell_normal,
-                sellMax: comparable.sell_max,
-                sampleSize: comparable.sample_size,
-                confidence: comparable.confidence,
-                quality: comparable.quality,
+                status: adData.market_status ?? null,
+                percent: adData.market_percent ?? null,
+                median: adData.market_median,
+                low: adData.market_low ?? null,
+                high: adData.market_high ?? null,
+                sellFast: adData.sell_fast ?? null,
+                sellNormal: adData.sell_normal ?? null,
+                sellMax: adData.sell_max ?? null,
+                sampleSize: adData.market_sample_size ?? null,
+                confidence: adData.market_confidence ?? null,
+                quality: adData.market_quality ?? null,
               }]);
             }
           }
