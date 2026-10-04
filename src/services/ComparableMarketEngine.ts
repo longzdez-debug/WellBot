@@ -1,5 +1,5 @@
 import { Ad } from '../types';
-import { getMarketSignal, parseMarketPrice } from './MarketEngine';
+import { parseMarketPrice } from './MarketEngine';
 
 export interface ComparableMarketResult {
   market_status: 'below_market' | 'market' | 'above_market' | null;
@@ -64,7 +64,7 @@ export function getComparableMarketSignal(current: Ad, history: Ad[], minimumSam
 
   const values = selected.map(x => x.parsed?.amount).filter((x): x is number => Number.isFinite(x));
   if (values.length < minimumSampleSize) {
-    return { market_status: null, market_percent: null, market_median: null, market_sample_size: values.length, confidence: null, comparable_count: ranked.length } as ComparableMarketResult & { market_sample_size?: number };
+    return { market_status: null, market_percent: null, market_median: null, sample_size: values.length, confidence: null, comparable_count: ranked.length };
   }
 
   const sorted = [...values].sort((a, b) => a - b);
