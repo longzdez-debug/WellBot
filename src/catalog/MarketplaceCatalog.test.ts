@@ -7,14 +7,14 @@ describe('Marketplace catalog',()=>{
     expect(MARKETPLACE_CATALOGS.av.length).toBeGreaterThan(0);
   });
   test('resolves categories and children per marketplace',()=>{
-    const onliner=MARKETPLACE_CATALOGS.onliner[0];
+    const onliner=MARKETPLACE_CATALOGS.onliner.find(x=>x.id==='computers')!;
     const child=onliner.children?.[0];
     expect(child).toBeDefined();
     expect(findMarketplaceNode('onliner',child!.id)?.title).toBe(child!.title);
     expect(findMarketplaceCategory('onliner',child!.id)?.id).toBe(onliner.id);
   });
   test('builds marketplace URLs without cross-marketplace leakage',()=>{
-    const onliner=buildMarketplaceSearchUrl('onliner',{categoryId:'electronics',subcategoryId:'phones',query:'iPhone',city:'minsk'});
+    const onliner=buildMarketplaceSearchUrl('onliner',{categoryId:'computers',subcategoryId:'computers_0',query:'iPhone',city:'minsk'});
     const av=buildMarketplaceSearchUrl('av',{categoryId:'cars',subcategoryId:'used',query:'BMW',minPrice:1000,maxPrice:5000});
     expect(onliner).toContain('baraholka.onliner.by');
     expect(av).toContain('av.by');

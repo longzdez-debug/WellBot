@@ -46,4 +46,5 @@ for(const target of [...index.matchAll(/data-scroll="([^"]+)"/g)].map(m=>m[1]))i
 if(/Успешных покупок<\/span><b>247|Общий профит<\/span><b>\+312 450|Средняя маржа<\/span><b>\+34%/.test(index))throw new Error("Hardcoded fake business metrics detected.");
 if(actions.filter(a=>a==='add').length!==1)throw new Error("There must be exactly one static primary add action.");
 if(!app.includes('/api/catalog')||!app.includes('/api/monitors'))throw new Error("Marketplace monitor API contract missing.");
+if(!app.includes('/api/catalog'))throw new Error("Official marketplace catalog API is missing.");
 console.log("WellBOT web UI contract: OK ("+buttons.length+" static buttons, "+actions.length+" actions, marketplace wizard enabled).");
