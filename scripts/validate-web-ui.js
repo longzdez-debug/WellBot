@@ -4,7 +4,7 @@ const app=fs.readFileSync("web/app.js","utf8");
 const cssRefs=[...index.matchAll(/href="\.\/([^"]+\.css)(?:\?[^"]*)?"/g)].map(m=>m[1]);
 for(const file of cssRefs){if(!fs.existsSync("web/"+file))throw new Error("Missing stylesheet: "+file);}
 if(cssRefs.includes("styles.css"))throw new Error("Legacy stylesheet styles.css is still referenced.");
-const appScriptIsValid=index.includes('<script src="./app.js?v=2026.10.04.24" defer></script>');
+const appScriptIsValid=index.includes('<script src="./app.js?v=2026.10.04.25" defer></script>');
 if(index.includes('<script src="./app.js?v=20261004-15" defer></script>>'))throw new Error("Malformed app.js script tag detected.");
 if(!appScriptIsValid)throw new Error("app.js must load unconditionally with defer.");
 if(index.includes("Telegram.WebApp.initData"))throw new Error("index.html must not gate app.js loading on Telegram initData.");
