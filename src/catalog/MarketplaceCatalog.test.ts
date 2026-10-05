@@ -22,7 +22,7 @@ describe('Marketplace catalog',()=>{
     expect(av).not.toContain('kufar.by');
   });
   test('has unique category ids at every depth',()=>{
-    for(const [source,catalog] of Object.entries(MARKETPLACE_CATALOGS)){
+    for(const [,catalog] of Object.entries(MARKETPLACE_CATALOGS)){
       const ids:string[]=[];
       const walk=(nodes:any[])=>{for(const node of nodes){ids.push(node.id);walk(node.children||[])}};
       walk(catalog);
