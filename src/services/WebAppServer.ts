@@ -76,8 +76,8 @@ export function parseTelegramInitData(raw: string, botToken: string, nowSeconds 
     const actual = Buffer.from(hash, 'hex');
     const expectedBuffer = Buffer.from(expected, 'hex');
     if (actual.length !== expectedBuffer.length || !timingSafeEqual(actual, expectedBuffer)) return null;
-    const user = JSON.parse(userRaw) as AuthUser;
-    if (!Number.isSafeInteger(user.id) || user.id <= 0) return null;
+    const user: unknown = JSON.parse(userRaw);
+    if (!isAuthUser(user)) return null;
     return { user, authDate };
   } catch { return null; }
 }
