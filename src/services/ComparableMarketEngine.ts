@@ -60,6 +60,7 @@ export function getComparableMarketSignal(current:Ad,history:Ad[],minimumSampleS
   const prepared=prepareHistory(history);
   const ranked=prepared
     .filter(x=>x.item.external_id!==current.external_id&&x.price?.currency===cp.currency)
+    .filter(x=>!current.market_group || x.item.market_group===current.market_group)
     .map(x=>({item:x.item,s:score(current,currentTokens,currentLocation,x),p:x.price!}))
     .filter(x=>x.s>=0.48)
     .sort((a,b)=>b.s-a.s);
