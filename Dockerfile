@@ -10,20 +10,15 @@ COPY src ./src
 COPY web ./web
 RUN npm run build
 
-# Copy SQL schema file to dist
 RUN cp src/database/schema.sql dist/database/
 
-# Remove dev dependencies after build
 RUN npm prune --omit=dev
 
-# Run the application without root privileges.
 RUN chown -R node:node /app
 USER node
 
-# Documentation/default only; Deplexo routes using the runtime PORT.
+# Deplexo routes the service to PORT. Keep 8080 as the local/container fallback.
+ENV PORT=8080
 EXPOSE 8080
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD sh -c "wget -qO- http://127.0.0.1:${PORT:-8080}/healthz >/dev/null || exit 1"
 
 CMD ["node", "dist/index.js"]
