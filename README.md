@@ -59,19 +59,19 @@ PARSE_INTERVAL_SECONDS=0.25
 PARSE_CONCURRENCY=16
 ```
 
-`deploy.sh` validates the required secrets, starts PostgreSQL, waits for it to become healthy, builds/starts WellBOT, and waits for `http://127.0.0.1:8080/health` to pass.
+`deploy.sh` validates the required secrets, starts PostgreSQL, waits for it to become healthy, builds/starts WellBOT, and waits for `http://127.0.0.1:3000/health` to pass.
 
 > Never commit `.env` or Telegram/database credentials to Git.
 
 ## HTTPS / Mini App
 
-For the Mini App, the built-in WellBOT web server listens on port `8080`. Put an HTTPS reverse proxy in front of it and set `WELLBOT_WEBAPP_URL` to the public HTTPS URL.
+For the Mini App, the built-in WellBOT web server listens on port `3000`. Put an HTTPS reverse proxy in front of it and set `WELLBOT_WEBAPP_URL` to the public HTTPS URL.
 
 A minimal Caddy example is provided in `Caddyfile.example`:
 
 ```text
 wellbot.example.com {
-    reverse_proxy 127.0.0.1:8080
+    reverse_proxy 127.0.0.1:3000
 }
 ```
 
@@ -95,7 +95,7 @@ Kufar searches are generated server-side from the verified WellBOT catalog, so u
 |---|---:|---|
 | `PARSE_INTERVAL_SECONDS` | `0.25` | Polling interval; values are clamped to 100 ms minimum |
 | `PARSE_CONCURRENCY` | `16` | Maximum search URLs parsed in parallel, clamped to 1–20 |
-| `WELLBOT_WEB_PORT` | disabled | Built-in Mini App server port |
+| `PORT` | `3000` | Built-in Mini App server port |
 | `WELLBOT_WEBAPP_URL` | empty | Public HTTPS Mini App URL |
 | `DB_PASSWORD` | — | PostgreSQL password used by Docker Compose |
 
