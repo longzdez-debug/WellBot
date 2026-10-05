@@ -94,7 +94,33 @@ export class BotHandler {
   async sendNotification(telegramId: number, ad: Ad): Promise<void> {
     try {
       const formatted = await this.adPresenter.format(ad);
-      await this.telegramSender.send(telegramId, { ...formatted, text: `📢 Новое объявление!\n\n${formatted.text}` });
+      const timezone = process.env.DISPLAY_TIMEZONE || 'Europe/Minsk';
+      const formatClock = (value: Date | string | null | undefined): string => {
+        const date = value instanceof Date ? value : value ? new Date(value) : null;
+        if (!date || Number.isNaN(date.getTime())) return '—';
+        return new Intl.DateTimeFormat('ru-RU', {
+          timeZone: timezone,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        }).format(date);
+      };
+      const published = ad.published_at ? new Date(ad.published_at) : null;
+      const detected = ad.detected_at ? new Date(ad.detected_at) : new Date();
+      const deliveryDelayMs = published && !Number.isNaN(published.getTime())
+        ? Math.max(0, Date.now() - published.getTime())
+        : null;
+      const realtimeMeta = [
+        '🕐 Опубликовано: ' + formatClock(published),
+        '⚡ Обнаружено: ' + formatClock(detected),
+        '📨 Отправлено: ' + formatClock(new Date()),
+        deliveryDelayMs !== null ? '⏱ Задержка: ' + (deliveryDelayMs / 1000).toFixed(1) + ' с' : null,
+      ].filter(Boolean).join('\n');
+      await this.telegramSender.send(telegramId, {
+        ...formatted,
+        text: '📢 Новое объявление!\n\n' + realtimeMeta + '\n\n' + formatted.text,
+      });
     } catch (error: any) {
       if (error?.response?.statusCode === 403) { logger.warn('User blocked bot', { telegramId }); return; }
       logger.error('Failed to send notification', { telegramId, adId: ad.id, error: error?.message || String(error) });
