@@ -258,12 +258,21 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
   });
 
   server.on('error', (error: Error) => {
-    logger.error('WellBOT WebApp server error', { port, error: error.message, code: (error as NodeJS.ErrnoException).code });
+    logger.error('WellBOT WebApp server error', {
+      port,
+      host: '0.0.0.0',
+      error: error.message,
+      code: (error as NodeJS.ErrnoException).code,
+    });
+    // A failed listener means the deployment can never become reachable.
+    // Fail fast instead of leaving a worker alive with no HTTP endpoint.
+    process.exitCode = 1;
   });
   server.on('listening', () => {
     const address = server.address();
-    logger.info('WellBOT WebApp server started', { port, webRoot, address });
+    logger.info('WellBOT WebApp server started', { port, host: '0.0.0.0', webRoot, address });
   });
+  logger.info('WellBOT WebApp server binding', { port, host: '0.0.0.0' });
   server.listen(port, '0.0.0.0');
   return { close: () => new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve()))) };
 }
