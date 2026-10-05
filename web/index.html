@@ -21,9 +21,9 @@
     </div>
 
     <nav class="side-nav" aria-label="Навигация">
-      <button class="nav-item active" data-scroll="feed-section"><span>⌂</span>Главная</button>
+      <button class="nav-item active" data-scroll="feed-section"><span>⌂</span>Обзор</button>
       <button class="nav-item" data-scroll="feed-section"><span>▱</span>Объявления</button>
-      <button class="nav-item" data-scroll="drops-section"><span>◎</span>Сделки</button>
+      <button class="nav-item" data-scroll="drops-section"><span>↘</span>Сделки</button>
       <button class="nav-item" data-scroll="monitors-section"><span>◫</span>Мониторинг</button>
     </nav>
 
@@ -49,7 +49,7 @@
     <header class="topbar">
       <div class="search-box"><span>⌕</span><input id="global-search" aria-label="Поиск" autocomplete="off" placeholder="Поиск по товарам, SKU, ссылкам..."><kbd>Ctrl + K</kbd></div>
       <div class="top-actions">
-        <button class="top-icon" data-scroll="drops-section" aria-label="Уведомления">♧</button>
+        <button class="top-icon" data-scroll="drops-section" aria-label="Сделки и уведомления">♧</button>
         <button class="top-icon" data-action="refresh" aria-label="Обновить">↻</button>
         <span class="divider"></span>
         <div class="bot-status" title="Статус обновляется автоматически"><i></i><span>Бот работает</span></div>
@@ -128,6 +128,13 @@
     </main>
   </div>
 </div>
-<script src="./app.js?v=20261005-04" defer></script>
+<nav class="mobile-nav" aria-label="Основная навигация">
+  <button class="mobile-nav-item active" data-scroll="feed-section" type="button"><span>⌂</span><b>Обзор</b></button>
+  <button class="mobile-nav-item" data-scroll="monitors-section" type="button"><span>◫</span><b>Мониторы</b></button>
+  <button class="mobile-nav-add" data-action="add" type="button" aria-label="Создать поиск">＋</button>
+  <button class="mobile-nav-item" data-scroll="drops-section" type="button"><span>↘</span><b>Сделки</b></button>
+  <button class="mobile-nav-item" data-action="profile" type="button"><span>◉</span><b>Профиль</b></button>
+</nav>
+<script src="./app.js?v=20261005-05" defer></script>
 </body>
 </html>
