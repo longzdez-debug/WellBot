@@ -225,3 +225,14 @@ WHERE a.id > b.id
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_outbox_dedupe_key
   ON notification_outbox(dedupe_key);
+
+
+-- WellBOT PRO subscriptions (Telegram Stars)
+CREATE TABLE IF NOT EXISTS pro_subscriptions (id BIGSERIAL PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,tier VARCHAR(32) NOT NULL DEFAULT 'pro',status VARCHAR(32) NOT NULL DEFAULT 'active',expires_at TIMESTAMP NOT NULL,telegram_payment_charge_id TEXT,provider_payment_charge_id TEXT,stars_amount INTEGER,last_invoice_payload TEXT,created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
+ALTER TABLE pro_subscriptions ADD COLUMN IF NOT EXISTS telegram_payment_charge_id TEXT;
+ALTER TABLE pro_subscriptions ADD COLUMN IF NOT EXISTS provider_payment_charge_id TEXT;
+ALTER TABLE pro_subscriptions ADD COLUMN IF NOT EXISTS stars_amount INTEGER;
+ALTER TABLE pro_subscriptions ADD COLUMN IF NOT EXISTS last_invoice_payload TEXT;
+ALTER TABLE pro_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pro_subscriptions_user_tier ON pro_subscriptions(user_id,tier);
+CREATE INDEX IF NOT EXISTS idx_pro_subscriptions_active ON pro_subscriptions(status,expires_at);
