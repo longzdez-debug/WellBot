@@ -23,7 +23,7 @@ export function findMarketplaceNode(source:MarketplaceSource,id:string):Marketpl
 }
 export function findMarketplaceCategory(source:MarketplaceSource,id:string):MarketplaceNode|null{
  const list=getMarketplaceCatalog(source); const direct=list.find(n=>n.id===id); if(direct)return direct;
- const walk=(nodes:MarketplaceNode[],root:MarketplaceNode):MarketplaceNode|null=>{for(const item of nodes){if(item.id===id)return root;const found=item.children?walk(item.children,root):null;if(found)return found;}return null};
+ const walk=(nodes:MarketplaceNode[],root:MarketplaceNode):MarketplaceNode|null=>{for(const item of nodes){if(item.id===id)return root;const found=item.children?walk(item.children,item):null;if(found)return found;}return null};
  for(const root of list){const found=walk(root.children||[],root);if(found)return found;} return null;
 }
 export function buildMarketplaceSearchUrl(source:MarketplaceSource,config:any):string{
