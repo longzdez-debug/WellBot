@@ -61,7 +61,8 @@ export abstract class BaseParser implements IParser {
             'Host': new URL(url).hostname,
           },
         });
-        if (typeof response.data !== 'string') return JSON.stringify(response.data);\n        return response.data;
+        if (typeof response.data !== 'string') return JSON.stringify(response.data);
+        return response.data;
       } catch (error: unknown) {
         lastError = error;
         const message = error instanceof Error ? error.message : String(error);
@@ -72,7 +73,9 @@ export abstract class BaseParser implements IParser {
           retryable,
         });
         if (!retryable || i >= attempts - 1) break;
-        const backoff = Math.min(1500, 200 * 2 ** i);\n        const jitter = Math.floor(Math.random() * 100);\n        await this.sleep(backoff + jitter);
+        const backoff = Math.min(1500, 200 * 2 ** i);
+        const jitter = Math.floor(Math.random() * 100);
+        await this.sleep(backoff + jitter);
       }
     }
 
