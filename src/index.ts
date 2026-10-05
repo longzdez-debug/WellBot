@@ -22,13 +22,13 @@ async function main() {
   // its readiness probe immediately after the container starts; database
   // connection/migration work must never prevent port 8080 from accepting
   // /healthz during startup.
+  const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
+  const DATABASE_URL = requiredEnv('DATABASE_URL');
   const db = new DatabaseService(DATABASE_URL);
   // DEPLEXO may inject PORT at runtime. Prefer the platform port when it is
   // present, while keeping WELLBOT_WEB_PORT/8080 as the local fallback.
   const configuredWebPort = process.env.PORT || process.env.WELLBOT_WEB_PORT || '8080';
   const webPort = Number(configuredWebPort);
-  const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
-  const DATABASE_URL = requiredEnv('DATABASE_URL');
   logger.info('WellBOT WebApp configuration', {
     configuredWebPort,
     webPort,
