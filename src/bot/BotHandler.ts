@@ -1,4 +1,4 @@
-import TelegramBot, { Message, CallbackQuery } from 'node-telegram-bot-api';
+import { TelegramBotClient, TelegramMessage as Message, TelegramCallbackQuery as CallbackQuery } from '../services/TelegramBotClient';
 import { DatabaseService } from '../database/DatabaseService';
 import { ParserFactory } from '../parsers/ParserFactory';
 import { RateLimiter } from '../utils/rateLimiter';
@@ -10,13 +10,13 @@ import { logger } from '../utils/logger';
 import { mapError } from '../utils/errorMapper';
 
 export class BotHandler {
-  private bot: TelegramBot;
+  private bot: TelegramBotClient;
   private db: DatabaseService;
   private rateLimiter: RateLimiter;
   private adPresenter: AdPresenter;
   private telegramSender: TelegramSender;
   constructor(token: string, db: DatabaseService) {
-    this.bot = new TelegramBot(token, { polling: true });
+    this.bot = new TelegramBotClient(token, { polling: true });
     this.db = db;
     this.rateLimiter = new RateLimiter(10, 60000);
     this.adPresenter = new AdPresenter();
@@ -25,7 +25,7 @@ export class BotHandler {
   }
 
   private getMainKeyboard() {
-    return { remove_keyboard: true } as TelegramBot.SendMessageOptions['reply_markup'];
+    return { remove_keyboard: true } as unknown;
   }
 
   private setupHandlers(): void {
