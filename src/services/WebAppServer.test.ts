@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto';
 import { parseTelegramInitData } from './WebAppServer';
 
 function sign(dataCheckString:string,token:string):string{
-  const secret=createHmac('sha256','WebAppData').update(token).digest();
+  const secret=createHmac('sha256',token).update('WebAppData').digest();
   return createHmac('sha256',secret).update(dataCheckString).digest('hex');
 }
 
