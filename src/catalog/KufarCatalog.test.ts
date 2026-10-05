@@ -14,20 +14,26 @@ describe('KufarCatalog', () => {
     ]));
   });
 
-  test('has no duplicate catalog ids', () => {
+  test('has no duplicate catalog ids at any depth', () => {
     const ids: string[] = [];
-    for (const category of KUFAR_CATALOG) {
-      ids.push(category.id);
-      for (const child of category.children || []) ids.push(child.id);
-    }
+    const walk = (nodes: typeof KUFAR_CATALOG) => {
+      for (const item of nodes) {
+        ids.push(item.id);
+        walk(item.children || []);
+      }
+    };
+    walk(KUFAR_CATALOG);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   test('every searchable leaf uses a numeric Kufar category id', () => {
-    for (const category of KUFAR_CATALOG) {
-      if (!category.children?.length && category.searchable !== false) expect(category.id).toMatch(/^\d+$/);
-      for (const child of category.children || []) expect(child.id).toMatch(/^\d+$/);
-    }
+    const walk = (nodes: typeof KUFAR_CATALOG) => {
+      for (const item of nodes) {
+        if (!item.children?.length && item.searchable !== false) expect(item.id).toMatch(/^\d+$/);
+        walk(item.children || []);
+      }
+    };
+    walk(KUFAR_CATALOG);
   });
 
   test('child lookup resolves to its owning category', () => {
