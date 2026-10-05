@@ -26,6 +26,8 @@ async function main() {
   const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
   const DATABASE_URL = requiredEnv('DATABASE_URL');
   const db = new DatabaseService(DATABASE_URL);
+  await db.initialize();
+  logger.info('Database initialized');
   let scheduler: ParserScheduler | null = null;
   const webServer = await startWebAppServer(
     webPort,
@@ -34,8 +36,6 @@ async function main() {
     undefined,
     async () => scheduler ? await scheduler.getMetrics() : { scheduler: { running: false }, notifications: {}, generatedAt: new Date().toISOString() },
   );
-  await db.initialize();
-  logger.info('Database initialized');
   const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
   scheduler = new ParserScheduler(db, bot);
   installWebAppBridge(bot);
