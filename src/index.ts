@@ -17,19 +17,16 @@ function requiredEnv(name: string): string {
 }
 
 async function main() {
-  logger.info('Starting WellBOT...', { version: '2.0.3', miniAppApi: 'telegram-init-data' });
-  const configuredWebPort = process.env.PORT || process.env.WELLBOT_WEB_PORT || '8080';
+  logger.info('Starting WellBOT...', { version: '2.0.4', miniAppApi: 'telegram-init-data' });
+  const configuredWebPort = process.env.PORT || '3000';
   const webPort = Number(configuredWebPort);
+  console.log('[WellBOT] HTTP startup', JSON.stringify({ port: configuredWebPort, platformPort: process.env.PORT || null, host: '0.0.0.0' }));
   logger.info('WellBOT WebApp configuration', { configuredWebPort, webPort, host: '0.0.0.0', platformPort: process.env.PORT || null });
-  if (!Number.isInteger(webPort) || webPort <= 0 || webPort >= 65536) throw new Error('PORT/WELLBOT_WEB_PORT must be a valid TCP port');
-
+  if (!Number.isInteger(webPort) || webPort <= 0 || webPort >= 65536) throw new Error('PORT must be a valid TCP port');
   const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
   const DATABASE_URL = requiredEnv('DATABASE_URL');
   const db = new DatabaseService(DATABASE_URL);
-
-  // Bind HTTP before polling and scheduler startup so Deplexo can reach readiness immediately.
-  const webServer = await startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined);
-
+  const webServer = await startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN);
   const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
   const scheduler = new ParserScheduler(db, bot);
   installWebAppBridge(bot);
@@ -42,14 +39,9 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info('Shutting down...');
-    await scheduler.stop();
-    bot.stop();
-    await webServer.close();
-    await db.close();
-    process.exit(0);
+    await scheduler.stop(); bot.stop(); await webServer.close(); await db.close(); process.exit(0);
   };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
   logger.info('WellBOT is running!');
 }
 
