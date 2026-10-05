@@ -63,6 +63,10 @@ export class DatabaseService {
     );
     return r.rows.length>0;
   }
+  async isAdDismissedForChat(externalId:string,telegramId:number):Promise<boolean>{
+    const r=await this.pool.query('SELECT 1 FROM dismissed_ads d JOIN users u ON u.id=d.user_id WHERE u.telegram_id=$1 AND d.external_id=$2 LIMIT 1',[telegramId,externalId]);
+    return r.rowCount===1;
+  }
   async isAdDismissedForUser(externalId:string,userId:number):Promise<boolean>{
     const r=await this.pool.query('SELECT 1 FROM dismissed_ads WHERE user_id=$1 AND external_id=$2',[userId,externalId]);
     return r.rowCount===1;
