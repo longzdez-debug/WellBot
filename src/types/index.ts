@@ -10,7 +10,7 @@ export interface Link {
 export interface Ad {
   id?: number; link_id?: number; external_id: string; title: string; description?: string | null;
   price?: string | null; image_url?: string | null; ad_url: string; location?: string | null; address?: string | null;
-  published_at?: Date | null; updated_at?: Date | null; created_at?: Date;
+  published_at?: Date | null; detected_at?: Date | null; updated_at?: Date | null; created_at?: Date;
   condition?: string | null; is_company?: boolean | null;
   market_status?: 'below_market' | 'market' | 'above_market' | null; market_percent?: number | null; market_median?: number | null;
   market_low?: number | null; market_high?: number | null; sell_fast?: number | null; sell_normal?: number | null; sell_max?: number | null;
