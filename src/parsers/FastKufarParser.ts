@@ -248,7 +248,7 @@ export class FastKufarParser extends BaseParser {
         requestMs: Date.now() - requestStartedAt,
       });
 
-      return ads.map((ad: any) => {
+      return ads.map((ad: any, index: number) => {
         let price = 'Договорная';
         if (ad.price_byn != null) price = `${(Number(ad.price_byn) / 100).toFixed(2)} BYN`;
         else if (ad.price_usd != null) price = `${(Number(ad.price_usd) / 100).toFixed(2)} USD`;
@@ -268,6 +268,8 @@ export class FastKufarParser extends BaseParser {
           updated_at: ad.list_time_up ? new Date(ad.list_time_up) : undefined,
           condition: adCondition(ad) || null,
           is_company: Boolean(ad.company_ad),
+          first_seen_source: endpoint.includes('cre-api') ? 'api-cre' : 'api-search',
+          first_seen_rank: index + 1,
         } as Ad;
       });
     };
@@ -318,7 +320,7 @@ export class FastKufarParser extends BaseParser {
         requestMs: Date.now() - started,
       });
 
-      return [...unique.values()].map((ad: any) => {
+      return [...unique.values()].map((ad: any, index: number) => {
         if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return null;
         const text = adSearchText(ad);
         if (!queryMatchesAd(text)) return null;
@@ -348,6 +350,8 @@ export class FastKufarParser extends BaseParser {
           updated_at: ad.list_time_up ? new Date(ad.list_time_up) : undefined,
           condition: adCondition(ad) || null,
           is_company: Boolean(ad.company_ad),
+          first_seen_source: 'html',
+          first_seen_rank: index + 1,
         } as Ad;
       }).filter(Boolean) as Ad[];
     };
@@ -361,9 +365,33 @@ export class FastKufarParser extends BaseParser {
 
       if (sources.length) {
         const startedAt = Date.now();
-        const settled = await Promise.allSettled(
-          sources.map(source => source === '__html__' ? requestHtml() : requestApi(source)),
-        );
+        const requests = sources.map(source => ({
+          source,
+          promise: source === '__html__' ? requestHtml() : requestApi(source),
+        }));
+
+        if (isSniper) {
+          try {
+            const first = await Promise.any(requests.map(async item => {
+              const ads = await item.promise;
+              if (!ads.length) throw new Error('empty source');
+              return item.source === '__html__'
+                ? ads.map(ad => ({...ad, first_seen_source: ad.first_seen_source ?? 'html'}))
+                : ads;
+            }));
+            logger.info('Kufar sniper first-hit source won', {
+              source: first[0]?.first_seen_source ?? 'unknown',
+              uniqueAds: first.length,
+              durationMs: Date.now() - startedAt,
+            });
+            return first;
+          } catch {
+            // All sources were empty/failed. Fall through to the full merge path
+            // so an established monitor still gets the same failure semantics.
+          }
+        }
+
+        const settled = await Promise.allSettled(requests.map(item => item.promise));
         const merged = new Map<string, Ad>();
         const successfulSources: string[] = [];
         const errors: string[] = [];
@@ -379,7 +407,11 @@ export class FastKufarParser extends BaseParser {
               else {
                 const currentTime = existing.published_at?.getTime() || 0;
                 const nextTime = ad.published_at?.getTime() || 0;
-                if (nextTime >= currentTime) merged.set(ad.external_id, ad);
+                if (nextTime >= currentTime) merged.set(ad.external_id, {
+                  ...ad,
+                  first_seen_source: existing.first_seen_source ?? ad.first_seen_source,
+                  first_seen_rank: existing.first_seen_rank ?? ad.first_seen_rank,
+                });
               }
             }
           } else {
