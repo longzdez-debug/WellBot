@@ -200,3 +200,10 @@ WHERE a.id > b.id
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_outbox_dedupe_key
   ON notification_outbox(dedupe_key);
+
+
+ALTER TABLE notification_outbox ADD COLUMN IF NOT EXISTS dead_lettered_at TIMESTAMP;
+ALTER TABLE notification_outbox ADD COLUMN IF NOT EXISTS dead_letter_reason TEXT;
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_dead_letter
+  ON notification_outbox(dead_lettered_at, id)
+  WHERE dead_lettered_at IS NOT NULL;
