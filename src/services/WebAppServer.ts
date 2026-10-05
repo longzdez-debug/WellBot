@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual, randomUUID } from 'node:crypto';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -8,7 +8,11 @@ import { KUFAR_CATALOG, MonitorConfig, buildKufarSearchUrl, findCatalogNode, fin
 import { MARKETPLACE_CATALOGS, MARKETPLACES, MarketplaceSource, buildMarketplaceSearchUrl, findMarketplaceNode, findMarketplaceCategory } from '../catalog/MarketplaceCatalog';
 import { KUFAR_PHONE_BRANDS, KUFAR_PHONE_FILTERS, isKufarPhoneCategory } from '../catalog/KufarPhoneCatalog';
 
-const isCatalogDescendant=(id:string,root:{children?:Array<{id:string;children?:any[]}>}):boolean=>{const walk=(nodes:any[]):boolean=>nodes.some(n=>n.id===id||(n.children&&walk(n.children)));return walk(root.children||[])};
+interface CatalogTreeNode { id:string; children?:CatalogTreeNode[]; }
+const isCatalogDescendant=(id:string,root:{children?:CatalogTreeNode[]}):boolean=>{
+  const walk=(nodes:CatalogTreeNode[]):boolean=>nodes.some(node=>node.id===id||(node.children?walk(node.children):false));
+  return walk(root.children||[]);
+};
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -46,6 +50,14 @@ async function getKufarPhoneModels(brand:string){
 
 type AuthUser = { id: number; username?: string; first_name?: string; last_name?: string };
 type TelegramInitData = { user: AuthUser; authDate: number };
+function isAuthUser(value: unknown): value is AuthUser {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const user=value as Record<string,unknown>;
+  return Number.isSafeInteger(user.id) && Number(user.id)>0
+    && (user.username===undefined || typeof user.username==='string')
+    && (user.first_name===undefined || typeof user.first_name==='string')
+    && (user.last_name===undefined || typeof user.last_name==='string');
+}
 
 export function parseTelegramInitData(raw: string, botToken: string, nowSeconds = Math.floor(Date.now() / 1000)): TelegramInitData | null {
   if (!raw || !botToken || raw.length > MAX_INIT_DATA) return null;
@@ -75,6 +87,7 @@ function applySecurityHeaders(res: ServerResponse): void {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 }
 
 function json(res: ServerResponse, status: number, payload: unknown): void {
@@ -105,10 +118,13 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
     try {
       const requestUrl = new URL(req.url || '/', 'http://localhost');
       requestPath = decodeURIComponent(requestUrl.pathname);
+      const requestId=typeof req.headers['x-request-id']==='string'&&req.headers['x-request-id'].length<=100 ? req.headers['x-request-id'] : randomUUID();
+      res.setHeader('X-Request-Id',requestId);
 
       if (requestPath === '/health' || requestPath === '/healthz') {
         if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); json(res, 405, { error: 'method_not_allowed' }); return; }
-        json(res, 200, { status: 'ok', service: 'wellbot-web' }); return;
+        const dbHealth=await db.healthCheck();
+        json(res, dbHealth.ok?200:503, { status: dbHealth.ok?'ok':'degraded', service: 'wellbot-web', database: dbHealth, requestId }); return;
       }
 
       if (requestPath.startsWith('/api/')) {
@@ -119,9 +135,9 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
         }
         const initData = req.headers['x-telegram-init-data'];
         const auth = parseTelegramInitData(typeof initData === 'string' ? initData : '', botToken);
-        if (!auth) { logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method }); json(res, 401, { error: 'unauthorized' }); return; }
+        if (!auth) { logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method, requestId }); json(res, 401, { error: 'unauthorized' }); return; }
         const user = await db.getUser(auth.user.id);
-        if (!user) { logger.warn('WellBOT API user not registered', { telegramId: auth.user.id, requestPath }); json(res, 403, { error: 'user_not_registered' }); return; }
+        if (!user) { logger.warn('WellBOT API user not registered', { telegramId: auth.user.id, requestPath, requestId }); json(res, 403, { error: 'user_not_registered' }); return; }
 
         if (requestPath === '/api/metrics' && req.method === 'GET') { json(res, 200, metricsProvider ? await metricsProvider() : { scheduler: { running: false }, notifications: {}, generatedAt: new Date().toISOString() }); return; }
 
