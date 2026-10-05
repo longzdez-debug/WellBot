@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id);
 CREATE INDEX IF NOT EXISTS idx_links_active ON links(is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_links_next_check ON links(next_check_at) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_links_user_source_key ON links(user_id, source_key) WHERE source_key IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_links_due_priority ON links(is_active, next_check_at, priority DESC, id);
+CREATE INDEX IF NOT EXISTS idx_links_due_priority ON links(is_active, next_check_at, priority DESC, id);\nCREATE INDEX IF NOT EXISTS idx_links_lease_until ON links(lease_until, id) WHERE is_active = true;
 
 DELETE FROM links a
 USING links b
