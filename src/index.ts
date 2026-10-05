@@ -16,9 +16,6 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
-const DATABASE_URL = requiredEnv('DATABASE_URL');
-
 async function main() {
   logger.info('Starting WellBOT...', { version: '2.0.2', miniAppApi: 'telegram-init-data' });
   // Start the HTTP listener before database initialization. DEPLEXO performs
@@ -26,8 +23,12 @@ async function main() {
   // connection/migration work must never prevent port 8080 from accepting
   // /healthz during startup.
   const db = new DatabaseService(DATABASE_URL);
-  const configuredWebPort = process.env.WELLBOT_WEB_PORT || '8080';
+  // DEPLEXO may inject PORT at runtime. Prefer the platform port when it is
+  // present, while keeping WELLBOT_WEB_PORT/8080 as the local fallback.
+  const configuredWebPort = process.env.PORT || process.env.WELLBOT_WEB_PORT || '8080';
   const webPort = Number(configuredWebPort);
+  const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
+  const DATABASE_URL = requiredEnv('DATABASE_URL');
   logger.info('WellBOT WebApp configuration', {
     configuredWebPort,
     webPort,
@@ -47,7 +48,7 @@ async function main() {
 
   // The server is intentionally created before DB initialization. /healthz is
   // dependency-free and must remain available even while PostgreSQL is starting.
-  const webServer = startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined, () => scheduler.getMetrics());
+  const webServer = await startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined, () => scheduler.getMetrics());
 
   await db.initialize();
   logger.info('Database initialized');
