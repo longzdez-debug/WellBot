@@ -51,6 +51,20 @@ const API_ENDPOINTS = [
   'https://cre-api.kufar.by/ads-search/v1/engine/v1/search/rendered-paginated',
 ];
 
+const REEF_API_URL = String(process.env.KUFAR_REEF_API_URL || 'https://api.reefapi.com/kufar/v1/search').trim();
+const REEF_API_KEY = String(process.env.KUFAR_REEF_API_KEY || '').trim();
+
+function axiosStatus(error: unknown): number | null {
+  const response = (error as any)?.response;
+  return Number.isInteger(response?.status) ? Number(response.status) : null;
+}
+
+function errorSummary(error: unknown): string {
+  const status = axiosStatus(error);
+  const message = error instanceof Error ? error.message : String(error);
+  return status ? 'HTTP ' + status + ': ' + message : message;
+}
+
 const CITY_VARIANTS: Record<string, string[]> = {
   minsk: ['минск','первомайский','московский','ленинский','заводской','октябрьский','фрунзенский','партизанский','советский','центральный'],
   brest: ['брест'], baranovichi: ['барановичи'], pinsk: ['пинск'], kobrin: ['кобрин'], bereza: ['береза'],
@@ -275,6 +289,87 @@ export class FastKufarParser extends BaseParser {
       });
     };
 
+    const requestReef = async (): Promise<Ad[]> => {
+      if (!REEF_API_KEY) throw new Error('KUFAR_REEF_API_KEY is not configured');
+      const started = Date.now();
+      const body: Record<string, unknown> = {
+        size: 50,
+        sort: 'newest',
+        language: 'ru',
+      };
+      if (params.query) body.query = String(params.query);
+      if (params.cat) body.category = String(params.cat);
+      if (params.rgn) body.region = Number(params.rgn);
+      if (requestedMinPrice != null && Number.isFinite(requestedMinPrice)) body.price_min = requestedMinPrice;
+      if (requestedMaxPrice != null && Number.isFinite(requestedMaxPrice)) body.price_max = requestedMaxPrice;
+      if (requestedSeller === 'company') body.company_only = true;
+      if (requestedSeller === 'private') body.company_only = false;
+      if (parts.includes('snyat')) body.listing_type = 'rent';
+      else if (parts.includes('kupit')) body.listing_type = 'sell';
+
+      const response = await this.axiosInstance.post(REEF_API_URL, body, {
+        timeout: 6000,
+        headers: {
+          'x-api-key': REEF_API_KEY,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+      });
+      if (response.data?.ok === false) {
+        throw new Error(String(response.data?.error?.message || response.data?.error || 'ReefAPI returned ok=false'));
+      }
+      const rawAds = Array.isArray(response.data?.data?.listings)
+        ? response.data.data.listings
+        : Array.isArray(response.data?.listings)
+          ? response.data.listings
+          : [];
+
+      const ads = rawAds.filter((ad: any) => {
+        const id = ad?.listing_id ?? ad?.ad_id ?? ad?.id;
+        if (!id) return false;
+        if (requestedCitySlug && String(ad?.area_name || ad?.region_name || '').trim()) {
+          const haystack = normalizeSearchText([ad?.area_name, ad?.region_name].filter(Boolean).join(' '));
+          const variants = CITY_VARIANTS[requestedCitySlug] || [requestedCitySlug];
+          if (!variants.some(variant => haystack.includes(normalizeSearchText(variant)))) return false;
+        }
+        const text = normalizeSearchText([ad?.title, ad?.description_excerpt].filter(Boolean).join(' '));
+        if (!queryMatchesAd(text)) return false;
+        if (normalizedBrandTerms.length && !normalizedBrandTerms.some(term => text.includes(term))) return false;
+        return true;
+      });
+
+      logger.info('Kufar managed source received', {
+        source: 'reefapi',
+        count: ads.length,
+        rawCount: rawAds.length,
+        requestMs: Date.now() - started,
+      });
+
+      return ads.map((ad: any, index: number) => {
+        const id = String(ad.listing_id ?? ad.ad_id ?? ad.id);
+        const currency = String(ad.price_currency || 'BYN').toUpperCase();
+        const numericPrice = ad.price != null ? Number(ad.price) : ad.price_byn != null ? Number(ad.price_byn) : NaN;
+        const price = Number.isFinite(numericPrice) ? numericPrice.toFixed(2) + ' ' + currency : 'Договорная';
+        const image = ad.image || (Array.isArray(ad.images) ? ad.images[0] : undefined);
+        return {
+          external_id: id,
+          title: ad.title || 'Без названия',
+          description: ad.description_excerpt || undefined,
+          price,
+          image_url: image,
+          ad_url: ad.url || ('https://www.kufar.by/item/' + id),
+          location: ad.area_name || ad.region_name,
+          address: ad.area_name || undefined,
+          published_at: ad.posted_at ? new Date(ad.posted_at) : undefined,
+          updated_at: ad.posted_at ? new Date(ad.posted_at) : undefined,
+          condition: ad.condition || null,
+          is_company: ad.seller_type === 'company',
+          first_seen_source: 'reefapi',
+          first_seen_rank: index + 1,
+        } as Ad;
+      });
+    };
+
     const requestHtml = async (): Promise<Ad[]> => {
       const started = Date.now();
       const response = await this.axiosInstance.get(url, {
@@ -362,13 +457,18 @@ export class FastKufarParser extends BaseParser {
       // for one backend after another. Their indexing/cache freshness can differ.
       const isSniper = monitorIdentity[13] === 'sniper';
       const sources = params.cat ? [...API_ENDPOINTS] : [];
-      if (isSniper) { params.size = 30; sources.push('__html__'); }
+      if (params.cat && REEF_API_KEY) sources.push('__reef__');
+      if (isSniper && !REEF_API_KEY) { params.size = 30; sources.push('__html__'); }
 
       if (sources.length) {
         const startedAt = Date.now();
         const requests = sources.map(source => ({
           source,
-          promise: source === '__html__' ? requestHtml() : requestApi(source),
+          promise: source === '__html__'
+            ? requestHtml()
+            : source === '__reef__'
+              ? requestReef()
+              : requestApi(source),
         }));
 
         if (isSniper) {
@@ -416,7 +516,7 @@ export class FastKufarParser extends BaseParser {
               }
             }
           } else {
-            errors.push(source + ': ' + (result.reason instanceof Error ? result.reason.message : String(result.reason)));
+            errors.push(source + ': ' + errorSummary(result.reason));
           }
         }
 
@@ -438,10 +538,14 @@ export class FastKufarParser extends BaseParser {
         query: requestedQuery || null,
       });
     } catch (error: any) {
-      logger.warn('Kufar realtime fan-out failed; trying rendered page', {
+      const status = axiosStatus(error);
+      logger.warn('Kufar realtime fan-out failed', {
         url,
-        error: error?.message || String(error),
+        status,
+        error: errorSummary(error),
+        managedFallbackConfigured: Boolean(REEF_API_KEY),
       });
+      if (status === 403 && !REEF_API_KEY) throw error;
     }
 
     return await requestHtml();
