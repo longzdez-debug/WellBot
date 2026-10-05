@@ -17,6 +17,18 @@ export class DatabaseService {
   async initialize():Promise<void>{try{await this.pool.query(readFileSync(join(__dirname,'schema.sql'),'utf-8'));logger.info('Database schema initialized');}catch(error){logger.error('Failed to initialize database',{error});throw error;}}
   async close():Promise<void>{await this.pool.end();}
   async createUser(telegramId:number,username:string|null):Promise<User>{const r=await this.pool.query<User>('INSERT INTO users (telegram_id, username) VALUES ($1,$2) ON CONFLICT (telegram_id) DO UPDATE SET username=COALESCE(EXCLUDED.username, users.username) RETURNING *',[telegramId,username]);return r.rows[0];}
+  async getProSubscription(telegramId:number):Promise<{tier:string;status:string;expiresAt:Date;starsAmount:number|null}|null>{
+    const r=await this.pool.query<{tier:string;status:string;expires_at:Date;stars_amount:number|null}>('SELECT s.tier,s.status,s.expires_at,s.stars_amount FROM pro_subscriptions s JOIN users u ON u.id=s.user_id WHERE u.telegram_id=$1 ORDER BY s.expires_at DESC LIMIT 1',[telegramId]);
+    const row=r.rows[0]; if(!row)return null; const active=row.status==='active' && new Date(row.expires_at).getTime()>Date.now();
+    if(!active && row.status==='active') await this.pool.query('UPDATE pro_subscriptions SET status=$1,updated_at=CURRENT_TIMESTAMP WHERE user_id=(SELECT id FROM users WHERE telegram_id=$2) AND tier=$3',['expired',telegramId,'pro']);
+    return {tier:row.tier,status:active?'active':row.status==='active'?'expired':row.status,expiresAt:new Date(row.expires_at),starsAmount:row.stars_amount};
+  }
+  async activateProSubscription(telegramId:number,expiresAt:Date,starsAmount:number,telegramChargeId:string,providerChargeId:string|null,payload:string):Promise<void>{
+    const user=await this.getUser(telegramId); if(!user)throw new Error('user_not_registered');
+    await this.pool.query("INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,telegram_payment_charge_id,provider_payment_charge_id,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,$3,$4,$5,$6,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),telegram_payment_charge_id=EXCLUDED.telegram_payment_charge_id,provider_payment_charge_id=EXCLUDED.provider_payment_charge_id,stars_amount=EXCLUDED.stars_amount,last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",[user.id,expiresAt,telegramChargeId,providerChargeId,starsAmount,payload]);
+  }
+  async revokeProByCharge(telegramChargeId:string):Promise<void>{await this.pool.query("UPDATE pro_subscriptions SET status='refunded',expires_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE telegram_payment_charge_id=$1",[telegramChargeId]);}
+
   async getUser(telegramId:number):Promise<User|null>{const r=await this.pool.query<User>('SELECT * FROM users WHERE telegram_id=$1',[telegramId]);return r.rows[0]||null;}
   async getUsersByIds(userIds:number[]):Promise<User[]>{const ids=[...new Set(userIds.filter(id=>Number.isSafeInteger(id)&&id>0))];if(!ids.length)return[];const r=await this.pool.query<User>('SELECT * FROM users WHERE id=ANY($1::int[])',[ids]);return r.rows;}
   private monitorSourceKey(config:MonitorConfig):string{const min=config.minPrice==null?'':String(config.minPrice);const max=config.maxPrice==null?'':String(config.maxPrice);return [config.source,config.categoryId,config.subcategoryId||'',config.region||'',config.city||'',config.query||'',min,max,config.condition||'',config.seller||'',config.minMarketDiscount==null?'':String(config.minMarketDiscount),config.mode||'normal'].join(':');}
