@@ -38,16 +38,19 @@ async function main() {
     throw new Error('WELLBOT_WEB_PORT must be a valid TCP port');
   }
 
+  // Construct the application services before opening the listener. They do
+  // not start background work until scheduler.start(), while /healthz itself
+  // remains dependency-free during PostgreSQL startup.
+  const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
+  const scheduler = new ParserScheduler(db, bot);
+  installWebAppBridge(bot);
+
   // The server is intentionally created before DB initialization. /healthz is
   // dependency-free and must remain available even while PostgreSQL is starting.
   const webServer = startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined, () => scheduler.getMetrics());
 
   await db.initialize();
   logger.info('Database initialized');
-
-  const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
-  const scheduler = new ParserScheduler(db, bot);
-  installWebAppBridge(bot);
 
   scheduler.start();
 
