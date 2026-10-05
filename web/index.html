@@ -22,9 +22,9 @@
 
     <nav class="side-nav" aria-label="Навигация">
       <button class="nav-item active" data-scroll="feed-section"><span>⌂</span>Главная</button>
-      <button class="nav-item" data-scroll="feed-section"><span>▱</span>Товары</button>
+      <button class="nav-item" data-scroll="feed-section"><span>▱</span>Объявления</button>
       <button class="nav-item" data-scroll="drops-section"><span>◎</span>Сделки</button>
-      <button class="nav-item" data-scroll="monitors-section"><span>◫</span>Задачи</button>
+      <button class="nav-item" data-scroll="monitors-section"><span>◫</span>Мониторинг</button>
     </nav>
 
     <div class="sidebar-spacer"></div>
@@ -58,6 +58,10 @@
     </header>
 
     <main>
+      <div class="section-switcher" role="navigation" aria-label="Разделы WellBOT">
+        <button class="section-switch active" type="button" data-scroll="feed-section"><span>▱</span><b>Объявления</b><small>Новые и выгодные лоты</small></button>
+        <button class="section-switch" type="button" data-scroll="monitors-section"><span>◫</span><b>Мониторинг</b><small>Активные поиски и задачи</small></button>
+      </div>
       <section class="dashboard-grid">
         <div class="main-column">
           <section class="hero">
