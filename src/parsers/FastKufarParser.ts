@@ -546,7 +546,7 @@ export class FastKufarParser extends BaseParser {
         error: errorSummary(error),
         managedFallbackConfigured: Boolean(reefApiKey()),
       });
-      if (status === 403 && !REEF_API_KEY) throw error;
+      if (status === 403 && !reefApiKey()) throw error;
     }
 
     return await requestHtml();
