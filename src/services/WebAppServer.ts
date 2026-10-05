@@ -257,6 +257,13 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
     }
   });
 
-  server.listen(port, '0.0.0.0', () => logger.info('WellBOT WebApp server started', { port, webRoot }));
+  server.on('error', (error: Error) => {
+    logger.error('WellBOT WebApp server error', { port, error: error.message, code: (error as NodeJS.ErrnoException).code });
+  });
+  server.on('listening', () => {
+    const address = server.address();
+    logger.info('WellBOT WebApp server started', { port, webRoot, address });
+  });
+  server.listen(port, '0.0.0.0');
   return { close: () => new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve()))) };
 }
