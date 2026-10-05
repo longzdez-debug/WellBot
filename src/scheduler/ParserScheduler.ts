@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import { MonitorConfig } from '../catalog/KufarCatalog';
 import { getComparableMarketSignal } from '../services/ComparableMarketEngine';
 import { parseMarketPrice } from '../services/MarketEngine';
+import { errorMessage, isRecord } from '../utils/safe';
 
 interface ParseLink { id:number; user_id:number; url:string; platform:Platform; config?:MonitorConfig|null; last_parsed_at?:Date|null; error_count?:number; next_check_at?:Date|null; }
 interface PriceDrop { adId:number; oldPrice:string; newPrice:string; changePercent:string; externalId:string; linkId:number; }
@@ -52,7 +53,42 @@ export class ParserScheduler {
   private async notifyPriceDrops(items:Array<{drop:PriceDrop;telegramId:number;userId:number}>):Promise<void>{const jobs:NotificationEnqueueJob[]=[];const seen=new Set<string>();for(const {drop,telegramId,userId} of items){const key=`price_drop:user:${telegramId}:${drop.externalId}:${drop.oldPrice}:${drop.newPrice}`;if(seen.has(key))continue;seen.add(key);jobs.push({kind:'price_drop',chatId:telegramId,dedupeKey:key,payload:{drop,userId}});}if(!jobs.length)return;const inserted=await this.db.enqueueNotifications(jobs);this.metrics.duplicateNotifications+=Math.max(0,jobs.length-inserted);}
 
   private async drainNotifications():Promise<void>{if(this.stopping||this.notificationDrainRunning)return;this.notificationDrainRunning=true;const startedAt=Date.now();try{const jobs=await this.db.claimNotificationJobs(this.notificationBatchSize,60);if(!jobs.length)return;await this.mapWithConcurrency(jobs,this.notificationConcurrency,job=>this.deliverNotification(job));logger.debug('Notification batch drained',{jobs:jobs.length,concurrency:Math.min(this.notificationConcurrency,jobs.length),duration:`${Date.now()-startedAt}ms`});}catch(error:unknown){const message=error instanceof Error?error.message:String(error);logger.error('Notification drain failed',{error:message});}finally{this.notificationDrainRunning=false;}}
-  private async deliverNotification(job:NotificationJob):Promise<void>{try{if(job.kind==='new_ad'){const ad=job.payload.ad as unknown as Ad;if(!ad||typeof ad.external_id!=='string'||typeof ad.title!=='string'||typeof ad.ad_url!=='string')throw new Error('Invalid new-ad notification payload');await this.bot.sendNotification(job.chat_id,ad);}else if(job.kind==='price_drop'){const drop=job.payload.drop as unknown as PriceDrop;const userId=Number(job.payload.userId);if(!drop||typeof drop.externalId!=='string'||typeof drop.oldPrice!=='string'||typeof drop.newPrice!=='string'||!Number.isSafeInteger(userId)||userId<=0)throw new Error('Invalid price-drop notification payload');await this.bot.sendPriceDropNotification(job.chat_id,drop,userId);}else throw new Error(`Unsupported notification kind: ${job.kind}`);await this.db.markNotificationSent(job.id);this.metrics.notificationsSent+=1;const createdAt=job.created_at instanceof Date?job.created_at:new Date(job.created_at);if(!Number.isNaN(createdAt.getTime())){this.metrics.notificationLatencies.push(Math.max(0,Date.now()-createdAt.getTime()));if(this.metrics.notificationLatencies.length>200)this.metrics.notificationLatencies.shift();}logger.debug('Notification delivered',{jobId:job.id,kind:job.kind,chatId:job.chat_id,attempts:job.attempts});}catch(error:unknown){const message=error instanceof Error?error.message:String(error);this.metrics.notificationsFailed+=1;const nextAttempt=job.attempts+1;if(nextAttempt>=this.maxNotificationAttempts){await this.db.discardNotification(job.id,`retry limit reached (${this.maxNotificationAttempts}): ${message}`);return;}const delaySeconds=Math.min(300,Math.max(2,2**Math.min(nextAttempt,8)));await this.db.rescheduleNotification(job.id,message,delaySeconds);logger.warn('Notification delivery failed; scheduled retry',{jobId:job.id,kind:job.kind,chatId:job.chat_id,attempts:nextAttempt,maxAttempts:this.maxNotificationAttempts,retryInSeconds:delaySeconds,error:message});}}
+  private async deliverNotification(job:NotificationJob):Promise<void>{
+    try{
+      const payload=isRecord(job.payload)?job.payload:{};
+      if(job.kind==='new_ad'){
+        const raw=payload.ad;
+        if(!isRecord(raw)||typeof raw.external_id!=='string'||typeof raw.title!=='string'||typeof raw.ad_url!=='string') throw new Error('Invalid new-ad notification payload');
+        const ad=raw as unknown as Ad;
+        await this.bot.sendNotification(job.chat_id,ad);
+      }else if(job.kind==='price_drop'){
+        const raw=payload.drop;
+        const userId=Number(payload.userId);
+        if(!isRecord(raw)||typeof raw.externalId!=='string'||typeof raw.oldPrice!=='string'||typeof raw.newPrice!=='string'||!Number.isSafeInteger(userId)||userId<=0) throw new Error('Invalid price-drop notification payload');
+        const drop=raw as unknown as PriceDrop;
+        await this.bot.sendPriceDropNotification(job.chat_id,drop,userId);
+      }else throw new Error(`Unsupported notification kind: ${job.kind}`);
+      await this.db.markNotificationSent(job.id);
+      this.metrics.notificationsSent+=1;
+      const createdAt=job.created_at instanceof Date?job.created_at:new Date(job.created_at);
+      if(!Number.isNaN(createdAt.getTime())){
+        this.metrics.notificationLatencies.push(Math.max(0,Date.now()-createdAt.getTime()));
+        if(this.metrics.notificationLatencies.length>200)this.metrics.notificationLatencies.shift();
+      }
+      logger.debug('Notification delivered',{jobId:job.id,kind:job.kind,chatId:job.chat_id,attempts:job.attempts});
+    }catch(error:unknown){
+      const message=errorMessage(error);
+      this.metrics.notificationsFailed+=1;
+      const nextAttempt=job.attempts+1;
+      if(nextAttempt>=this.maxNotificationAttempts){
+        await this.db.discardNotification(job.id,`retry limit reached (${this.maxNotificationAttempts}): ${message}`);
+        return;
+      }
+      const delaySeconds=Math.min(300,Math.max(2,2**Math.min(nextAttempt,8)));
+      await this.db.rescheduleNotification(job.id,message,delaySeconds);
+      logger.warn('Notification delivery failed; scheduled retry',{jobId:job.id,kind:job.kind,chatId:job.chat_id,attempts:nextAttempt,maxAttempts:this.maxNotificationAttempts,retryInSeconds:delaySeconds,error:message});
+    }
+  }
 
   private async maintainNotificationOutbox():Promise<void>{try{const purged=await this.db.purgeNotificationOutbox(this.notificationRetentionDays);if(purged>0)logger.info('Notification outbox retention cleanup completed',{purged,retentionDays:this.notificationRetentionDays});}catch(error:unknown){const message=error instanceof Error?error.message:String(error);logger.warn('Notification outbox maintenance failed',{error:message});}}
 
