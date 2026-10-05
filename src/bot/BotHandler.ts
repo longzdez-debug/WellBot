@@ -61,6 +61,31 @@ export class BotHandler {
       else if (data?.startsWith('check_')) { const linkId = parseInt(data.replace('check_', ''), 10); if (Number.isSafeInteger(linkId) && linkId > 0) await this.handleCheckLink(chatId, userId, linkId); }
     });
 
+    this.bot.on('pre_checkout_query', async (query: any) => {
+      try {
+        const expectedPrice=Math.min(10000,Math.max(1,Math.floor(Number(process.env.WELLBOT_PRO_PRICE_STARS||'199'))));
+        const payload=String(query.invoice_payload||'');
+        if(!payload.startsWith('wellbot_pro_monthly_v1:')||query.currency!=='XTR'||Number(query.total_amount)!==expectedPrice){await (this.bot as any).answerPreCheckoutQuery(query.id,false,{error_message:'Счёт WellBOT PRO недействителен или устарел.'});return;}
+        await (this.bot as any).answerPreCheckoutQuery(query.id,true);
+      }catch(error){logger.error('PRO pre-checkout failed',{error:error instanceof Error?error.message:String(error)});try{await (this.bot as any).answerPreCheckoutQuery(query.id,false,{error_message:'Не удалось проверить оплату. Попробуйте ещё раз.'});}catch{}}
+    });
+    this.bot.on('message', async (msg: Message) => {
+      const payment=(msg as Message & {successful_payment?:any}).successful_payment;if(!payment)return;
+      const payload=String(payment.invoice_payload||'');if(!payload.startsWith('wellbot_pro_monthly_v1:')||payment.currency!=='XTR')return;
+      try{
+        const expiry=payment.subscription_expiration_date?new Date(Number(payment.subscription_expiration_date)*1000):new Date(Date.now()+30*24*60*60*1000);
+        const expiresAt=Number.isFinite(expiry.getTime())?expiry:new Date(Date.now()+30*24*60*60*1000);
+        await this.db.activateProSubscription(msg.from?.id||msg.chat.id,expiresAt,Number(payment.total_amount||0),String(payment.telegram_payment_charge_id||''),payment.provider_payment_charge_id?String(payment.provider_payment_charge_id):null,payload);
+        await this.bot.sendMessage(msg.chat.id,'👑 WellBOT PRO активирован до '+expiresAt.toLocaleDateString('ru-RU')+'.');
+        logger.info('WellBOT PRO payment confirmed',{telegramId:msg.from?.id||msg.chat.id,chargeId:payment.telegram_payment_charge_id,expiresAt:expiresAt.toISOString(),recurring:Boolean(payment.is_recurring)});
+      }catch(error){logger.error('Failed to activate PRO after payment',{telegramId:msg.from?.id||msg.chat.id,error:error instanceof Error?error.message:String(error)});}
+    });
+    this.bot.on('message', async (msg: Message) => {
+      if(!msg.from||!msg.text)return;
+      if(msg.text==='/pro'||msg.text==='👑 WellBOT PRO')await this.sendProInvoice(msg.chat.id,msg.from.id);
+      else if(msg.text==='/terms')await this.bot.sendMessage(msg.chat.id,'Условия WellBOT PRO: подписка оплачивается в Telegram Stars, срок — 30 дней с автоматическим продлением. Для вопросов по оплате используйте /paysupport.');
+      else if(msg.text==='/paysupport')await this.bot.sendMessage(msg.chat.id,'Поддержка оплаты WellBOT PRO: укажите время платежа и Telegram ID. Мы проверим платёж и статус подписки.');
+    });
     this.bot.on('polling_error', (error: Error) => logger.error('Telegram polling error', { error: error.message }));
     logger.info('Bot handlers initialized');
   }
