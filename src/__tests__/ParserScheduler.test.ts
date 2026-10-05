@@ -48,7 +48,7 @@ describe('ParserScheduler', () => {
       updateLastParsed: jest.fn().mockResolvedValue(undefined),
       resetErrorCount: jest.fn().mockResolvedValue(undefined),
       getExistingAdStatesForLink: jest.fn().mockResolvedValue({ existingIds: new Set<string>(), prices: new Map(), market: new Map() }),
-      getRecentMarketAds: jest.fn().mockResolvedValue([]),
+      getGlobalRecentMarketAds: jest.fn().mockResolvedValue([]),
       updateAdMarketSignals: jest.fn().mockResolvedValue(undefined),
       claimNewAdsForUser: jest.fn().mockImplementation(async (_userId: number, _linkId: number, input: Ad[]) => {
         const claimed = input.filter(ad => !userSeen.has(ad.external_id)).map(ad => ad.external_id);
@@ -61,6 +61,7 @@ describe('ParserScheduler', () => {
       updateAdPrice: jest.fn().mockResolvedValue(undefined),
       enqueueNotifications: jest.fn().mockImplementation(async (jobs: unknown[]) => notificationInsertCount ?? jobs.length),
       claimNotificationJobs: jest.fn().mockResolvedValue([]),
+      isAdDismissedForChat: jest.fn().mockResolvedValue(false),
       purgeNotificationOutbox: jest.fn().mockResolvedValue(0),
       getPendingNotificationStats: jest.fn().mockResolvedValue({ count: 0, oldestAgeMs: 0 }),
       getActiveLinkFreshnessStats: jest.fn().mockResolvedValue({ activeLinks: linkList.length, oldestAgeMs: 0, avgAgeMs: 0 }),
