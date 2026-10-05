@@ -160,7 +160,7 @@ src/
 
 web/
 ├── index.html        # WellBOT Mini App UI
-├── styles.css
+├── premium.css
 └── app.js            # search form + Telegram WebApp bridge
 ```
 
