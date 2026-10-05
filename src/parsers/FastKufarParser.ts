@@ -214,6 +214,9 @@ export class FastKufarParser extends BaseParser {
           Host: new URL(endpoint).host,
           'User-Agent': this.getRandomUserAgent(),
           Accept: 'application/json, text/plain, */*',
+          'Cache-Control': 'no-cache, no-store, max-age=0',
+          Pragma: 'no-cache',
+          'X-Request-Id': `${Date.now()}-${Math.random().toString(36).slice(2)}`,
           'Accept-Language': 'ru-RU,ru;q=0.9',
           Referer: 'https://www.kufar.by/',
           Origin: 'https://www.kufar.by',
@@ -276,6 +279,8 @@ export class FastKufarParser extends BaseParser {
         headers: {
           'User-Agent': this.getRandomUserAgent(),
           Accept: 'text/html,application/xhtml+xml',
+          'Cache-Control': 'no-cache, no-store, max-age=0',
+          Pragma: 'no-cache',
           'Accept-Language': 'ru-RU,ru;q=0.9',
           'Cache-Control': 'no-cache',
         },
