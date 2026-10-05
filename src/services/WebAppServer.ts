@@ -133,11 +133,13 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 export function startWebAppServer(port: number, db: DatabaseService, botToken: string, webRoot = join(process.cwd(), 'web'), metricsProvider?: () => unknown | Promise<unknown>): { close: () => Promise<void> } {
   const server = createServer(async (req, res) => {
     let requestPath = '';
+    let requestId = '';
+    let traceId = '';
     try {
       const requestUrl = new URL(req.url || '/', 'http://localhost');
       requestPath = decodeURIComponent(requestUrl.pathname);
-      const requestId=typeof req.headers['x-request-id']==='string'&&/^[A-Za-z0-9._:-]{1,100}$/.test(req.headers['x-request-id']) ? req.headers['x-request-id'] : randomUUID();
-      const traceId=observability.traceId();
+      requestId=typeof req.headers['x-request-id']==='string'&&/^[A-Za-z0-9._:-]{1,100}$/.test(req.headers['x-request-id']) ? req.headers['x-request-id'] : randomUUID();
+      traceId=observability.traceId();
       res.setHeader('X-Request-Id',requestId);
       res.setHeader('X-Trace-Id',traceId);
       observability.inc('http_requests_total');
