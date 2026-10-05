@@ -12,45 +12,29 @@ installRuntimeGuards();
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
-  if (!value) { logger.error(`${name} is not set`); process.exit(1); }
+  if (!value) { logger.error(name + ' is not set'); process.exit(1); }
   return value;
 }
 
 async function main() {
-  logger.info('Starting WellBOT...', { version: '2.0.2', miniAppApi: 'telegram-init-data' });
-
-  // Deplexo injects PORT at runtime. WELLBOT_WEB_PORT remains a local/deployment
-  // override, with 8080 as the final fallback for local runs.
+  logger.info('Starting WellBOT...', { version: '2.0.3', miniAppApi: 'telegram-init-data' });
   const configuredWebPort = process.env.PORT || process.env.WELLBOT_WEB_PORT || '8080';
   const webPort = Number(configuredWebPort);
-  logger.info('WellBOT WebApp configuration', {
-    configuredWebPort,
-    webPort,
-    host: '0.0.0.0',
-    platformPort: process.env.PORT || null,
-  });
-  if (!Number.isInteger(webPort) || webPort <= 0 || webPort >= 65536) {
-    throw new Error('PORT/WELLBOT_WEB_PORT must be a valid TCP port');
-  }
+  logger.info('WellBOT WebApp configuration', { configuredWebPort, webPort, host: '0.0.0.0', platformPort: process.env.PORT || null });
+  if (!Number.isInteger(webPort) || webPort <= 0 || webPort >= 65536) throw new Error('PORT/WELLBOT_WEB_PORT must be a valid TCP port');
 
   const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
   const DATABASE_URL = requiredEnv('DATABASE_URL');
   const db = new DatabaseService(DATABASE_URL);
 
-  // Construct the application services before opening the listener. They do
-  // not start background work until scheduler.start(), while /healthz itself
-  // remains dependency-free during PostgreSQL startup.
+  // Bind HTTP before polling and scheduler startup so Deplexo can reach readiness immediately.
+  const webServer = await startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined);
+
   const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
   const scheduler = new ParserScheduler(db, bot);
   installWebAppBridge(bot);
-
-  // The server is intentionally created before DB initialization. /healthz is
-  // dependency-free and must remain available even while PostgreSQL is starting.
-  const webServer = await startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined, () => scheduler.getMetrics());
-
   await db.initialize();
   logger.info('Database initialized');
-
   scheduler.start();
 
   let shuttingDown = false;
@@ -60,7 +44,7 @@ async function main() {
     logger.info('Shutting down...');
     await scheduler.stop();
     bot.stop();
-    if (webServer) await webServer.close();
+    await webServer.close();
     await db.close();
     process.exit(0);
   };
