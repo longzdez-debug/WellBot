@@ -15,6 +15,15 @@ describe('ComparableMarketEngine',()=>{
     expect(signal.market_median).toBeGreaterThan(900);
     expect(signal.market_percent).toBeLessThan(-20);
   });
+  test('rejects generic title matches that share only one broad token',()=>{
+    const current=ad('x','iPhone 15 Pro 256GB','700 BYN');
+    const history=[
+      ...Array.from({length:20},(_,i)=>ad(String(i),'iPhone чехол универсальный',String(50+i)+' BYN')),
+      ...Array.from({length:10},(_,i)=>ad('p'+i,'iPhone 15 Pro 256GB',String(1000+i*10)+' BYN')),
+    ];
+    const signal=getComparableMarketSignal(current,history);
+    expect(signal.market_median).toBeGreaterThan(900);
+  });
   test('refuses valuation when there are not enough comparable samples',()=>{
     const current=ad('x','PlayStation 5 Slim','900 BYN');
     const history=Array.from({length:9},(_,i)=>ad(String(i),i<2?'PlayStation 5 Slim':'Телевизор LG',String(1000+i*10)+' BYN'));
