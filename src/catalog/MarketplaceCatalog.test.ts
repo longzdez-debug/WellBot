@@ -34,7 +34,7 @@ describe('Marketplace catalog',()=>{
     const walk=(source:any,nodes:any[])=>{for(const node of nodes){if(node.children?.length){
       expect(findMarketplaceCategory(source,node.children[0].id)?.id).toBe(node.id);
     } walk(source,node.children||[])}};
-    for(const [source,catalog] of Object.entries(MARKETPLACE_CATALOGS)) walk(source,catalog);
+    for(const [source,catalog] of Object.entries(MARKETPLACE_CATALOGS)) walk(source as 'kufar'|'onliner'|'av',catalog);
   });
 
 });
