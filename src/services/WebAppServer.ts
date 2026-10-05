@@ -29,9 +29,11 @@ const PHONE_MODEL_TTL=30*60*1000;
 const API_RATE_LIMIT = Math.max(20, Math.min(600, Number(process.env.WELLBOT_API_RATE_LIMIT || 120)));
 const API_RATE_WINDOW_MS = 60_000;
 const apiRateBuckets = new Map<string, { started: number; count: number }>();
+const MAX_RATE_BUCKETS = 10_000;
 function clientKey(req: IncomingMessage): string { return req.socket.remoteAddress || 'unknown'; }
 function rateLimited(req: IncomingMessage): boolean {
   const key=clientKey(req); const now=Date.now(); const current=apiRateBuckets.get(key);
+  if (apiRateBuckets.size > MAX_RATE_BUCKETS) for (const [bucketKey,bucket] of apiRateBuckets) if (now-bucket.started>=API_RATE_WINDOW_MS) apiRateBuckets.delete(bucketKey);
   if(!current || now-current.started>=API_RATE_WINDOW_MS){apiRateBuckets.set(key,{started:now,count:1});return false;}
   current.count+=1; return current.count>API_RATE_LIMIT;
 }
@@ -144,18 +146,23 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
 
       if (requestPath === '/metrics') {
         if (req.method !== 'GET') { res.setHeader('Allow','GET'); json(res,405,{error:'method_not_allowed'}); return; }
-        const schedulerMetrics = metricsProvider ? await metricsProvider() : {};
+        const schedulerMetrics: unknown = metricsProvider ? await metricsProvider() : {};
+        const metrics = schedulerMetrics && typeof schedulerMetrics === 'object' ? schedulerMetrics as Record<string, unknown> : {};
+        const scheduler = metrics.scheduler && typeof metrics.scheduler === 'object' ? metrics.scheduler as Record<string, unknown> : {};
+        const notifications = metrics.notifications && typeof metrics.notifications === 'object' ? metrics.notifications as Record<string, unknown> : {};
+        const freshness = scheduler.freshnessLagMs && typeof scheduler.freshnessLagMs === 'object' ? scheduler.freshnessLagMs as Record<string, unknown> : {};
+        const cycleDuration = scheduler.cycleDurationMs && typeof scheduler.cycleDurationMs === 'object' ? scheduler.cycleDurationMs as Record<string, unknown> : {};
+        const notificationLatency = notifications.latencyMs && typeof notifications.latencyMs === 'object' ? notifications.latencyMs as Record<string, unknown> : {};
         applySecurityHeaders(res); res.statusCode=200; res.setHeader('Content-Type','text/plain; version=0.0.4; charset=utf-8'); res.setHeader('Cache-Control','no-store');
-        const scheduler = (schedulerMetrics as any)?.scheduler || {}; const notifications=(schedulerMetrics as any)?.notifications || {};
         res.end(observability.prometheus({
           scheduler_running: scheduler.running ? 1 : 0,
           scheduler_cycles_total: Number(scheduler.cycles||0), scheduler_failures_total:Number(scheduler.failures||0),
           scheduler_cycle_overruns_total:Number(scheduler.cycleOverruns||0), scheduler_link_failures_total:Number(scheduler.linkFailures||0),
           scheduler_links_parsed_total:Number(scheduler.linksParsed||0), scheduler_active_links:Number(scheduler.activeLinks||0),
-          scheduler_oldest_link_age_ms:Number(scheduler.freshnessLagMs?.oldest||0), scheduler_cycle_p95_ms:Number(scheduler.cycleDurationMs?.p95||0),
+          scheduler_oldest_link_age_ms:Number(freshness.oldest||0), scheduler_cycle_p95_ms:Number(cycleDuration.p95||0),
           notification_pending:Number(notifications.pending||0), notification_oldest_age_ms:Number(notifications.oldestAgeMs||0),
           notification_sent_total:Number(notifications.sent||0), notification_failed_total:Number(notifications.failed||0),
-          notification_p95_latency_ms:Number(notifications.latencyMs?.p95||0),
+          notification_p95_latency_ms:Number(notificationLatency.p95||0),
         })); return;
       }
 
