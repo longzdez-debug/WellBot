@@ -50,15 +50,11 @@ export class AvParser extends BaseParser {
 
         // Формируем заголовок
         let title = '';
-        if (ad.metadata?.vinInfo?.vin) {
-          title = `VIN: ${ad.metadata.vinInfo.vin}`;
-        } else {
-          const brand = ad.properties?.find((p: any) => p.name === 'brand')?.value;
-          const model = ad.properties?.find((p: any) => p.name === 'model')?.value;
-          const year = ad.properties?.find((p: any) => p.name === 'year')?.value;
-          const parts = [year, brand, model].filter(Boolean);
-          title = parts.length > 0 ? parts.join(' ') : 'Автомобиль';
-        }
+        const brand = ad.properties?.find((p: any) => p.name === 'brand')?.value;
+        const model = ad.properties?.find((p: any) => p.name === 'model')?.value;
+        const year = ad.properties?.find((p: any) => p.name === 'year')?.value;
+        const parts = [year, brand, model].filter(Boolean);
+        title = parts.length > 0 ? parts.join(' ') : (ad.metadata?.vinInfo?.vin ? `Автомобиль ${ad.metadata.vinInfo.vin}` : 'Автомобиль');
 
         // Формируем URL объявления
         const adUrl = ad.publicUrl ? `https://cars.av.by${ad.publicUrl}` : `https://cars.av.by/search/?q=${encodeURIComponent(ad.metadata?.vinInfo?.vin || title || '')}`;
