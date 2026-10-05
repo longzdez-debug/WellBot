@@ -265,6 +265,17 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           return;
         }
 
+        const adDismissMatch = requestPath.match(/^\/api\/ads\/(\d+)\/dismiss$/);
+        if (adDismissMatch && req.method === 'POST') {
+          const adId = Number(adDismissMatch[1]);
+          if (!Number.isSafeInteger(adId) || adId <= 0) { json(res, 400, { error: 'invalid_ad_id' }); return; }
+          const ok = await db.dismissAdForUser(adId, user.id);
+          if (!ok) { json(res, 404, { error: 'not_found' }); return; }
+          logger.info('WellBOT ad dismissed', { telegramId: auth.user.id, dbUserId: user.id, adId });
+          json(res, 200, { ok: true });
+          return;
+        }
+
         const linkMatch = requestPath.match(/^\/api\/links\/(\d+)$/);
         if (linkMatch && req.method === 'PATCH') {
           let body: Record<string, unknown>;
