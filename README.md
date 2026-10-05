@@ -2,7 +2,7 @@
 
 **WellBOT** — Telegram listing search for resellers. Create a marketplace search from the WellBOT catalog with category, city, price, condition, seller and mode filters. WellBOT watches it continuously and sends new listings to Telegram.
 
-## Production MVP
+## Production
 
 - 🟢 Kufar catalog search monitoring
 - 🔵 Onliner search monitoring
@@ -131,6 +131,17 @@ docker compose down
 ```
 
 The PostgreSQL volume is named `postgres_data`. Do **not** use `docker compose down -v` unless you intentionally want to delete the database.
+
+## Engineering quality gates
+
+The repository treats build, type-checking, tests and the Mini App contract as release gates. Use:
+
+```bash
+npm ci
+npm run verify
+```
+
+The runtime also uses a durable Telegram outbox with retry, leasing and dead-letter retention, transactional schema initialization, request IDs, structured logs and a database-aware health endpoint.
 
 ## Development
 
