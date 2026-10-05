@@ -137,6 +137,9 @@
   #drops{display:grid;gap:8px}
   #drops>*{border-radius:14px}
 
+  .hot-actions{grid-template-columns:1fr 96px}
+  .hot-open,.hot-skip{height:40px}
+  .hot-skip{padding:0 8px}
   .mobile-fab{
     position:fixed;right:18px;bottom:calc(78px + env(safe-area-inset-bottom));
     z-index:125;width:48px;height:48px;border:1px solid rgba(255,255,255,.12);
