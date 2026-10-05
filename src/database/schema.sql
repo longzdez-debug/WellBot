@@ -185,6 +185,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_price_history_unique_ad_drop
 CREATE TABLE IF NOT EXISTS notification_outbox (
   id BIGSERIAL PRIMARY KEY,
   kind VARCHAR(32) NOT NULL,
+  priority SMALLINT NOT NULL DEFAULT 0,
   chat_id BIGINT NOT NULL,
   dedupe_key TEXT NOT NULL,
   payload JSONB NOT NULL,
@@ -196,8 +197,10 @@ CREATE TABLE IF NOT EXISTS notification_outbox (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE notification_outbox ADD COLUMN IF NOT EXISTS priority SMALLINT NOT NULL DEFAULT 0;
+
 CREATE INDEX IF NOT EXISTS idx_notification_outbox_pending
-  ON notification_outbox(available_at, id)
+  ON notification_outbox(priority DESC, available_at, id)
   WHERE sent_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_notification_outbox_locked
   ON notification_outbox(locked_until, id)
