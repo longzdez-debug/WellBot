@@ -88,4 +88,49 @@ describe('FastKufarParser catalog/search behavior', () => {
 
     expect(ads.map(ad => ad.external_id)).toEqual(['ok']);
   });
+  test('uses the configured managed Kufar source when direct Kufar endpoints are denied', async () => {
+    const previousKey = process.env.KUFAR_REEF_API_KEY;
+    process.env.KUFAR_REEF_API_KEY = 'test-key';
+    try {
+      const calls: Array<{ url: string; config: any }> = [];
+      const axiosMock = {
+        get: jest.fn(async (url: string) => {
+          calls.push({ url, config: null });
+          const error: any = new Error('Request failed with status code 403');
+          error.response = { status: 403 };
+          throw error;
+        }),
+        post: jest.fn(async (url: string, body: any, config: any) => {
+          calls.push({ url, config: { body, ...config } });
+          return {
+            data: { ok: true, data: { listings: [{
+              listing_id: 'reef-1',
+              title: 'iPhone 15 Pro',
+              price: 1500,
+              price_currency: 'BYN',
+              posted_at: '2026-10-05T12:00:00Z',
+              url: 'https://www.kufar.by/item/reef-1',
+              region_name: 'Минск',
+              area_name: 'Центральный',
+              seller_type: 'private',
+              image: 'https://example.com/image.jpg',
+            }] } },
+          };
+        }),
+      } as any;
+      const parser = new FastKufarParser(axiosMock);
+      const ads = await parser.parseUrl(
+        'https://www.kufar.by/l/telefony-i-planshety/wb?wb=kufar%7C17010%7C17050%7C%7Cminsk%7C%7C0%7C2000%7Cnew%7Cprivate%7Cnormal',
+      );
+      expect(axiosMock.post).toHaveBeenCalledTimes(1);
+      expect(calls.some(call => call.url.includes('reefapi.com/kufar/v1/search'))).toBe(true);
+      expect(ads).toHaveLength(1);
+      expect(ads[0].external_id).toBe('reef-1');
+      expect(ads[0].first_seen_source).toBe('reefapi');
+    } finally {
+      if (previousKey === undefined) delete process.env.KUFAR_REEF_API_KEY;
+      else process.env.KUFAR_REEF_API_KEY = previousKey;
+    }
+  });
+
 });
