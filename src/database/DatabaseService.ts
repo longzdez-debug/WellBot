@@ -9,12 +9,30 @@ export interface DashboardAd extends Ad { link_platform: Platform; link_url: str
 export interface DashboardPriceDrop { id:number; external_id:string; old_price:string|null; new_price:string|null; price_change_percent:number|null; created_at:Date; title:string; image_url:string|null; ad_url:string; link_platform:Platform; }
 export type NotificationKind = 'new_ad' | 'price_drop';
 export interface NotificationEnqueueJob { kind:NotificationKind; chatId:number; dedupeKey:string; payload:Record<string, unknown>; }
-export interface NotificationJob { id:number; kind:NotificationKind; chat_id:number; dedupe_key:string; payload:Record<string, unknown>; attempts:number; available_at:Date; locked_until:Date|null; sent_at:Date|null; last_error:string|null; created_at:Date; }
+export interface NotificationJob { id:number; kind:NotificationKind; chat_id:number; dedupe_key:string; payload:Record<string, unknown>; attempts:number; available_at:Date; locked_until:Date|null; sent_at:Date|null; dead_lettered_at:Date|null; dead_letter_reason:string|null; last_error:string|null; created_at:Date; }
 
 export class DatabaseService {
   private pool: Pool;
   constructor(connectionString:string){this.pool=new Pool({connectionString,max:10,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,statement_timeout:12000,query_timeout:12000,keepAlive:true,keepAliveInitialDelayMillis:10000});this.pool.on('error',(err:Error)=>logger.error('Unexpected database error',{error:err.message}));}
-  async initialize():Promise<void>{try{await this.pool.query(readFileSync(join(__dirname,'schema.sql'),'utf-8'));logger.info('Database schema initialized');}catch(error){logger.error('Failed to initialize database',{error});throw error;}}
+  async initialize():Promise<void>{
+    const client=await this.pool.connect();
+    try{
+      await client.query('SELECT pg_advisory_xact_lock($1)',[738421]);
+      await client.query('BEGIN');
+      await client.query(readFileSync(join(__dirname,'schema.sql'),'utf-8'));
+      await client.query('COMMIT');
+      logger.info('Database schema initialized');
+    }catch(error){
+      await client.query('ROLLBACK').catch(()=>undefined);
+      logger.error('Failed to initialize database',{error});
+      throw error;
+    }finally{client.release();}
+  }
+  async healthCheck():Promise<{ok:boolean;latencyMs:number}>{
+    const started=Date.now();
+    try{await this.pool.query('SELECT 1');return{ok:true,latencyMs:Date.now()-started};}
+    catch(error){logger.error('Database health check failed',{error});return{ok:false,latencyMs:Date.now()-started};}
+  }
   async close():Promise<void>{await this.pool.end();}
   async createUser(telegramId:number,username:string|null):Promise<User>{const r=await this.pool.query<User>('INSERT INTO users (telegram_id, username) VALUES ($1,$2) ON CONFLICT (telegram_id) DO UPDATE SET username=COALESCE(EXCLUDED.username, users.username) RETURNING *',[telegramId,username]);return r.rows[0];}
   async getUser(telegramId:number):Promise<User|null>{const r=await this.pool.query<User>('SELECT * FROM users WHERE telegram_id=$1',[telegramId]);return r.rows[0]||null;}
@@ -85,5 +103,5 @@ export class DatabaseService {
   async discardNotification(id:number,errorMessage:string):Promise<void>{const reason=errorMessage.slice(0,2000);await this.pool.query('UPDATE notification_outbox SET dead_lettered_at=CURRENT_TIMESTAMP,dead_letter_reason=$2,locked_until=NULL,last_error=$2 WHERE id=$1 AND sent_at IS NULL AND dead_lettered_at IS NULL',[id,reason]);logger.error('Notification moved to dead letter after retry limit',{jobId:id,error:reason});}
   async getPendingNotificationStats():Promise<{count:number;oldestAgeMs:number}>{const r=await this.pool.query<{count:string;oldest_at:Date|null}>('SELECT COUNT(*) AS count, MIN(created_at) AS oldest_at FROM notification_outbox WHERE sent_at IS NULL AND dead_lettered_at IS NULL',[]);const row=r.rows[0];const oldest=row?.oldest_at instanceof Date?row.oldest_at:null;return {count:Number(row?.count||0),oldestAgeMs:oldest?Math.max(0,Date.now()-oldest.getTime()):0};}
   async getActiveLinkFreshnessStats():Promise<{activeLinks:number;oldestAgeMs:number;avgAgeMs:number}>{const r=await this.pool.query<{active_links:string;oldest_at:Date|null;avg_age_ms:string|null}>(`SELECT COUNT(*) FILTER (WHERE is_active) AS active_links,MIN(last_parsed_at) FILTER (WHERE is_active) AS oldest_at,COALESCE(AVG(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP-COALESCE(last_parsed_at,created_at)))*1000) FILTER (WHERE is_active),0) AS avg_age_ms FROM links`,[]);const row=r.rows[0];const oldest=row?.oldest_at instanceof Date?row.oldest_at:null;return{activeLinks:Number(row?.active_links||0),oldestAgeMs:oldest?Math.max(0,Date.now()-oldest.getTime()):0,avgAgeMs:Number(row?.avg_age_ms||0)};}
-  async purgeNotificationOutbox(retentionDays=14):Promise<number>{const safeDays=Math.min(Math.max(Math.floor(retentionDays),1),365);const r=await this.pool.query('DELETE FROM notification_outbox WHERE sent_at IS NOT NULL AND sent_at < CURRENT_TIMESTAMP - ($1::int * INTERVAL \'1 day\')',[safeDays]);return r.rowCount||0;}
+  async purgeNotificationOutbox(retentionDays=14):Promise<number>{const safeDays=Math.min(Math.max(Math.floor(retentionDays),1),365);const r=await this.pool.query('DELETE FROM notification_outbox WHERE (sent_at IS NOT NULL AND sent_at < CURRENT_TIMESTAMP - ($1::int * INTERVAL \'1 day\')) OR (dead_lettered_at IS NOT NULL AND dead_lettered_at < CURRENT_TIMESTAMP - ($1::int * INTERVAL \'1 day\'))',[safeDays]);return r.rowCount||0;}
 }
