@@ -38,9 +38,8 @@ export abstract class BaseParser implements IParser {
 
   private isRetryable(error: unknown): boolean {
     if (!axios.isAxiosError(error)) return true;
-    const axiosError = error as AxiosError;
-    if (!axiosError.response) return true;
-    const status = axiosError.response.status;
+    const status = error.response?.status;
+    if (status == null) return true;
     return status === 408 || status === 425 || status === 429 || status >= 500;
   }
 
