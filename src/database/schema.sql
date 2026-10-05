@@ -116,6 +116,18 @@ ON CONFLICT (user_id, external_id) DO NOTHING;
 CREATE INDEX IF NOT EXISTS idx_user_ad_seen_user_first_seen
   ON user_ad_seen(user_id, first_seen_at DESC);
 
+-- Per-user dismissed listings. Dismissal is durable and hides the listing from
+-- the Mini App without deleting the underlying marketplace data.
+CREATE TABLE IF NOT EXISTS dismissed_ads (
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  external_id VARCHAR(255) NOT NULL,
+  dismissed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, external_id)
+);
+CREATE INDEX IF NOT EXISTS idx_dismissed_ads_user_time
+  ON dismissed_ads(user_id, dismissed_at DESC);
+
+
 -- Price history tracking.
 CREATE TABLE IF NOT EXISTS price_history (
   id SERIAL PRIMARY KEY,
