@@ -41,10 +41,10 @@ export class TelegramSender {
       const caption = this.truncateCaption(formatted.text);
       if (mediaToSend.length === 1) {
         try { await this.bot.sendPhoto(chatId, mediaToSend[0], { caption, parse_mode: 'HTML', reply_markup: replyMarkup }); return; }
-        catch (error: any) {
+        catch (error: unknown) {
           const statusCode = this.getStatusCode(error);
           if (statusCode !== 400) throw error;
-          logger.warn('Photo notification rejected, falling back to text', { chatId, error: error?.response?.body?.description || error.message });
+          logger.warn('Photo notification rejected, falling back to text', { chatId, error: (error instanceof Error ? error.message : String(error)) });
           await this.waitForRateLimit(chatId);
           await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup });
           return;
@@ -54,9 +54,9 @@ export class TelegramSender {
       try {
         await this.bot.sendMediaGroup(chatId, inputMedia);
         if (replyMarkup) { await this.waitForRateLimit(chatId); await this.bot.sendMessage(chatId, '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', { reply_markup: replyMarkup }); }
-      } catch (error: any) {
+      } catch (error: unknown) {
         const statusCode = this.getStatusCode(error);
-        if (statusCode === 400) { logger.warn('Media group rejected, falling back to text notification', { chatId, error: error?.response?.body?.description || error.message }); await this.waitForRateLimit(chatId); await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup }); return; }
+        if (statusCode === 400) { logger.warn('Media group rejected, falling back to text notification', { chatId, error: (error instanceof Error ? error.message : String(error)) }); await this.waitForRateLimit(chatId); await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup }); return; }
         throw error;
       }
       return;
@@ -81,7 +81,7 @@ export class TelegramSender {
         const statusCode = this.getStatusCode(error);
         if (statusCode === 429 && attempt < this.MAX_RETRIES) { const retryAfter = this.getRetryAfter(error); this.retryAfterByChat.set(chatId, Date.now() + retryAfter * 1000); logger.warn('Telegram rate limited, retrying', { chatId, externalId: formatted.externalId, retryAfter, attempt: attempt + 1 }); continue; }
         if (statusCode === 403) { logger.warn('User blocked the bot', { chatId, externalId: formatted.externalId }); return; }
-        logger.error('Failed to send Telegram message', { chatId, externalId: formatted.externalId, error: error.message, statusCode, durationMs: Date.now() - startedAt, attempts: attempt + 1 });
+        logger.error('Failed to send Telegram message', { chatId, externalId: formatted.externalId, error: error instanceof Error ? error.message : String(error), statusCode, durationMs: Date.now() - startedAt, attempts: attempt + 1 });
         throw error;
       }
     }
