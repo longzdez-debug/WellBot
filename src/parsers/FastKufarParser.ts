@@ -248,7 +248,8 @@ export class FastKufarParser extends BaseParser {
         requestMs: Date.now() - requestStartedAt,
       });
 
-      return ads.map((ad: any, index: number) => {
+      return ads.map((ad: any) => {
+        const searchRank = rawAds.indexOf(ad) + 1;
         let price = 'Договорная';
         if (ad.price_byn != null) price = `${(Number(ad.price_byn) / 100).toFixed(2)} BYN`;
         else if (ad.price_usd != null) price = `${(Number(ad.price_usd) / 100).toFixed(2)} USD`;
@@ -269,7 +270,7 @@ export class FastKufarParser extends BaseParser {
           condition: adCondition(ad) || null,
           is_company: Boolean(ad.company_ad),
           first_seen_source: endpoint.includes('cre-api') ? 'api-cre' : 'api-search',
-          first_seen_rank: index + 1,
+          first_seen_rank: searchRank > 0 ? searchRank : null,
         } as Ad;
       });
     };
