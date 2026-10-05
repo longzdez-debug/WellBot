@@ -12,7 +12,11 @@ export function installRuntimeGuards(): void {
     const message = reason instanceof Error ? reason.message : String(reason);
     const stack = reason instanceof Error ? reason.stack : undefined;
     logger.error('Unhandled promise rejection', { error: message, stack });
-    process.exitCode = 1;
+    if (!shuttingDown) {
+      shuttingDown = true;
+      process.exitCode = 1;
+      setImmediate(() => process.exit(1));
+    }
   });
 
   process.on('uncaughtException', (error: Error) => {
