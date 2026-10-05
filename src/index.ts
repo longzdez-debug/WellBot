@@ -25,9 +25,11 @@ async function main() {
   const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
   const DATABASE_URL = requiredEnv('DATABASE_URL');
   const db = new DatabaseService(DATABASE_URL);
-  // DEPLEXO injects PORT for the public readiness listener. Use it whenever
-  // present; WELLBOT_WEB_PORT is the local/Docker fallback.
-  const configuredWebPort = process.env.PORT || process.env.WELLBOT_WEB_PORT || '8080';
+  // DEPLEXO declares 8080 in deplexo.yaml and probes that container port.
+  // Do not switch to an injected PORT value here: on DEPLEXO that value can
+  // represent the external/runtime routing port rather than the container
+  // listener declared by the deployment manifest.
+  const configuredWebPort = process.env.WELLBOT_WEB_PORT || '8080';
   const webPort = Number(configuredWebPort);
   logger.info('WellBOT WebApp configuration', {
     configuredWebPort,
