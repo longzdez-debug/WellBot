@@ -153,6 +153,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
         const freshness = scheduler.freshnessLagMs && typeof scheduler.freshnessLagMs === 'object' ? scheduler.freshnessLagMs as Record<string, unknown> : {};
         const cycleDuration = scheduler.cycleDurationMs && typeof scheduler.cycleDurationMs === 'object' ? scheduler.cycleDurationMs as Record<string, unknown> : {};
         const notificationLatency = notifications.latencyMs && typeof notifications.latencyMs === 'object' ? notifications.latencyMs as Record<string, unknown> : {};
+        const db = metrics.db && typeof metrics.db === 'object' ? metrics.db as Record<string, unknown> : {};
         applySecurityHeaders(res); res.statusCode=200; res.setHeader('Content-Type','text/plain; version=0.0.4; charset=utf-8'); res.setHeader('Cache-Control','no-store');
         res.end(observability.prometheus({
           scheduler_running: scheduler.running ? 1 : 0,
@@ -163,6 +164,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           notification_pending:Number(notifications.pending||0), notification_oldest_age_ms:Number(notifications.oldestAgeMs||0),
           notification_sent_total:Number(notifications.sent||0), notification_failed_total:Number(notifications.failed||0),
           notification_p95_latency_ms:Number(notificationLatency.p95||0),
+          db_pool_total:Number(db.total||0), db_pool_idle:Number(db.idle||0), db_pool_waiting:Number(db.waiting||0),
         })); return;
       }
 
