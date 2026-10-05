@@ -33,6 +33,7 @@ describe('ParserScheduler notification reliability', () => {
       rescheduleNotification: jest.fn().mockResolvedValue(undefined),
       markNotificationSent: jest.fn().mockResolvedValue(undefined),
       discardNotification: jest.fn().mockResolvedValue(undefined),
+      isAdDismissedForChat: jest.fn().mockResolvedValue(false),
     };
     const failingBot = {
       sendNotification: jest.fn().mockRejectedValue(new Error('telegram unavailable')),
