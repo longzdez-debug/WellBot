@@ -20,9 +20,10 @@ RUN npm prune --omit=dev
 RUN chown -R node:node /app
 USER node
 
+# Documentation/default only; Deplexo routes using the runtime PORT.
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD sh -c "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"
+  CMD sh -c "wget -qO- http://127.0.0.1:${PORT:-8080}/healthz >/dev/null || exit 1"
 
 CMD ["node", "dist/index.js"]

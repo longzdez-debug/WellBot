@@ -18,18 +18,10 @@ function requiredEnv(name: string): string {
 
 async function main() {
   logger.info('Starting WellBOT...', { version: '2.0.2', miniAppApi: 'telegram-init-data' });
-  // Start the HTTP listener before database initialization. DEPLEXO performs
-  // its readiness probe immediately after the container starts; database
-  // connection/migration work must never prevent port 8080 from accepting
-  // /healthz during startup.
-  const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
-  const DATABASE_URL = requiredEnv('DATABASE_URL');
-  const db = new DatabaseService(DATABASE_URL);
-  // DEPLEXO declares 8080 in deplexo.yaml and probes that container port.
-  // Do not switch to an injected PORT value here: on DEPLEXO that value can
-  // represent the external/runtime routing port rather than the container
-  // listener declared by the deployment manifest.
-  const configuredWebPort = process.env.WELLBOT_WEB_PORT || '8080';
+
+  // Deplexo injects PORT at runtime. WELLBOT_WEB_PORT remains a local/deployment
+  // override, with 8080 as the final fallback for local runs.
+  const configuredWebPort = process.env.PORT || process.env.WELLBOT_WEB_PORT || '8080';
   const webPort = Number(configuredWebPort);
   logger.info('WellBOT WebApp configuration', {
     configuredWebPort,
@@ -38,8 +30,12 @@ async function main() {
     platformPort: process.env.PORT || null,
   });
   if (!Number.isInteger(webPort) || webPort <= 0 || webPort >= 65536) {
-    throw new Error('WELLBOT_WEB_PORT must be a valid TCP port');
+    throw new Error('PORT/WELLBOT_WEB_PORT must be a valid TCP port');
   }
+
+  const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
+  const DATABASE_URL = requiredEnv('DATABASE_URL');
+  const db = new DatabaseService(DATABASE_URL);
 
   // Construct the application services before opening the listener. They do
   // not start background work until scheduler.start(), while /healthz itself
