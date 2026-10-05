@@ -195,6 +195,17 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           json(res,201,{link,config});return;
         }
 
+        const dismissMatch = requestPath.match(/^\/api\/ads\/(\d+)\/dismiss$/);
+        if (dismissMatch && req.method === 'POST') {
+          const adId = Number(dismissMatch[1]);
+          if (!Number.isSafeInteger(adId) || adId <= 0) { json(res, 400, { error: 'invalid_ad_id' }); return; }
+          const ok = await db.dismissAdForUser(adId, user.id);
+          if (!ok) { json(res, 404, { error: 'not_found' }); return; }
+          logger.info('WellBOT ad dismissed', { telegramId: auth.user.id, dbUserId: user.id, adId });
+          json(res, 200, { ok: true, adId });
+          return;
+        }
+
         if (requestPath === '/api/links' && req.method === 'POST') {
           json(res, 410, { error: 'url_monitors_disabled', message: 'Создание поиска по ссылке отключено. Используйте каталог WellBOT.' });
           return;
