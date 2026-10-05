@@ -395,7 +395,7 @@ export class FastKufarParser extends BaseParser {
           durationMs: Date.now() - startedAt,
         });
 
-        if (merged.size) return [...merged.values()];
+        if (successfulSources.length) return [...merged.values()];
         throw new Error('All Kufar realtime source paths failed: ' + (errors.join(' | ') || 'empty response'));
       }
 
