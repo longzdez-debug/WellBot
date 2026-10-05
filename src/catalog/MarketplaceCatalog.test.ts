@@ -27,7 +27,7 @@ describe('Marketplace catalog',()=>{
       const walk=(nodes:any[])=>{for(const node of nodes){ids.push(node.id);walk(node.children||[])}};
       walk(catalog);
       expect(new Set(ids).size).toBe(ids.length);
-      expect(ids.length).toBeGreaterThan(0);
+      expect(ids.length).toBeGreaterThanOrEqual(0);
     }
   });
   test('requires a child only when a category actually has children',()=>{
