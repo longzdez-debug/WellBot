@@ -282,7 +282,6 @@ export class FastKufarParser extends BaseParser {
           'Cache-Control': 'no-cache, no-store, max-age=0',
           Pragma: 'no-cache',
           'Accept-Language': 'ru-RU,ru;q=0.9',
-          'Cache-Control': 'no-cache',
         },
       });
       const html = String(response.data || '');
