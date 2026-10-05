@@ -85,6 +85,42 @@ function json(res: ServerResponse, status: number, payload: unknown): void {
   res.end(JSON.stringify(payload));
 }
 
+function prometheus(metrics: any): string {
+  const lines = [
+    '# HELP wellbot_scheduler_running Whether the parser scheduler is running.',
+    '# TYPE wellbot_scheduler_running gauge',
+    `wellbot_scheduler_running ${metrics?.scheduler?.running ? 1 : 0}`,
+    '# HELP wellbot_scheduler_cycles_total Completed parser cycles.',
+    '# TYPE wellbot_scheduler_cycles_total counter',
+    `wellbot_scheduler_cycles_total ${Number(metrics?.scheduler?.cycles || 0)}`,
+    '# HELP wellbot_scheduler_cycle_failures_total Parser cycle failures.',
+    '# TYPE wellbot_scheduler_cycle_failures_total counter',
+    `wellbot_scheduler_cycle_failures_total ${Number(metrics?.scheduler?.failures || 0)}`,
+    '# HELP wellbot_scheduler_active_links Active monitors.',
+    '# TYPE wellbot_scheduler_active_links gauge',
+    `wellbot_scheduler_active_links ${Number(metrics?.scheduler?.activeLinks || 0)}`,
+    '# HELP wellbot_scheduler_freshness_oldest_ms Age of the oldest active monitor checkpoint.',
+    '# TYPE wellbot_scheduler_freshness_oldest_ms gauge',
+    `wellbot_scheduler_freshness_oldest_ms ${Number(metrics?.scheduler?.freshnessLagMs?.oldest || 0)}`,
+    '# HELP wellbot_notifications_pending Pending notification jobs.',
+    '# TYPE wellbot_notifications_pending gauge',
+    `wellbot_notifications_pending ${Number(metrics?.notifications?.pending || 0)}`,
+    '# HELP wellbot_notifications_sent_total Notifications delivered.',
+    '# TYPE wellbot_notifications_sent_total counter',
+    `wellbot_notifications_sent_total ${Number(metrics?.notifications?.sent || 0)}`,
+    '# HELP wellbot_notifications_failed_total Notification delivery failures.',
+    '# TYPE wellbot_notifications_failed_total counter',
+    `wellbot_notifications_failed_total ${Number(metrics?.notifications?.failed || 0)}`,
+    '# HELP wellbot_new_ads_total New ads detected.',
+    '# TYPE wellbot_new_ads_total counter',
+    `wellbot_new_ads_total ${Number(metrics?.newAds || 0)}`,
+    '# HELP wellbot_price_drops_total Price drops detected.',
+    '# TYPE wellbot_price_drops_total counter',
+    `wellbot_price_drops_total ${Number(metrics?.priceDrops || 0)}`,
+  ];
+  return lines.join('\\n') + '\\n';
+}
+
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   let size = 0;
   let body = '';
@@ -110,6 +146,16 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
         if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); json(res, 405, { error: 'method_not_allowed' }); return; }
         if (req.method === 'HEAD') { applySecurityHeaders(res); res.statusCode = 200; res.setHeader('Cache-Control', 'no-store'); res.end(); return; }
         json(res, 200, { status: 'ok', service: 'wellbot-web' }); return;
+      }
+
+      if (requestPath === '/metrics' && req.method === 'GET') {
+        const metrics = metricsProvider ? await metricsProvider() : {};
+        applySecurityHeaders(res);
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(prometheus(metrics));
+        return;
       }
 
       if (requestPath.startsWith('/api/')) {

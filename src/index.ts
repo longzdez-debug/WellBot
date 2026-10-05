@@ -26,12 +26,19 @@ async function main() {
   const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
   const DATABASE_URL = requiredEnv('DATABASE_URL');
   const db = new DatabaseService(DATABASE_URL);
-  const webServer = await startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN);
-  const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
-  const scheduler = new ParserScheduler(db, bot);
-  installWebAppBridge(bot);
+  let scheduler: ParserScheduler | null = null;
+  const webServer = await startWebAppServer(
+    webPort,
+    db,
+    TELEGRAM_BOT_TOKEN,
+    undefined,
+    async () => scheduler ? await scheduler.getMetrics() : { scheduler: { running: false }, notifications: {}, generatedAt: new Date().toISOString() },
+  );
   await db.initialize();
   logger.info('Database initialized');
+  const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
+  scheduler = new ParserScheduler(db, bot);
+  installWebAppBridge(bot);
   scheduler.start();
 
   let shuttingDown = false;
@@ -39,7 +46,7 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info('Shutting down...');
-    await scheduler.stop(); bot.stop(); await webServer.close(); await db.close(); process.exit(0);
+    await scheduler?.stop(); bot.stop(); await webServer.close(); await db.close(); process.exit(0);
   };
   process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
   logger.info('WellBOT is running!');
