@@ -292,3 +292,6 @@ body{letter-spacing:-.01em}
   input,select{font-size:16px}
   .nav-item{height:46px;font-size:14px}
 }
+
+/* WellBOT PRO */
+.profile-modal .deal-reasons{margin-top:12px}.profile-modal .deal-reasons span{font-size:9px;color:#b9c2ce}#pro-buy:disabled{opacity:.6;cursor:default}.rail-premium{cursor:pointer}
