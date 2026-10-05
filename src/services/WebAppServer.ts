@@ -118,7 +118,7 @@ function prometheus(metrics: any): string {
     '# TYPE wellbot_price_drops_total counter',
     `wellbot_price_drops_total ${Number(metrics?.priceDrops || 0)}`,
   ];
-  return lines.join('\\n') + '\\n';
+  return lines.join('\n') + '\n';
 }
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -202,8 +202,9 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
           const config = body as unknown as MonitorConfig;
           const source = config.source as MarketplaceSource;
           if (!['kufar','onliner','av'].includes(source)) { json(res,400,{error:'invalid_source',message:'Выберите площадку.'}); return; }
+          if (typeof config.categoryId !== 'string' || config.categoryId.length < 1 || config.categoryId.length > 100) { json(res,400,{error:'invalid_category',message:'Выберите категорию из каталога WellBOT.'}); return; }
           const node = source==='kufar' ? findCatalogNode(config.categoryId) : findMarketplaceNode(source,config.categoryId);
-          if (typeof config.categoryId!=='string' || !node || node.searchable===false) { json(res,400,{error:'invalid_category',message:'Выберите категорию из каталога WellBOT.'}); return; }
+          if (!node || node.searchable===false) { json(res,400,{error:'invalid_category',message:'Выберите категорию из каталога WellBOT.'}); return; }
           const category = source==='kufar' ? findCatalogCategory(config.categoryId) : findMarketplaceCategory(source,config.categoryId);
           if (node.children?.length && !config.subcategoryId) { json(res,400,{error:'subcategory_required',message:'Выберите подкатегорию.'}); return; }
           if (config.subcategoryId) {
@@ -212,16 +213,19 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
           }
           if (config.condition && config.condition!=='new' && config.condition!=='used') { json(res,400,{error:'invalid_condition'}); return; }
           if (config.seller && config.seller!=='private' && config.seller!=='company') { json(res,400,{error:'invalid_seller'}); return; }
-          if (config.minMarketDiscount!=null && (!Number.isFinite(Number(config.minMarketDiscount)) || Number(config.minMarketDiscount)<0 || Number(config.minMarketDiscount)>90)) { json(res,400,{error:'invalid_market_discount',message:'Минимальная скидка от рынка должна быть от 0 до 90%.'}); return; }
-          if (config.skipSlots!=null && (!Number.isSafeInteger(Number(config.skipSlots)) || Number(config.skipSlots)<0 || Number(config.skipSlots)>100)) { json(res,400,{error:'invalid_skip_slots',message:'Пропуск слотов должен быть от 0 до 100.'}); return; }
+          if (config.minMarketDiscount!=null && (typeof config.minMarketDiscount!=='number' || !Number.isFinite(config.minMarketDiscount) || config.minMarketDiscount<0 || config.minMarketDiscount>90)) { json(res,400,{error:'invalid_market_discount',message:'Минимальная скидка от рынка должна быть от 0 до 90%.'}); return; }
+          if (config.skipSlots!=null && (typeof config.skipSlots!=='number' || !Number.isSafeInteger(config.skipSlots) || config.skipSlots<0 || config.skipSlots>100)) { json(res,400,{error:'invalid_skip_slots',message:'Пропуск слотов должен быть от 0 до 100.'}); return; }
           if (config.mode && config.mode!=='normal' && config.mode!=='sniper') { json(res,400,{error:'invalid_mode'}); return; }
           if (config.brand!=null && (typeof config.brand!=='string' || config.brand.length>60 || !KUFAR_PHONE_BRANDS.some(x=>x.id===String(config.brand).toLowerCase()))) { json(res,400,{error:'invalid_brand',message:'Производитель не найден в каталоге Kufar.'}); return; }
           if (config.model!=null && (typeof config.model!=='string' || config.model.length>100)) { json(res,400,{error:'invalid_model',message:'Модель слишком длинная.'}); return; }
           if ((config.brand||config.model||config.phoneFilters) && source!=='kufar') { json(res,400,{error:'phone_filters_only_kufar'}); return; }
           if ((config.brand||config.model||config.phoneFilters) && !isKufarPhoneCategory(config.categoryId,config.subcategoryId)) { json(res,400,{error:'phone_filters_wrong_category',message:'Фильтры телефона доступны только для мобильных телефонов Kufar.'}); return; }
           if (config.query!=null && (typeof config.query!=='string' || config.query.length>120)) { json(res,400,{error:'invalid_query'}); return; }
-          if (config.minPrice!=null && (!Number.isFinite(Number(config.minPrice)) || Number(config.minPrice)<0)) { json(res,400,{error:'invalid_min_price'}); return; }
-          if (config.maxPrice!=null && (!Number.isFinite(Number(config.maxPrice)) || Number(config.maxPrice)<0)) { json(res,400,{error:'invalid_max_price'}); return; }
+          if (config.city!=null && (typeof config.city!=='string' || config.city.length>100)) { json(res,400,{error:'invalid_city'}); return; }
+          if (config.region!=null && (typeof config.region!=='string' || config.region.length>100)) { json(res,400,{error:'invalid_region'}); return; }
+          if (config.phoneFilters!=null && (typeof config.phoneFilters!=='object' || Array.isArray(config.phoneFilters))) { json(res,400,{error:'invalid_phone_filters'}); return; }
+          if (config.minPrice!=null && (typeof config.minPrice!=='number' || !Number.isFinite(config.minPrice) || config.minPrice<0)) { json(res,400,{error:'invalid_min_price'}); return; }
+          if (config.maxPrice!=null && (typeof config.maxPrice!=='number' || !Number.isFinite(config.maxPrice) || config.maxPrice<0)) { json(res,400,{error:'invalid_max_price'}); return; }
           if (config.minPrice!=null && config.maxPrice!=null && Number(config.minPrice)>Number(config.maxPrice)) { json(res,400,{error:'invalid_price_range'}); return; }
           const links=await db.getUserLinks(user.id);
           const url=source==='kufar' ? buildKufarSearchUrl(config) : buildMarketplaceSearchUrl(source,config);
