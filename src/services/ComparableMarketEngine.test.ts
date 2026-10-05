@@ -33,4 +33,12 @@ describe('ComparableMarketEngine',()=>{
     expect(signal.sample_size).toBe(0);
     expect(signal.comparable_count).toBe(2);
   });
+  test('does not mix valuation data from another catalog category',()=>{
+    const current={...ad('x','iPhone 15 Pro 256GB','700 BYN'),market_group:'kufar:phones:17010'};
+    const same=Array.from({length:10},(_,i)=>({...ad('s'+i,'iPhone 15 Pro 256GB',String(980+i*5)+' BYN'),market_group:'kufar:phones:17010'}));
+    const wrong=Array.from({length:20},(_,i)=>({...ad('w'+i,'iPhone 15 Pro 256GB',String(100+i*2)+' BYN'),market_group:'kufar:home:3040'}));
+    const signal=getComparableMarketSignal(current,[...same,...wrong]);
+    expect(signal.market_median).toBeGreaterThan(900);
+    expect(signal.comparable_count).toBe(10);
+  });
 });
