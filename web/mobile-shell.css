@@ -101,6 +101,39 @@
   .monitor-main em{font-size:6px}
   .count{font-size:10px}
 
+  .analytics-kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+  .analytics-kpi{
+    min-width:0;padding:12px;border:1px solid rgba(255,255,255,.07);border-radius:14px;
+    background:linear-gradient(145deg,#111720,#0d1219);
+  }
+  .analytics-kpi small{display:block;color:#687486;font-size:6px;font-weight:800;letter-spacing:.1em}
+  .analytics-kpi strong{display:block;margin-top:5px;color:#f2f4f8;font:700 20px/1 'Space Grotesk',sans-serif}
+  .analytics-kpi span{display:block;margin-top:4px;color:#798494;font-size:6.5px}
+  .analytics-card{
+    margin-bottom:8px;padding:12px;border:1px solid rgba(255,255,255,.07);border-radius:14px;
+    background:#0e131a;
+  }
+  .analytics-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+  .analytics-card-head small{display:block;color:#687486;font-size:6px;letter-spacing:.1em}
+  .analytics-card-head strong{display:block;margin-top:3px;font-size:10px;color:#eef1f5}
+  .analytics-card-head>span{color:#737f90;font-size:6.5px}
+  .analytics-bars{display:grid;gap:9px}
+  .analytics-bar-row{display:grid;grid-template-columns:55px 1fr 22px;gap:7px;align-items:center}
+  .analytics-bar-row>span,.analytics-bar-row>b{font-size:7px;color:#9ca6b4}
+  .analytics-bar-row>b{text-align:right;color:#d9dde4}
+  .analytics-bar-row>div{height:5px;border-radius:99px;background:#191f28;overflow:hidden}
+  .analytics-bar-row i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#6f3cff,#a17aff)}
+  .analytics-deal{
+    width:100%;display:grid;grid-template-columns:34px 1fr 14px;gap:8px;align-items:center;
+    padding:8px 0;border:0;border-top:1px solid rgba(255,255,255,.055);background:none;text-align:left;color:inherit
+  }
+  .analytics-deal:first-child{border-top:0}
+  .analytics-deal-score{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:rgba(111,60,255,.12);color:#b79cff;font:700 10px 'Space Grotesk',sans-serif}
+  .analytics-deal b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e8ebef;font-size:8px}
+  .analytics-deal small{display:block;margin-top:3px;color:#788494;font-size:6.5px}
+  .analytics-deal>strong{color:#737f90;font-size:17px;text-align:right}
+  .analytics-empty{padding:10px 0;color:#737f90;font-size:7px}
+  .compact-head{margin-top:14px}
   #drops{display:grid;gap:8px}
   #drops>*{border-radius:14px}
 
