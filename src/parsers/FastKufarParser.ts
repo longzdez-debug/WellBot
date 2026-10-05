@@ -349,34 +349,61 @@ export class FastKufarParser extends BaseParser {
     };
 
     try {
-      // API category filtering is ID-based. For catalog slugs without a verified
-      // API ID we deliberately use the rendered category page instead of risking
-      // a silent fallback to "all Kufar listings".
-      if (params.cat) {
-        let lastError: unknown;
-        for (const endpoint of API_ENDPOINTS) {
-          try {
-            const results = await requestApi(endpoint);
-            return results;
-          } catch (error: unknown) {
-            lastError = error;
-            logger.warn('Kufar API endpoint failed; trying fallback endpoint', {
-              endpoint,
-              error: error instanceof Error ? error.message : String(error),
-            });
+      // Realtime mode fans out independent Kufar source paths instead of waiting
+      // for one backend after another. Their indexing/cache freshness can differ.
+      const isSniper = monitorIdentity[11] === 'sniper';
+      const sources = params.cat ? [...API_ENDPOINTS] : [];
+      if (isSniper) sources.push('__html__');
+
+      if (sources.length) {
+        const startedAt = Date.now();
+        const settled = await Promise.allSettled(
+          sources.map(source => source === '__html__' ? requestHtml() : requestApi(source)),
+        );
+        const merged = new Map<string, Ad>();
+        const successfulSources: string[] = [];
+        const errors: string[] = [];
+
+        for (let i = 0; i < settled.length; i += 1) {
+          const result = settled[i];
+          const source = sources[i];
+          if (result.status === 'fulfilled') {
+            successfulSources.push(source);
+            for (const ad of result.value) {
+              const existing = merged.get(ad.external_id);
+              if (!existing) merged.set(ad.external_id, ad);
+              else {
+                const currentTime = existing.published_at?.getTime() || 0;
+                const nextTime = ad.published_at?.getTime() || 0;
+                if (nextTime >= currentTime) merged.set(ad.external_id, ad);
+              }
+            }
+          } else {
+            errors.push(source + ': ' + (result.reason instanceof Error ? result.reason.message : String(result.reason)));
           }
         }
-        throw lastError instanceof Error ? lastError : new Error('All Kufar API endpoints failed');
+
+        logger.info('Kufar realtime fan-out completed', {
+          sniper: isSniper,
+          successfulSources,
+          failedSources: errors,
+          uniqueAds: merged.size,
+          durationMs: Date.now() - startedAt,
+        });
+
+        if (merged.size) return [...merged.values()];
+        throw new Error('All Kufar realtime source paths failed: ' + (errors.join(' | ') || 'empty response'));
       }
+
       logger.debug('Kufar category has no verified API id; using rendered category page', {
         url,
         categoryPath: parts.filter(part => !/^r~|^mt~/i.test(part)).join('/'),
         query: requestedQuery || null,
       });
     } catch (error: any) {
-      logger.warn('Kufar API hot-path failed; trying rendered page', {
+      logger.warn('Kufar realtime fan-out failed; trying rendered page', {
         url,
-        errors: Array.isArray(error?.errors) ? error.errors.map((e: any) => e?.message).slice(0, 2) : [error?.message],
+        error: error?.message || String(error),
       });
     }
 
