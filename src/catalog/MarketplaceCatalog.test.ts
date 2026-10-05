@@ -21,4 +21,20 @@ describe('Marketplace catalog',()=>{
     expect(onliner).not.toContain('kufar.by');
     expect(av).not.toContain('kufar.by');
   });
+  test('has unique category ids at every depth',()=>{
+    for(const [source,catalog] of Object.entries(MARKETPLACE_CATALOGS)){
+      const ids:string[]=[];
+      const walk=(nodes:any[])=>{for(const node of nodes){ids.push(node.id);walk(node.children||[])}};
+      walk(catalog);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(ids.length).toBeGreaterThan(0);
+    }
+  });
+  test('requires a child only when a category actually has children',()=>{
+    const walk=(source:any,nodes:any[])=>{for(const node of nodes){if(node.children?.length){
+      expect(findMarketplaceCategory(source,node.children[0].id)?.id).toBe(node.id);
+    } walk(source,node.children||[])}};
+    for(const [source,catalog] of Object.entries(MARKETPLACE_CATALOGS)) walk(source,catalog);
+  });
+
 });
