@@ -546,7 +546,11 @@ export class FastKufarParser extends BaseParser {
         error: errorSummary(error),
         managedFallbackConfigured: Boolean(reefApiKey()),
       });
-      if (status === 403 && !reefApiKey()) throw error;
+      // When the managed source is configured, do not fall back to Kufar HTML
+      // after an API failure. DEPLEXO currently gets socket resets from the
+      // rendered page, so this only adds noise and delays the scheduler backoff.
+      if (reefApiKey()) throw error;
+      if (status === 403) throw error;
     }
 
     return await requestHtml();
