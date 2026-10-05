@@ -21,6 +21,8 @@ const MAX_LINKS = 50;
 const AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
 const PHONE_MODEL_CACHE=new Map<string,{expires:number;models:{id:string;title:string;slug:string}[]}>();
 const PHONE_MODEL_TTL=30*60*1000;
+function isAdminTelegramId(id:number):boolean{return String(process.env.TELEGRAM_ADMIN_IDS||'').split(',').map(x=>x.trim()).filter(Boolean).includes(String(id));}
+
 
 async function getKufarPhoneModels(brand:string){
   const key=brand.toLowerCase();
@@ -169,6 +171,27 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
         if (!auth) { logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method }); json(res, 401, { error: 'unauthorized' }); return; }
         const user = await db.getUser(auth.user.id);
         if (!user) { logger.warn('WellBOT API user not registered', { telegramId: auth.user.id, requestPath }); json(res, 403, { error: 'user_not_registered' }); return; }
+
+        if (requestPath === '/api/admin/overview' && req.method === 'GET') {
+          if(!isAdminTelegramId(auth.user.id)){json(res,403,{error:'admin_forbidden'});return;}
+          const [users,promos,audit]=await Promise.all([db.adminListUsers(100),db.listPromoCodes(100),db.getAdminAudit(100)]);
+          json(res,200,{users,promos,audit,adminTelegramId:auth.user.id});return;
+        }
+        if (requestPath === '/api/admin/pro/grant' && req.method === 'POST') {
+          if(!isAdminTelegramId(auth.user.id)){json(res,403,{error:'admin_forbidden'});return;}
+          try{const body=await readJson(req);const telegramId=Number(body.telegramId),days=Number(body.durationDays),reason=String(body.reason||'admin grant').slice(0,500);if(!Number.isSafeInteger(telegramId)||telegramId<=0||!Number.isFinite(days)||days<1||days>3650){json(res,400,{error:'invalid_grant'});return;}await db.adminGrantPro(telegramId,days,auth.user.id,reason);json(res,200,{ok:true});}catch(e){json(res,400,{error:e instanceof Error?e.message:'grant_failed'});}return;
+        }
+        if (requestPath === '/api/admin/pro/revoke' && req.method === 'POST') {
+          if(!isAdminTelegramId(auth.user.id)){json(res,403,{error:'admin_forbidden'});return;}
+          try{const body=await readJson(req);const telegramId=Number(body.telegramId),reason=String(body.reason||'admin revoke').slice(0,500);if(!Number.isSafeInteger(telegramId)||telegramId<=0){json(res,400,{error:'invalid_user'});return;}await db.revokePro(telegramId,auth.user.id,reason);json(res,200,{ok:true});}catch(e){json(res,400,{error:e instanceof Error?e.message:'revoke_failed'});}return;
+        }
+        if (requestPath === '/api/admin/promo/create' && req.method === 'POST') {
+          if(!isAdminTelegramId(auth.user.id)){json(res,403,{error:'admin_forbidden'});return;}
+          try{const body=await readJson(req);const code=String(body.code||'').trim().toUpperCase(),days=Number(body.durationDays),maxUses=Number(body.maxUses||1);const expiresAt=body.expiresAt?new Date(String(body.expiresAt)):null;if(!code||!Number.isFinite(days)||days<1||days>3650||!Number.isFinite(maxUses)||maxUses<1||maxUses>100000||expiresAt&&!Number.isFinite(expiresAt.getTime())){json(res,400,{error:'invalid_promo'});return;}await db.createPromoCode(code,days,maxUses,expiresAt,auth.user.id);json(res,200,{ok:true,code});}catch(e){json(res,400,{error:e instanceof Error?e.message:'promo_create_failed'});}return;
+        }
+        if (requestPath === '/api/promo/redeem' && req.method === 'POST') {
+          try{const body=await readJson(req);const code=String(body.code||'').trim();if(!code||code.length>64){json(res,400,{error:'invalid_promo'});return;}const expiresAt=await db.redeemPromoCode(auth.user.id,code);json(res,200,{ok:true,expiresAt:expiresAt.toISOString()});}catch(e){json(res,400,{error:e instanceof Error?e.message:'promo_redeem_failed'});}return;
+        }
 
         if (requestPath === '/api/pro' && req.method === 'GET') {
           const subscription=await db.getProSubscription(auth.user.id);
