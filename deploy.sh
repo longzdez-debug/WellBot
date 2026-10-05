@@ -70,7 +70,7 @@ docker compose up -d bot
 
 echo "Waiting for WellBOT health endpoint..."
 for _ in {1..30}; do
-  if curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then
+  if curl -fsS http://127.0.0.1:3000/health >/dev/null 2>&1; then
     echo "WellBOT is healthy."
     docker compose ps
     echo
