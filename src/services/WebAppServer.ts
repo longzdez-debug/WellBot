@@ -235,7 +235,8 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
         json(res, 404, { error: 'not_found' }); return;
       }
 
-      if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); json(res, 405, { error: 'method_not_allowed' }); return; }
+      if (requestPath === '/' && req.method === 'HEAD') { applySecurityHeaders(res); res.statusCode = 200; res.setHeader('Cache-Control', 'no-store'); res.end(); return; }
+      if (req.method !== 'GET') { res.setHeader('Allow', 'GET, HEAD'); json(res, 405, { error: 'method_not_allowed' }); return; }
       const relativePath = requestPath === '/' ? '/index.html' : requestPath;
       const normalizedPath = normalize(relativePath).replace(/^[/\\]+/, '');
       if (normalizedPath.startsWith('..')) { json(res, 400, { error: 'bad_request' }); return; }
