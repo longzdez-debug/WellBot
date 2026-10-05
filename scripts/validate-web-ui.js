@@ -1,6 +1,7 @@
 const fs=require("node:fs");
 const index=fs.readFileSync("web/index.html","utf8");
 const app=fs.readFileSync("web/app.js","utf8");
+const compose=fs.readFileSync("docker-compose.yml","utf8");
 const cssRefs=[...index.matchAll(/href="\.\/([^"]+\.css)(?:\?[^"]*)?"/g)].map(m=>m[1]);
 for(const file of cssRefs){if(!fs.existsSync("web/"+file))throw new Error("Missing stylesheet: "+file);}
 if(cssRefs.includes("styles.css"))throw new Error("Legacy stylesheet styles.css is still referenced.");
@@ -50,4 +51,7 @@ if(/Успешных покупок<\/span><b>247|Общий профит<\/span
 if(actions.filter(a=>a==='add').length<1)throw new Error("At least one static primary add action is required.");
 if(!app.includes('/api/catalog')||!app.includes('/api/monitors'))throw new Error("Marketplace monitor API contract missing.");
 if(!app.includes('/api/catalog'))throw new Error("Official marketplace catalog API is missing.");
+for(const endpoint of ['/api/admin/overview','/api/admin/pro/grant','/api/admin/pro/revoke','/api/admin/promo/create','/api/ads/'])if(!app.includes(endpoint)&&endpoint!=='/api/admin/overview')throw new Error("Required WellBOT action contract missing: "+endpoint);
+if(!app.includes('/api/admin/overview'))throw new Error("Admin overview API contract missing.");
+for(const env of ['TELEGRAM_ADMIN_IDS','WELLBOT_PRO_PRICE_STARS','WELLBOT_TERMS_URL'])if(!new RegExp('^\\s*'+env+':','m').test(compose))throw new Error("Docker Compose does not pass "+env+" to the bot container.");
 console.log("WellBOT web UI contract: OK ("+buttons.length+" static buttons, "+actions.length+" actions, marketplace wizard enabled).");
