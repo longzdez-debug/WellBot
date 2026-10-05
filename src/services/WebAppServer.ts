@@ -7,6 +7,7 @@ import { logger } from '../utils/logger';
 import { KUFAR_CATALOG, MonitorConfig, buildKufarSearchUrl, findCatalogNode, findCatalogCategory } from '../catalog/KufarCatalog';
 import { MARKETPLACE_CATALOGS, MARKETPLACES, MarketplaceSource, buildMarketplaceSearchUrl, findMarketplaceNode, findMarketplaceCategory } from '../catalog/MarketplaceCatalog';
 import { KUFAR_PHONE_BRANDS, KUFAR_PHONE_FILTERS, isKufarPhoneCategory } from '../catalog/KufarPhoneCatalog';
+import { observability } from './Observability';
 
 interface CatalogTreeNode { id:string; children?:CatalogTreeNode[]; }
 const isCatalogDescendant=(id:string,root:{children?:CatalogTreeNode[]}):boolean=>{
@@ -25,6 +26,21 @@ const MAX_LINKS = 50;
 const AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
 const PHONE_MODEL_CACHE=new Map<string,{expires:number;models:{id:string;title:string;slug:string}[]}>();
 const PHONE_MODEL_TTL=30*60*1000;
+const API_RATE_LIMIT = Math.max(20, Math.min(600, Number(process.env.WELLBOT_API_RATE_LIMIT || 120)));
+const API_RATE_WINDOW_MS = 60_000;
+const apiRateBuckets = new Map<string, { started: number; count: number }>();
+function clientKey(req: IncomingMessage): string { return req.socket.remoteAddress || 'unknown'; }
+function rateLimited(req: IncomingMessage): boolean {
+  const key=clientKey(req); const now=Date.now(); const current=apiRateBuckets.get(key);
+  if(!current || now-current.started>=API_RATE_WINDOW_MS){apiRateBuckets.set(key,{started:now,count:1});return false;}
+  current.count+=1; return current.count>API_RATE_LIMIT;
+}
+function allowedOrigin(req: IncomingMessage): boolean {
+  const origin=req.headers.origin;
+  if(!origin) return true;
+  const allowed=(process.env.WELLBOT_ALLOWED_ORIGINS||'').split(',').map(x=>x.trim()).filter(Boolean);
+  return allowed.length===0 || allowed.includes(origin);
+}
 
 async function getKufarPhoneModels(brand:string){
   const key=brand.toLowerCase();
@@ -118,8 +134,30 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
     try {
       const requestUrl = new URL(req.url || '/', 'http://localhost');
       requestPath = decodeURIComponent(requestUrl.pathname);
-      const requestId=typeof req.headers['x-request-id']==='string'&&req.headers['x-request-id'].length<=100 ? req.headers['x-request-id'] : randomUUID();
+      const requestId=typeof req.headers['x-request-id']==='string'&&/^[A-Za-z0-9._:-]{1,100}$/.test(req.headers['x-request-id']) ? req.headers['x-request-id'] : randomUUID();
+      const traceId=observability.traceId();
       res.setHeader('X-Request-Id',requestId);
+      res.setHeader('X-Trace-Id',traceId);
+      observability.inc('http_requests_total');
+      if (requestPath.startsWith('/api/') && !allowedOrigin(req)) { observability.inc('http_origin_rejected_total'); json(res,403,{error:'origin_not_allowed',requestId,traceId}); return; }
+      if (requestPath.startsWith('/api/') && rateLimited(req)) { observability.inc('http_rate_limited_total'); res.setHeader('Retry-After','60'); json(res,429,{error:'rate_limited',requestId,traceId}); return; }
+
+      if (requestPath === '/metrics') {
+        if (req.method !== 'GET') { res.setHeader('Allow','GET'); json(res,405,{error:'method_not_allowed'}); return; }
+        const schedulerMetrics = metricsProvider ? await metricsProvider() : {};
+        applySecurityHeaders(res); res.statusCode=200; res.setHeader('Content-Type','text/plain; version=0.0.4; charset=utf-8'); res.setHeader('Cache-Control','no-store');
+        const scheduler = (schedulerMetrics as any)?.scheduler || {}; const notifications=(schedulerMetrics as any)?.notifications || {};
+        res.end(observability.prometheus({
+          scheduler_running: scheduler.running ? 1 : 0,
+          scheduler_cycles_total: Number(scheduler.cycles||0), scheduler_failures_total:Number(scheduler.failures||0),
+          scheduler_cycle_overruns_total:Number(scheduler.cycleOverruns||0), scheduler_link_failures_total:Number(scheduler.linkFailures||0),
+          scheduler_links_parsed_total:Number(scheduler.linksParsed||0), scheduler_active_links:Number(scheduler.activeLinks||0),
+          scheduler_oldest_link_age_ms:Number(scheduler.freshnessLagMs?.oldest||0), scheduler_cycle_p95_ms:Number(scheduler.cycleDurationMs?.p95||0),
+          notification_pending:Number(notifications.pending||0), notification_oldest_age_ms:Number(notifications.oldestAgeMs||0),
+          notification_sent_total:Number(notifications.sent||0), notification_failed_total:Number(notifications.failed||0),
+          notification_p95_latency_ms:Number(notifications.latencyMs?.p95||0),
+        })); return;
+      }
 
       if (requestPath === '/health' || requestPath === '/healthz') {
         if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); json(res, 405, { error: 'method_not_allowed' }); return; }
@@ -135,9 +173,9 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
         }
         const initData = req.headers['x-telegram-init-data'];
         const auth = parseTelegramInitData(typeof initData === 'string' ? initData : '', botToken);
-        if (!auth) { logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method, requestId }); json(res, 401, { error: 'unauthorized' }); return; }
+        if (!auth) { observability.inc('api_unauthorized_total'); logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method, requestId, traceId }); json(res, 401, { error: 'unauthorized', requestId, traceId }); return; }
         const user = await db.getUser(auth.user.id);
-        if (!user) { logger.warn('WellBOT API user not registered', { telegramId: auth.user.id, requestPath, requestId }); json(res, 403, { error: 'user_not_registered' }); return; }
+        if (!user) { logger.warn('WellBOT API user not registered', { telegramId: auth.user.id, requestPath, requestId }); json(res, 403, { error: 'user_not_registered', requestId, traceId }); return; }
 
         if (requestPath === '/api/metrics' && req.method === 'GET') { json(res, 200, metricsProvider ? await metricsProvider() : { scheduler: { running: false }, notifications: {}, generatedAt: new Date().toISOString() }); return; }
 
@@ -254,7 +292,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (message === 'body_too_large') { json(res, 413, { error: 'body_too_large' }); return; }
-      if (requestPath.startsWith('/api/')) { logger.error('WellBOT API request failed', { requestPath, error: message }); json(res, 500, { error: 'internal_error' }); return; }
+      if (requestPath.startsWith('/api/')) { observability.inc('api_errors_total'); logger.error('WellBOT API request failed', { requestPath, error: message, requestId, traceId }); json(res, 500, { error: 'internal_error', requestId, traceId }); return; }
       res.statusCode = 404;
       applySecurityHeaders(res);
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
