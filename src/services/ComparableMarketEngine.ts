@@ -29,13 +29,17 @@ function score(current:Ad,currentTokens:Set<string>,currentLocation:string,candi
   const candidateTokens=candidate.tokens;
   const currentNums=numericTokens(currentTokens); const candidateNums=numericTokens(candidateTokens);
   if(currentNums.length&&candidateNums.length&&!currentNums.every(x=>candidateNums.includes(x))) return 0;
+  const shared=[...currentTokens].filter(x=>candidateTokens.has(x));
+  const meaningfulCurrent=[...currentTokens].filter(x=>x.length>=3);
+  const meaningfulShared=shared.filter(x=>x.length>=3);
+  if(meaningfulCurrent.length>=2&&meaningfulShared.length<2)return 0;
   const title=titleSimilarity(currentTokens,candidateTokens);
-  if(title<0.42)return 0;
-  let s=title*0.68;
-  s+=sameLocation(currentLocation,candidate.location)*0.14;
-  if(current.condition&&candidate.item.condition)s+=current.condition===candidate.item.condition?0.10:-0.06;
-  if(current.is_company!==undefined&&candidate.item.is_company!==undefined)s+=current.is_company===candidate.item.is_company?0.04:-0.02;
-  if(currentNums.length&&candidateNums.length)s+=0.04;
+  if(title<0.50)return 0;
+  let s=title*0.58;
+  s+=sameLocation(currentLocation,candidate.location)*0.10;
+  if(current.condition&&candidate.item.condition)s+=current.condition===candidate.item.condition?0.10:-0.10;
+  if(current.is_company!==undefined&&candidate.item.is_company!==undefined)s+=current.is_company===candidate.item.is_company?0.04:-0.03;
+  if(currentNums.length&&candidateNums.length)s+=0.08;
   return Math.max(0,Math.min(1,s));
 }
 function percentile(values:number[],p:number){if(!values.length)return null;const a=[...values].sort((x,y)=>x-y);const pos=(a.length-1)*p,lo=Math.floor(pos),hi=Math.ceil(pos);return a[lo]+(a[hi]-a[lo])*(pos-lo);}
@@ -60,17 +64,17 @@ export function getComparableMarketSignal(current:Ad,history:Ad[],minimumSampleS
     .filter(x=>x.s>=0.48)
     .sort((a,b)=>b.s-a.s);
   if(ranked.length<minimumSampleSize)return {...empty,comparable_count:ranked.length};
-  const selected=ranked.slice(0,40);
+  const selected=ranked.slice(0,50);
   const rawValues=selected.map(x=>x.p.amount).filter(Number.isFinite);
   if(rawValues.length<minimumSampleSize)return {...empty,comparable_count:ranked.length};
   const values=robustValues(rawValues);
   if(values.length<minimumSampleSize)return {...empty,comparable_count:ranked.length};
   const median=percentile(values,.5)!; const low=percentile(values,.25)!; const high=percentile(values,.75)!;
   const percent=Number((((cp.amount-median)/median)*100).toFixed(1));
-  const confidence=values.length>=25&&ranked[0].s>=0.65?'high':values.length>=12?'medium':'low';
-  const status=confidence==='low'?null:(percent<=-15?'below_market':percent>=15?'above_market':'market');
   const avgScore=selected.reduce((sum,x)=>sum+x.s,0)/selected.length;
   const spread=median>0?Math.min(1,(high-low)/median):1;
-  const quality=Math.round(Math.min(100,values.length*1.7+avgScore*45-spread*18));
+  const confidence=values.length>=25&&avgScore>=0.72&&spread<=0.35?'high':values.length>=12&&avgScore>=0.60&&spread<=0.55?'medium':'low';
+  const status=confidence==='low'?null:(percent<=-12?'below_market':percent>=12?'above_market':'market');
+  const quality=Math.round(Math.min(100,values.length*1.6+avgScore*55-spread*24));
   return {market_status:status,market_percent:percent,market_median:Number(median.toFixed(2)),market_low:Number(low.toFixed(2)),market_high:Number(high.toFixed(2)),sell_fast:Number((low*.98).toFixed(2)),sell_normal:Number((median*.97).toFixed(2)),sell_max:Number((high*.97).toFixed(2)),sample_size:values.length,confidence,comparable_count:ranked.length,quality};
 }
