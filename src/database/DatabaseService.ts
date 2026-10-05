@@ -45,6 +45,28 @@ export class DatabaseService {
   async getLinkForUser(linkId:number,userId:number):Promise<Link|null>{const r=await this.pool.query<Link>('SELECT * FROM links WHERE id=$1 AND user_id=$2',[linkId,userId]);return r.rows[0]||null;}
   async deleteLink(linkId:number,userId?:number):Promise<boolean>{const query=userId==null?'DELETE FROM links WHERE id=$1':'DELETE FROM links WHERE id=$1 AND user_id=$2';const params=userId==null?[linkId]:[linkId,userId];const r=await this.pool.query(query,params);return(r.rowCount||0)>0;}
   async setLinkActive(linkId:number,userId:number,isActive:boolean):Promise<boolean>{const r=await this.pool.query('UPDATE links SET is_active=$1,error_count=CASE WHEN $1 THEN 0 ELSE error_count END WHERE id=$2 AND user_id=$3 AND ($1=false OR (SELECT COUNT(*) FROM links AS active_links WHERE active_links.user_id=$3 AND active_links.is_active=true AND active_links.id<>$2)<50)',[isActive,linkId,userId]);return(r.rowCount||0)>0;}
+  async claimDueLinks(limit=100,leaseMs=30000):Promise<Link[]>{
+    const safeLimit=Math.min(Math.max(Math.floor(limit),1),500);
+    const safeLease=Math.min(Math.max(Math.floor(leaseMs),5000),300000);
+    const r=await this.pool.query<Link>(
+      `WITH candidates AS (
+        SELECT id FROM links
+        WHERE is_active=true
+          AND (next_check_at IS NULL OR next_check_at<=CURRENT_TIMESTAMP)
+          AND (lease_until IS NULL OR lease_until<CURRENT_TIMESTAMP)
+        ORDER BY COALESCE(next_check_at,CURRENT_TIMESTAMP),priority DESC,id
+        LIMIT $1
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE links l
+      SET lease_until=CURRENT_TIMESTAMP+($2::int*INTERVAL '1 millisecond')
+      FROM candidates c
+      WHERE l.id=c.id
+      RETURNING l.*`,
+      [safeLimit,safeLease],
+    );
+    return r.rows;
+  }
   async getActiveLinks():Promise<Link[]>{const r=await this.pool.query<Link>('SELECT * FROM links WHERE is_active=true AND (next_check_at IS NULL OR next_check_at<=CURRENT_TIMESTAMP) ORDER BY COALESCE(next_check_at,CURRENT_TIMESTAMP),priority DESC,id',[]);return r.rows;}
   async scheduleNextChecks(items:Array<{linkId:number;delayMs:number}>):Promise<void>{if(!items.length)return;const unique=new Map<number,number>();for(const item of items){if(!Number.isSafeInteger(item.linkId)||item.linkId<=0)continue;unique.set(item.linkId,Math.min(Math.max(Math.floor(item.delayMs),250),300000));}if(!unique.size)return;const ids=[...unique.keys()];const delays=[...unique.values()];await this.pool.query('UPDATE links l SET next_check_at=CURRENT_TIMESTAMP+(v.delay_ms::int * INTERVAL \'1 millisecond\') FROM unnest($1::int[],$2::int[]) AS v(id,delay_ms) WHERE l.id=v.id AND l.is_active=true',[ids,delays]);}
   async incrementErrorCount(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET error_count=error_count+1 WHERE id=$1',[linkId]);}
