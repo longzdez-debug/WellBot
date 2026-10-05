@@ -139,7 +139,7 @@ describe('ParserScheduler', () => {
     };
     parser.parseUrl.mockResolvedValue([deal, ordinary]);
     const db = makeDb([link]);
-    db.getRecentMarketAds.mockResolvedValue(marketHistory);
+    db.getGlobalRecentMarketAds.mockResolvedValue(marketHistory);
 
     await new ParserScheduler(db as never, bot as never).runParsing();
 
