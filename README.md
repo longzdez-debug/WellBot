@@ -7,7 +7,7 @@
 - 🟢 Kufar catalog search monitoring
 - 🔵 Onliner search monitoring
 - 🚗 Av.by search monitoring
-- ⚡ Default polling interval: **0.5 seconds** (minimum 0.25 seconds)
+- ⚡ Default polling interval: **0.25 seconds**
 - 🚀 Concurrent parsing of up to 16 searches by default
 - 🧠 First-run baseline — existing listings are not spammed as "new"
 - 🔁 Duplicate protection per Telegram user
@@ -22,6 +22,10 @@
 - 🤖 GitHub Actions build, test and Docker validation
 
 > The 0.5-second value is the scheduler target between cycles. Actual detection latency also depends on source visibility, parser/network latency and Telegram delivery. WellBOT does not claim an exact end-to-end latency guarantee.
+
+## Production target
+
+Production runs on **DEPLEXO**. The repository is designed so the same Docker Compose stack can be rebuilt and restarted there without changing application code.
 
 ## Stack
 
@@ -51,7 +55,7 @@ Before running the script, set at minimum:
 TELEGRAM_BOT_TOKEN=your_bot_token
 DB_PASSWORD=use-a-long-random-password
 WELLBOT_WEBAPP_URL=https://your-domain.example/
-PARSE_INTERVAL_SECONDS=0.5
+PARSE_INTERVAL_SECONDS=0.25
 PARSE_CONCURRENCY=16
 ```
 
@@ -89,7 +93,7 @@ Kufar searches are generated server-side from the verified WellBOT catalog, so u
 
 | Variable | Default | Meaning |
 |---|---:|---|
-| `PARSE_INTERVAL_SECONDS` | `0.5` | Polling interval; values are clamped to 250 ms minimum |
+| `PARSE_INTERVAL_SECONDS` | `0.25` | Polling interval; values are clamped to 100 ms minimum |
 | `PARSE_CONCURRENCY` | `16` | Maximum search URLs parsed in parallel, clamped to 1–20 |
 | `WELLBOT_WEB_PORT` | disabled | Built-in Mini App server port |
 | `WELLBOT_WEBAPP_URL` | empty | Public HTTPS Mini App URL |
@@ -148,7 +152,7 @@ CI runs build, tests and a production Docker build on Node 22.
 src/
 ├── bot/              # Telegram handlers + Mini App bridge
 ├── database/         # PostgreSQL service and schema
-├── parsers/          # Kufar / Onliner / Av.by parsers
+├── parsers/          # Kufar realtime source racing / Onliner / Av.by parsers
 ├── scheduler/        # concurrent polling, dedup, notifications
 ├── services/         # Telegram sender, WebApp server, presentation
 ├── types/            # shared domain types
