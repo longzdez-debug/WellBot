@@ -28,6 +28,7 @@ export class DatabaseService {
       throw error;
     }finally{client.release();}
   }
+  getPoolStats():{total:number;idle:number;waiting:number}{return{total:this.pool.totalCount,idle:this.pool.idleCount,waiting:this.pool.waitingCount};}
   async healthCheck():Promise<{ok:boolean;latencyMs:number}>{
     const started=Date.now();
     try{await this.pool.query('SELECT 1');return{ok:true,latencyMs:Date.now()-started};}
