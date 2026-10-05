@@ -170,6 +170,23 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
         const user = await db.getUser(auth.user.id);
         if (!user) { logger.warn('WellBOT API user not registered', { telegramId: auth.user.id, requestPath }); json(res, 403, { error: 'user_not_registered' }); return; }
 
+        if (requestPath === '/api/pro' && req.method === 'GET') {
+          const subscription=await db.getProSubscription(auth.user.id);
+          const active=subscription?.status==='active'&&subscription.expiresAt.getTime()>Date.now();
+          json(res,200,{tier:active?'pro':'free',active,subscription:subscription?{tier:subscription.tier,status:active?'active':subscription.status,expiresAt:subscription.expiresAt.toISOString(),starsAmount:subscription.starsAmount}:null,priceStars:Number(process.env.WELLBOT_PRO_PRICE_STARS||'199')});
+          return;
+        }
+        if (requestPath === '/api/pro/invoice' && req.method === 'POST') {
+          const priceStars=Math.min(10000,Math.max(1,Math.floor(Number(process.env.WELLBOT_PRO_PRICE_STARS||'199'))));
+          const current=await db.getProSubscription(auth.user.id);
+          if(current?.status==='active'&&current.expiresAt.getTime()>Date.now()){json(res,409,{error:'pro_already_active',message:'WellBOT PRO уже активен.'});return;}
+          const payload='wellbot_pro_monthly_v1:'+auth.user.id+':'+Date.now();
+          const telegramResponse=await fetch('https://api.telegram.org/bot'+encodeURIComponent(botToken)+'/sendInvoice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:auth.user.id,title:'WellBOT PRO',description:'Умный Deal Score, расширенная аналитика рынка, быстрые находки и PRO-возможности.',payload,currency:'XTR',prices:[{label:'WellBOT PRO — 30 дней',amount:priceStars}],subscription_period:2592000,terms_url:process.env.WELLBOT_TERMS_URL||undefined})});
+          const telegramResult=await telegramResponse.json() as {ok?:boolean;result?:{message_id:number};description?:string};
+          if(!telegramResponse.ok||!telegramResult.ok){logger.error('Telegram PRO invoice failed',{telegramId:auth.user.id,status:telegramResponse.status,description:telegramResult.description});json(res,502,{error:'invoice_failed',message:'Telegram не смог создать счёт. Попробуйте ещё раз.'});return;}
+          json(res,200,{ok:true,messageId:telegramResult.result?.message_id||null,priceStars});return;
+        }
+
         if (requestPath === '/api/metrics' && req.method === 'GET') { json(res, 200, metricsProvider ? await metricsProvider() : { scheduler: { running: false }, notifications: {}, generatedAt: new Date().toISOString() }); return; }
 
         if (requestPath === '/api/bootstrap' && req.method === 'GET') {
