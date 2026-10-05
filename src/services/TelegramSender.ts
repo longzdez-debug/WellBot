@@ -1,9 +1,9 @@
-import TelegramBot from 'node-telegram-bot-api';
+import { TelegramBotClient, TelegramInputMediaPhoto, TelegramInlineKeyboardMarkup } from './TelegramBotClient';
 import { FormattedAd } from './AdPresenter';
 import { logger } from '../utils/logger';
 
 export class TelegramSender {
-  private bot: TelegramBot;
+  private bot: TelegramBotClient;
   private readonly lastSendByChat: Map<number, number> = new Map();
   private readonly retryAfterByChat: Map<number, number> = new Map();
   private readonly MIN_CHAT_INTERVAL_MS = 1050;
@@ -14,7 +14,7 @@ export class TelegramSender {
   private readonly MAX_CAPTION_LENGTH = 1024;
   private readonly MAX_RETRIES = 3;
 
-  constructor(bot: TelegramBot) { this.bot = bot; }
+  constructor(bot: TelegramBotClient) { this.bot = bot; }
   private async waitForRateLimit(chatId: number): Promise<void> { let release!: () => void; const previous = this.rateLimitQueue; this.rateLimitQueue = new Promise<void>(resolve => { release = resolve; }); await previous; try { const now = Date.now(); const retryUntil = this.retryAfterByChat.get(chatId) ?? 0; const chatUntil = (this.lastSendByChat.get(chatId) ?? 0) + this.MIN_CHAT_INTERVAL_MS; const globalUntil = this.lastGlobalSendTime + this.GLOBAL_MIN_INTERVAL_MS; const waitUntil = Math.max(now, retryUntil, chatUntil, globalUntil); if (waitUntil > now) await new Promise(resolve => setTimeout(resolve, waitUntil - now)); const sentAt = Date.now(); this.lastSendByChat.set(chatId, sentAt); this.lastGlobalSendTime = sentAt; } finally { release(); } }
   private truncateCaption(text: string): string { if (text.length <= this.MAX_CAPTION_LENGTH) return text; logger.warn('Caption too long, truncating', { originalLength: text.length, maxLength: this.MAX_CAPTION_LENGTH }); return text.slice(0, this.MAX_CAPTION_LENGTH - 1).trimEnd() + '…'; }
   private getStatusCode(error: any): number | undefined { return error?.response?.statusCode; }
@@ -28,7 +28,7 @@ export class TelegramSender {
     const candidate = line.replace(/^\s*🔗\s*/, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').trim();
     try { const parsed = new URL(candidate); if (!['http:', 'https:'].includes(parsed.protocol)) return null; return parsed.toString(); } catch { return null; }
   }
-  private getReplyMarkup(formatted: FormattedAd): TelegramBot.InlineKeyboardMarkup | undefined {
+  private getReplyMarkup(formatted: FormattedAd): TelegramInlineKeyboardMarkup | undefined {
     const url = this.getButtonUrl(formatted);
     if (!url) return undefined;
     return { inline_keyboard: [[{ text: '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', url }]] };
@@ -50,7 +50,7 @@ export class TelegramSender {
           return;
         }
       }
-      const inputMedia: TelegramBot.InputMediaPhoto[] = mediaToSend.map((url, index) => ({ type: 'photo', media: url, caption: index === 0 ? caption : undefined, parse_mode: index === 0 ? 'HTML' : undefined }));
+      const inputMedia: TelegramInputMediaPhoto[] = mediaToSend.map((url, index) => ({ type: 'photo', media: url, caption: index === 0 ? caption : undefined, parse_mode: index === 0 ? 'HTML' : undefined }));
       try {
         await this.bot.sendMediaGroup(chatId, inputMedia);
         if (replyMarkup) { await this.waitForRateLimit(chatId); await this.bot.sendMessage(chatId, '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', { reply_markup: replyMarkup }); }
