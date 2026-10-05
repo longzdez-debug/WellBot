@@ -12,7 +12,8 @@
     "check:schema": "node scripts/validate-schema.js",
     "typecheck": "tsc --noEmit",
     "verify": "npm run build && npm run typecheck && npm test -- --runInBand",
-    "check:db": "node scripts/check-postgres.js"
+    "check:db": "node scripts/check-postgres.js",
+    "check:ops": "sh scripts/check-operations.sh"
   },
   "keywords": [
     "telegram",
