@@ -17,8 +17,8 @@ export class DatabaseService {
   async initialize():Promise<void>{
     const client=await this.pool.connect();
     try{
-      await client.query('SELECT pg_advisory_xact_lock($1)',[738421]);
       await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock($1)',[738421]);
       await client.query(readFileSync(join(__dirname,'schema.sql'),'utf-8'));
       await client.query('COMMIT');
       logger.info('Database schema initialized');
