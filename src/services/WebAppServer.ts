@@ -218,7 +218,7 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
             db.getDashboardStats(user.id), db.getUserAdsCount(user.id),
           ]);
           logger.info('WellBOT bootstrap', { telegramId: auth.user.id, dbUserId: user.id, links: links.length, activeLinksFromLinks: links.filter(link => link.is_active).length, inactiveLinksFromLinks: links.filter(link => !link.is_active).length, ads: ads.length, priceDrops: priceDrops.length, totalLinks: stats.totalLinks, activeLinks: stats.activeLinks });
-          json(res, 200, { user: { id: user.id, telegramId: user.telegram_id, username: user.username }, links, ads, priceDrops, stats, statsByLink, serverTime: new Date().toISOString() });
+          json(res, 200, { user: { id: user.id, telegramId: user.telegram_id, username: user.username }, isAdmin: isAdminTelegramId(auth.user.id), links, ads, priceDrops, stats, statsByLink, serverTime: new Date().toISOString() });
           return;
         }
 
