@@ -31,7 +31,9 @@ async function main() {
 
   // The Docker image and compose stack expose port 8080 for the Mini App.
   // Keep the WebApp enabled by default for Telegram Mini App deployments.
-  const webPort = Number(process.env.WELLBOT_WEB_PORT || 8080);
+  const configuredWebPort = process.env.PORT || process.env.WELLBOT_WEB_PORT || '8080';
+  const webPort = Number(configuredWebPort);
+  logger.info('WellBOT WebApp configuration', { configuredWebPort, webPort });
   const webServer = webPort > 0 && webPort < 65536
     ? startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined, () => scheduler.getMetrics())
     : null;
