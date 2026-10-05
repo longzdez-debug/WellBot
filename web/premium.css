@@ -261,3 +261,34 @@ body{letter-spacing:-.01em}
 @media(prefers-reduced-motion:reduce){
   .listing:hover{transform:none}
 }
+
+/* Mobile Mini App readability pass */
+@media (max-width: 760px){
+  body{font-size:16px}
+  main{padding:18px 14px 88px}
+  .topbar{height:64px;padding:0 14px}
+  .search-box{height:42px;width:min(100%,320px)}
+  .search-box input{font-size:15px}
+  .search-box kbd{display:none}
+  .section-switcher{gap:6px;margin-bottom:14px}
+  .section-switch{min-height:62px;padding:9px 10px}
+  .section-switch b{font-size:13px}
+  .section-switch small{font-size:10px}
+  .section-switch>span{width:30px;height:30px;font-size:17px}
+  .hero{min-height:230px;padding:24px 20px;border-radius:14px}
+  .hero-label{font-size:11px}
+  .hero h1{font-size:32px;line-height:1.05}
+  .hero p{font-size:15px;line-height:1.5}
+  .primary-hero{height:46px;font-size:14px;padding:0 18px}
+  .dashboard-grid{grid-template-columns:1fr}
+  .right-rail{grid-template-columns:1fr}
+  .card-title,.panel-title{font-size:17px!important}
+  .card-subtitle,.muted,.meta,.metadata,.small-text{font-size:13px!important}
+  .price,.deal-price,.hot-price{font-size:22px!important}
+  .hot-info>strong{font-size:17px!important}
+  .hot-info>span,.hot-meta{font-size:13px!important}
+  .hot-action,.hot-actions button,.hot-actions a{min-height:44px;font-size:14px!important}
+  button{min-height:42px}
+  input,select{font-size:16px}
+  .nav-item{height:46px;font-size:14px}
+}
