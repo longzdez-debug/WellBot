@@ -21,26 +21,33 @@ const DATABASE_URL = requiredEnv('DATABASE_URL');
 
 async function main() {
   logger.info('Starting WellBOT...', { version: '2.0.2', miniAppApi: 'telegram-init-data' });
+  // Start the HTTP listener before database initialization. DEPLEXO performs
+  // its readiness probe immediately after the container starts; database
+  // connection/migration work must never prevent port 8080 from accepting
+  // /healthz during startup.
   const db = new DatabaseService(DATABASE_URL);
+  const configuredWebPort = process.env.WELLBOT_WEB_PORT || '8080';
+  const webPort = Number(configuredWebPort);
+  logger.info('WellBOT WebApp configuration', {
+    configuredWebPort,
+    webPort,
+    host: '0.0.0.0',
+    platformPort: process.env.PORT || null,
+  });
+  if (!Number.isInteger(webPort) || webPort <= 0 || webPort >= 65536) {
+    throw new Error('WELLBOT_WEB_PORT must be a valid TCP port');
+  }
+
+  // The server is intentionally created before DB initialization. /healthz is
+  // dependency-free and must remain available even while PostgreSQL is starting.
+  const webServer = startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined, () => scheduler.getMetrics());
+
   await db.initialize();
   logger.info('Database initialized');
 
   const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
   const scheduler = new ParserScheduler(db, bot);
   installWebAppBridge(bot);
-
-  // The Docker image and compose stack expose port 8080 for the Mini App.
-  // Keep the WebApp enabled by default for Telegram Mini App deployments.
-  // DEPLEXO's declared service port is 8080. Prefer the explicit WellBOT port
-  // so a platform-injected PORT cannot silently move the HTTP listener away
-  // from the port advertised in deplexo.yaml.
-  const configuredWebPort = process.env.WELLBOT_WEB_PORT || process.env.PORT || '8080';
-  const webPort = Number(configuredWebPort);
-  logger.info('WellBOT WebApp configuration', { configuredWebPort, webPort });
-  const webServer = webPort > 0 && webPort < 65536
-    ? startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined, () => scheduler.getMetrics())
-    : null;
-  if (!webServer) logger.error('WellBOT WebApp server disabled; WELLBOT_WEB_PORT must be a valid TCP port');
 
   scheduler.start();
 
