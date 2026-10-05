@@ -58,6 +58,9 @@ CREATE TABLE IF NOT EXISTS ads (
   address TEXT,
   published_at TIMESTAMP,
   detected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  first_seen_source VARCHAR(32),
+  first_seen_rank INTEGER,
   updated_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT ads_external_id_link_id_unique UNIQUE (external_id, link_id)
@@ -70,6 +73,10 @@ CREATE INDEX IF NOT EXISTS idx_ads_link_created_at ON ads(link_id, created_at DE
 -- Parser hot-path indexes: existing-ad lookup and latest-price lookup are keyed by link first.
 CREATE INDEX IF NOT EXISTS idx_ads_link_external_updated ON ads(link_id, external_id, updated_at DESC NULLS LAST, id DESC);
 ALTER TABLE ads ADD COLUMN IF NOT EXISTS detected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE ads ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE ads ADD COLUMN IF NOT EXISTS first_seen_source VARCHAR(32);
+ALTER TABLE ads ADD COLUMN IF NOT EXISTS first_seen_rank INTEGER;
+CREATE INDEX IF NOT EXISTS idx_ads_first_seen ON ads(link_id, first_seen_at DESC, id DESC);
 
 CREATE INDEX IF NOT EXISTS idx_ads_link_published_created ON ads(link_id, published_at DESC NULLS LAST, created_at DESC, id DESC);
 
