@@ -101,7 +101,7 @@ export class ParserScheduler {
       if(skipSlots>0) logger.debug('Skipping listing slots for monitor',{linkId:link.id,skipSlots,availableSlots:normalizedRaw.length});
       const externalIds=scannedRaw.map(ad=>ad.external_id);
       const state=await this.db.getExistingAdStatesForLink(link.id,externalIds);
-      const marketAds=await this.db.getRecentMarketAds(link.id,250);
+      const marketAds=await this.db.getGlobalRecentMarketAds(2000);
       const marketCandidates=scannedRaw.map(ad=>{
         const last=state.prices.get(ad.external_id); const newPrice=parseMarketPrice(ad.price); const oldPrice=last?parseMarketPrice(last.price):null;
         const unchanged=Boolean(last&&newPrice&&oldPrice&&newPrice.currency===oldPrice.currency&&newPrice.amount===oldPrice.amount);
