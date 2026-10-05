@@ -8,16 +8,38 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: wellbot_ci
+          POSTGRES_USER: bot_user
+          POSTGRES_PASSWORD: ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U bot_user -d wellbot_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run build
       - run: npm test -- --runInBand
+      - name: Validate production operations tooling
+        run: npm run check:ops
+      - name: PostgreSQL schema integration
+        env:
+          DATABASE_URL: postgresql://bot_user:ci_password@localhost:5432/wellbot_ci
+        run: npm run check:db
       - name: Validate Dockerfile
         run: docker build --check .
       - name: Build production Docker image

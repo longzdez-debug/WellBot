@@ -55,7 +55,7 @@ describe('ParserScheduler', () => {
         claimed.forEach(id => userSeen.add(id));
         return new Set(claimed);
       }),
-      getLink: jest.fn().mockResolvedValue(null),
+      getLink: jest.fn().mockImplementation(async (id: number) => linkList.find(link => link.id === id) ?? null),
       incrementErrorCount: jest.fn().mockResolvedValue(undefined),
       createPriceDropRecord: jest.fn().mockResolvedValue(true),
       updateAdPrice: jest.fn().mockResolvedValue(undefined),

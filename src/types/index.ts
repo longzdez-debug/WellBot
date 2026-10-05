@@ -5,7 +5,7 @@ export interface User {
 export interface Link {
   id: number; user_id: number; url: string; platform: Platform;
   config?: Record<string, unknown> | null; source_key?: string | null; next_check_at?: Date | null;
-  is_active: boolean; error_count: number; last_parsed_at: Date | null; created_at: Date;
+  is_active: boolean; error_count: number; last_parsed_at: Date | null; lease_until?: Date | null; created_at: Date;
 }
 export interface Ad {
   id?: number; link_id?: number; external_id: string; title: string; description?: string | null;

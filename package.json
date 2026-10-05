@@ -1,14 +1,19 @@
 {
   "name": "wellbot",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "Telegram bot for tracking ads on Kufar.by, Onliner.by, Av.by",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "test": "node --check web/app.js && npm run check:web-ui && jest",
-    "check:web-ui": "node scripts/validate-web-ui.js"
+    "test": "node --check web/app.js && npm run check:web-ui && npm run check:schema && jest",
+    "check:web-ui": "node scripts/validate-web-ui.js",
+    "check:schema": "node scripts/validate-schema.js",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run build && npm run typecheck && npm test -- --runInBand",
+    "check:db": "node scripts/check-postgres.js",
+    "check:ops": "sh scripts/check-operations.sh"
   },
   "keywords": [
     "telegram",
@@ -24,17 +29,18 @@
     "axios": "^1.20.0",
     "cheerio": "^1.0.0",
     "dotenv": "^16.4.7",
-    "node-telegram-bot-api": "^0.66.0",
     "pg": "^8.13.1"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^22.10.2",
-    "@types/node-telegram-bot-api": "^0.64.7",
     "@types/pg": "^8.11.10",
     "jest": "^30.2.0",
     "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

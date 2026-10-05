@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual, randomUUID } from 'node:crypto';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -7,8 +7,13 @@ import { logger } from '../utils/logger';
 import { KUFAR_CATALOG, MonitorConfig, buildKufarSearchUrl, findCatalogNode, findCatalogCategory } from '../catalog/KufarCatalog';
 import { MARKETPLACE_CATALOGS, MARKETPLACES, MarketplaceSource, buildMarketplaceSearchUrl, findMarketplaceNode, findMarketplaceCategory } from '../catalog/MarketplaceCatalog';
 import { KUFAR_PHONE_BRANDS, KUFAR_PHONE_FILTERS, isKufarPhoneCategory } from '../catalog/KufarPhoneCatalog';
+import { observability } from './Observability';
 
-const isCatalogDescendant=(id:string,root:{children?:Array<{id:string;children?:any[]}>}):boolean=>{const walk=(nodes:any[]):boolean=>nodes.some(n=>n.id===id||(n.children&&walk(n.children)));return walk(root.children||[])};
+interface CatalogTreeNode { id:string; children?:CatalogTreeNode[]; }
+const isCatalogDescendant=(id:string,root:{children?:CatalogTreeNode[]}):boolean=>{
+  const walk=(nodes:CatalogTreeNode[]):boolean=>nodes.some(node=>node.id===id||(node.children?walk(node.children):false));
+  return walk(root.children||[]);
+};
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -21,6 +26,23 @@ const MAX_LINKS = 50;
 const AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
 const PHONE_MODEL_CACHE=new Map<string,{expires:number;models:{id:string;title:string;slug:string}[]}>();
 const PHONE_MODEL_TTL=30*60*1000;
+const API_RATE_LIMIT = Math.max(20, Math.min(600, Number(process.env.WELLBOT_API_RATE_LIMIT || 120)));
+const API_RATE_WINDOW_MS = 60_000;
+const apiRateBuckets = new Map<string, { started: number; count: number }>();
+const MAX_RATE_BUCKETS = 10_000;
+function clientKey(req: IncomingMessage): string { return req.socket.remoteAddress || 'unknown'; }
+function rateLimited(req: IncomingMessage): boolean {
+  const key=clientKey(req); const now=Date.now(); const current=apiRateBuckets.get(key);
+  if (apiRateBuckets.size > MAX_RATE_BUCKETS) for (const [bucketKey,bucket] of apiRateBuckets) if (now-bucket.started>=API_RATE_WINDOW_MS) apiRateBuckets.delete(bucketKey);
+  if(!current || now-current.started>=API_RATE_WINDOW_MS){apiRateBuckets.set(key,{started:now,count:1});return false;}
+  current.count+=1; return current.count>API_RATE_LIMIT;
+}
+function allowedOrigin(req: IncomingMessage): boolean {
+  const origin=req.headers.origin;
+  if(!origin) return true;
+  const allowed=(process.env.WELLBOT_ALLOWED_ORIGINS||'').split(',').map(x=>x.trim()).filter(Boolean);
+  return allowed.length===0 || allowed.includes(origin);
+}
 
 async function getKufarPhoneModels(brand:string){
   const key=brand.toLowerCase();
@@ -46,6 +68,14 @@ async function getKufarPhoneModels(brand:string){
 
 type AuthUser = { id: number; username?: string; first_name?: string; last_name?: string };
 type TelegramInitData = { user: AuthUser; authDate: number };
+function isAuthUser(value: unknown): value is AuthUser {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const user=value as Record<string,unknown>;
+  return Number.isSafeInteger(user.id) && Number(user.id)>0
+    && (user.username===undefined || typeof user.username==='string')
+    && (user.first_name===undefined || typeof user.first_name==='string')
+    && (user.last_name===undefined || typeof user.last_name==='string');
+}
 
 export function parseTelegramInitData(raw: string, botToken: string, nowSeconds = Math.floor(Date.now() / 1000)): TelegramInitData | null {
   if (!raw || !botToken || raw.length > MAX_INIT_DATA) return null;
@@ -59,13 +89,13 @@ export function parseTelegramInitData(raw: string, botToken: string, nowSeconds 
     const age = nowSeconds - authDate;
     if (age < -300 || age > AUTH_MAX_AGE_SECONDS) return null;
     const dataCheckString = [...params.entries()].filter(([key]) => key !== 'hash').sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${key}=${value}`).join('\n');
-    const secret = createHmac('sha256', 'WebAppData').update(botToken).digest();
+    const secret = createHmac('sha256', botToken).update('WebAppData').digest();
     const expected = createHmac('sha256', secret).update(dataCheckString).digest('hex');
     const actual = Buffer.from(hash, 'hex');
     const expectedBuffer = Buffer.from(expected, 'hex');
     if (actual.length !== expectedBuffer.length || !timingSafeEqual(actual, expectedBuffer)) return null;
-    const user = JSON.parse(userRaw) as AuthUser;
-    if (!Number.isSafeInteger(user.id) || user.id <= 0) return null;
+    const user: unknown = JSON.parse(userRaw);
+    if (!isAuthUser(user)) return null;
     return { user, authDate };
   } catch { return null; }
 }
@@ -75,6 +105,7 @@ function applySecurityHeaders(res: ServerResponse): void {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 }
 
 function json(res: ServerResponse, status: number, payload: unknown): void {
@@ -102,13 +133,47 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 export function startWebAppServer(port: number, db: DatabaseService, botToken: string, webRoot = join(process.cwd(), 'web'), metricsProvider?: () => unknown | Promise<unknown>): { close: () => Promise<void> } {
   const server = createServer(async (req, res) => {
     let requestPath = '';
+    let requestId = '';
+    let traceId = '';
     try {
       const requestUrl = new URL(req.url || '/', 'http://localhost');
       requestPath = decodeURIComponent(requestUrl.pathname);
+      requestId=typeof req.headers['x-request-id']==='string'&&/^[A-Za-z0-9._:-]{1,100}$/.test(req.headers['x-request-id']) ? req.headers['x-request-id'] : randomUUID();
+      traceId=observability.traceId();
+      res.setHeader('X-Request-Id',requestId);
+      res.setHeader('X-Trace-Id',traceId);
+      observability.inc('http_requests_total');
+      if (requestPath.startsWith('/api/') && !allowedOrigin(req)) { observability.inc('http_origin_rejected_total'); json(res,403,{error:'origin_not_allowed',requestId,traceId}); return; }
+      if (requestPath.startsWith('/api/') && rateLimited(req)) { observability.inc('http_rate_limited_total'); res.setHeader('Retry-After','60'); json(res,429,{error:'rate_limited',requestId,traceId}); return; }
+
+      if (requestPath === '/metrics') {
+        if (req.method !== 'GET') { res.setHeader('Allow','GET'); json(res,405,{error:'method_not_allowed'}); return; }
+        const schedulerMetrics: unknown = metricsProvider ? await metricsProvider() : {};
+        const metrics = schedulerMetrics && typeof schedulerMetrics === 'object' ? schedulerMetrics as Record<string, unknown> : {};
+        const scheduler = metrics.scheduler && typeof metrics.scheduler === 'object' ? metrics.scheduler as Record<string, unknown> : {};
+        const notifications = metrics.notifications && typeof metrics.notifications === 'object' ? metrics.notifications as Record<string, unknown> : {};
+        const freshness = scheduler.freshnessLagMs && typeof scheduler.freshnessLagMs === 'object' ? scheduler.freshnessLagMs as Record<string, unknown> : {};
+        const cycleDuration = scheduler.cycleDurationMs && typeof scheduler.cycleDurationMs === 'object' ? scheduler.cycleDurationMs as Record<string, unknown> : {};
+        const notificationLatency = notifications.latencyMs && typeof notifications.latencyMs === 'object' ? notifications.latencyMs as Record<string, unknown> : {};
+        const db = metrics.db && typeof metrics.db === 'object' ? metrics.db as Record<string, unknown> : {};
+        applySecurityHeaders(res); res.statusCode=200; res.setHeader('Content-Type','text/plain; version=0.0.4; charset=utf-8'); res.setHeader('Cache-Control','no-store');
+        res.end(observability.prometheus({
+          scheduler_running: scheduler.running ? 1 : 0,
+          scheduler_cycles_total: Number(scheduler.cycles||0), scheduler_failures_total:Number(scheduler.failures||0),
+          scheduler_cycle_overruns_total:Number(scheduler.cycleOverruns||0), scheduler_link_failures_total:Number(scheduler.linkFailures||0),
+          scheduler_links_parsed_total:Number(scheduler.linksParsed||0), scheduler_active_links:Number(scheduler.activeLinks||0),
+          scheduler_oldest_link_age_ms:Number(freshness.oldest||0), scheduler_cycle_p95_ms:Number(cycleDuration.p95||0),
+          notification_pending:Number(notifications.pending||0), notification_oldest_age_ms:Number(notifications.oldestAgeMs||0),
+          notification_sent_total:Number(notifications.sent||0), notification_failed_total:Number(notifications.failed||0),
+          notification_p95_latency_ms:Number(notificationLatency.p95||0),
+          db_pool_total:Number(db.total||0), db_pool_idle:Number(db.idle||0), db_pool_waiting:Number(db.waiting||0),
+        })); return;
+      }
 
       if (requestPath === '/health' || requestPath === '/healthz') {
         if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); json(res, 405, { error: 'method_not_allowed' }); return; }
-        json(res, 200, { status: 'ok', service: 'wellbot-web' }); return;
+        const dbHealth=await db.healthCheck();
+        json(res, dbHealth.ok?200:503, { status: dbHealth.ok?'ok':'degraded', service: 'wellbot-web', database: dbHealth, requestId }); return;
       }
 
       if (requestPath.startsWith('/api/')) {
@@ -119,9 +184,9 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
         }
         const initData = req.headers['x-telegram-init-data'];
         const auth = parseTelegramInitData(typeof initData === 'string' ? initData : '', botToken);
-        if (!auth) { logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method }); json(res, 401, { error: 'unauthorized' }); return; }
+        if (!auth) { observability.inc('api_unauthorized_total'); logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method, requestId, traceId }); json(res, 401, { error: 'unauthorized', requestId, traceId }); return; }
         const user = await db.getUser(auth.user.id);
-        if (!user) { logger.warn('WellBOT API user not registered', { telegramId: auth.user.id, requestPath }); json(res, 403, { error: 'user_not_registered' }); return; }
+        if (!user) { logger.warn('WellBOT API user not registered', { telegramId: auth.user.id, requestPath, requestId }); json(res, 403, { error: 'user_not_registered', requestId, traceId }); return; }
 
         if (requestPath === '/api/metrics' && req.method === 'GET') { json(res, 200, metricsProvider ? await metricsProvider() : { scheduler: { running: false }, notifications: {}, generatedAt: new Date().toISOString() }); return; }
 
@@ -200,6 +265,17 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
           return;
         }
 
+        const adDismissMatch = requestPath.match(/^\/api\/ads\/(\d+)\/dismiss$/);
+        if (adDismissMatch && req.method === 'POST') {
+          const adId = Number(adDismissMatch[1]);
+          if (!Number.isSafeInteger(adId) || adId <= 0) { json(res, 400, { error: 'invalid_ad_id' }); return; }
+          const ok = await db.dismissAdForUser(adId, user.id);
+          if (!ok) { json(res, 404, { error: 'not_found' }); return; }
+          logger.info('WellBOT ad dismissed', { telegramId: auth.user.id, dbUserId: user.id, adId });
+          json(res, 200, { ok: true });
+          return;
+        }
+
         const linkMatch = requestPath.match(/^\/api\/links\/(\d+)$/);
         if (linkMatch && req.method === 'PATCH') {
           let body: Record<string, unknown>;
@@ -238,7 +314,7 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       if (message === 'body_too_large') { json(res, 413, { error: 'body_too_large' }); return; }
-      if (requestPath.startsWith('/api/')) { logger.error('WellBOT API request failed', { requestPath, error: message }); json(res, 500, { error: 'internal_error' }); return; }
+      if (requestPath.startsWith('/api/')) { observability.inc('api_errors_total'); logger.error('WellBOT API request failed', { requestPath, error: message, requestId, traceId }); json(res, 500, { error: 'internal_error', requestId, traceId }); return; }
       res.statusCode = 404;
       applySecurityHeaders(res);
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');

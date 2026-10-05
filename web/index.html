@@ -10,7 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./premium.css?v=20261004-12">
+<link rel="stylesheet" href="./mobile-shell.css?v=20261005-01">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="./app.js?v=2026.10.04.24" defer></script>
 </head>
 <body>
 <div class="app-shell">
@@ -93,9 +95,16 @@
 
 
 
-          <section class="section" id="drops-section">
-            <div class="section-head"><div><span class="label">PRICE ALERTS</span><h2>Цена упала</h2></div></div>
-            <div id="drops"><div class="empty">Снижений пока нет.</div></div>
+          <section class="section analytics-section" id="analytics-section">
+            <div class="section-head">
+              <div><span class="label">ANALYTICS</span><h2>Аналитика</h2><p>Что происходит с мониторингом и рынком сегодня</p></div>
+              <button class="link-btn" data-action="refresh">Обновить →</button>
+            </div>
+            <div id="analytics"><div class="empty">Загружаю аналитику…</div></div>
+            <div class="analytics-drops">
+              <div class="section-head compact-head"><div><span class="label">PRICE ALERTS</span><h3>Цена упала</h3></div></div>
+              <div id="drops"><div class="empty">Снижений пока нет.</div></div>
+            </div>
           </section>
         </div>
 
@@ -124,6 +133,47 @@
     </main>
   </div>
 </div>
-<script src="./app.js?v=20261004-26" defer></script>
+
+  <button class="mobile-fab" type="button" data-action="add" aria-label="Создать новый монитор"><span>＋</span></button>
+  <nav class="mobile-tabbar" aria-label="Основная навигация">
+    <button class="mobile-tab active" type="button" data-mobile-tab="objects" aria-current="page">
+      <span class="mobile-tab-icon">▱</span><span>Объявления</span>
+    </button>
+    <button class="mobile-tab" type="button" data-mobile-tab="monitoring">
+      <span class="mobile-tab-icon">◫</span><span>Мониторинг</span>
+    </button>
+    <button class="mobile-tab" type="button" data-mobile-tab="analytics">
+      <span class="mobile-tab-icon">◒</span><span>Аналитика</span>
+    </button>
+  </nav>
+
+<script>
+(()=>{
+  const tabs=[...document.querySelectorAll('.mobile-tab')];
+  const setTab=(tab,persist=true)=>{
+    const allowed=['objects','monitoring','analytics'];
+    if(!allowed.includes(tab))tab='objects';
+    document.body.classList.remove('mobile-tab-objects','mobile-tab-monitoring','mobile-tab-analytics');
+    document.body.classList.add('mobile-tab-'+tab);
+    tabs.forEach(btn=>{
+      const active=btn.dataset.mobileTab===tab;
+      btn.classList.toggle('active',active);
+      if(active)btn.setAttribute('aria-current','page');else btn.removeAttribute('aria-current');
+    });
+    if(persist){try{localStorage.setItem('wellbot-mobile-tab',tab)}catch(_){} }
+    window.scrollTo({top:0,behavior:'smooth'});
+  };
+  let initial='objects';
+  try{initial=localStorage.getItem('wellbot-mobile-tab')||initial}catch(_){}
+  setTab(initial,false);
+  document.addEventListener('click',event=>{
+    const button=event.target.closest?.('.mobile-tab');
+    if(!button)return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    setTab(button.dataset.mobileTab);
+  },true);
+})();
+</script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-import axios, { AxiosError, AxiosInstance } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import http from 'node:http';
 import https from 'node:https';
 import { Ad, Platform } from '../types';
@@ -38,13 +38,16 @@ export abstract class BaseParser implements IParser {
 
   private isRetryable(error: unknown): boolean {
     if (!axios.isAxiosError(error)) return true;
-    const axiosError = error as AxiosError;
-    if (!axiosError.response) return true;
-    const status = axiosError.response.status;
+    const status = error.response?.status;
+    if (status == null) return true;
     return status === 408 || status === 425 || status === 429 || status >= 500;
   }
 
-  protected async fetchWithRetry(url: string, retries: number = 1): Promise<string> {
+  protected async fetchWithRetry(url: string, retries: number = 2): Promise<string> {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error(`Unsupported parser URL protocol: ${parsedUrl.protocol}`);
+    }
     const attempts = Math.max(1, Math.floor(retries));
     let lastError: unknown;
 
@@ -57,6 +60,7 @@ export abstract class BaseParser implements IParser {
             'Host': new URL(url).hostname,
           },
         });
+        if (typeof response.data !== 'string') return JSON.stringify(response.data);
         return response.data;
       } catch (error: unknown) {
         lastError = error;
@@ -68,7 +72,9 @@ export abstract class BaseParser implements IParser {
           retryable,
         });
         if (!retryable || i >= attempts - 1) break;
-        await this.sleep(150 * (i + 1));
+        const backoff = Math.min(1500, 200 * 2 ** i);
+        const jitter = Math.floor(Math.random() * 100);
+        await this.sleep(backoff + jitter);
       }
     }
 

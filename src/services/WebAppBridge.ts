@@ -1,5 +1,6 @@
 import axios from 'axios';
-import TelegramBot, { Message } from 'node-telegram-bot-api';
+import { TelegramMessage as Message } from './TelegramBotClient';
+import { TelegramBotClient } from './TelegramBotClient';
 import { BotHandler } from '../bot/BotHandler';
 import { logger } from '../utils/logger';
 
@@ -7,7 +8,7 @@ interface TelegramApiResponse<T> { ok: boolean; result?: T; description?: string
 interface TelegramMenuButton { type: string; text?: string; web_app?: { url: string }; }
 
 export function installWebAppBridge(handler: BotHandler): void {
-  const bot = (handler as unknown as { bot: TelegramBot }).bot;
+  const bot: TelegramBotClient = handler.getTelegramBot();
   if (!bot) { logger.warn('WellBOT WebApp bridge not installed: Telegram bot is unavailable'); return; }
 
   const webAppUrl = (process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || process.env.MINI_APP_URL)?.trim();

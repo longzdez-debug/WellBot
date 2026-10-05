@@ -1,4 +1,4 @@
-import TelegramBot, { Message, CallbackQuery } from 'node-telegram-bot-api';
+import { TelegramBotClient, TelegramMessage as Message, TelegramCallbackQuery as CallbackQuery } from '../services/TelegramBotClient';
 import { DatabaseService } from '../database/DatabaseService';
 import { ParserFactory } from '../parsers/ParserFactory';
 import { RateLimiter } from '../utils/rateLimiter';
@@ -10,13 +10,13 @@ import { logger } from '../utils/logger';
 import { mapError } from '../utils/errorMapper';
 
 export class BotHandler {
-  private bot: TelegramBot;
+  private bot: TelegramBotClient;
   private db: DatabaseService;
   private rateLimiter: RateLimiter;
   private adPresenter: AdPresenter;
   private telegramSender: TelegramSender;
   constructor(token: string, db: DatabaseService) {
-    this.bot = new TelegramBot(token, { polling: true });
+    this.bot = new TelegramBotClient(token, { polling: true });
     this.db = db;
     this.rateLimiter = new RateLimiter(10, 60000);
     this.adPresenter = new AdPresenter();
@@ -25,7 +25,7 @@ export class BotHandler {
   }
 
   private getMainKeyboard() {
-    return { remove_keyboard: true } as TelegramBot.SendMessageOptions['reply_markup'];
+    return { remove_keyboard: true } as unknown;
   }
 
   private setupHandlers(): void {
@@ -118,5 +118,6 @@ export class BotHandler {
 
   async handleStats(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } const links = await this.db.getUserLinks(user.id); const stats = await this.db.getUserAdsCount(user.id); const totalAds = stats.reduce((sum, stat) => sum + stat.count, 0); const statsByLink = stats.map(stat => `  ${stat.linkPlatform.toUpperCase()}: ${stat.count} объявлений`); await this.bot.sendMessage(chatId, `📊 Статистика:\n\n🎯 Поисков: ${links.length}\n📄 Всего объявлений в базе: ${totalAds}\n\n${statsByLink.length ? statsByLink.join('\n') : 'Нет данных'}`, { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to handle /stats', { userId, error: error.message, stack: error.stack }); await this.bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`); } }
 
+  getTelegramBot(): TelegramBotClient { return this.bot; }
   stop(): void { this.bot.stopPolling(); }
 }

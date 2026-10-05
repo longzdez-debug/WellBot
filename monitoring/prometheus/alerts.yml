@@ -1,0 +1,56 @@
+groups:
+  - name: wellbot
+    rules:
+      - alert: WellBOTSchedulerFailures
+        expr: increase(wellbot_scheduler_failures_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: WellBOT scheduler is failing
+          description: Scheduler cycles are failing continuously.
+
+      - alert: WellBOTLinksStale
+        expr: wellbot_scheduler_oldest_link_age_ms > 1800000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: WellBOT monitor data is stale
+          description: The oldest active monitor has not been parsed for more than 30 minutes.
+
+      - alert: WellBOTNotificationBacklog
+        expr: wellbot_notification_oldest_age_ms > 600000
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Telegram notification backlog is stale
+          description: The oldest pending notification is older than 10 minutes.
+
+      - alert: WellBOTDatabasePoolWaiting
+        expr: wellbot_db_pool_waiting > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: WellBOT PostgreSQL pool is saturated
+          description: Requests are waiting for a PostgreSQL connection.
+
+      - alert: WellBOTApiErrors
+        expr: increase(wellbot_api_errors_total[5m]) > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: WellBOT API errors increased
+          description: More than 20 API failures occurred during the alert window.
+
+      - alert: WellBOTRateLimitSpike
+        expr: increase(wellbot_http_rate_limited_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: WellBOT API rate limiting spiked
+          description: A sustained rate-limit spike may indicate abuse or a broken client.

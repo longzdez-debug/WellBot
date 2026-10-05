@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo 'WellBOT Vercel deployment is static-only'",
+  "buildCommand": "echo 'WellBOT Mini App static bundle'",
+  "outputDirectory": "web"
+}

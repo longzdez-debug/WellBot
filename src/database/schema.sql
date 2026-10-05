@@ -30,12 +30,14 @@ ALTER TABLE links ADD COLUMN IF NOT EXISTS config JSONB;
 ALTER TABLE links ADD COLUMN IF NOT EXISTS source_key TEXT;
 ALTER TABLE links ADD COLUMN IF NOT EXISTS next_check_at TIMESTAMP;
 ALTER TABLE links ADD COLUMN IF NOT EXISTS priority SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE links ADD COLUMN IF NOT EXISTS lease_until TIMESTAMP;
 
 CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id);
 CREATE INDEX IF NOT EXISTS idx_links_active ON links(is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_links_next_check ON links(next_check_at) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_links_user_source_key ON links(user_id, source_key) WHERE source_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_links_due_priority ON links(is_active, next_check_at, priority DESC, id);
+CREATE INDEX IF NOT EXISTS idx_links_lease_until ON links(lease_until, id) WHERE is_active = true;
 
 DELETE FROM links a
 USING links b
@@ -115,6 +117,16 @@ ON CONFLICT (user_id, external_id) DO NOTHING;
 
 CREATE INDEX IF NOT EXISTS idx_user_ad_seen_user_first_seen
   ON user_ad_seen(user_id, first_seen_at DESC);
+\nCREATE TABLE IF NOT EXISTS user_ad_dismissed (
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  external_id VARCHAR(255) NOT NULL,
+  dismissed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_ad_dismissed_user_time
+  ON user_ad_dismissed(user_id, dismissed_at DESC);
+
 
 -- Price history tracking.
 CREATE TABLE IF NOT EXISTS price_history (
@@ -200,3 +212,10 @@ WHERE a.id > b.id
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_outbox_dedupe_key
   ON notification_outbox(dedupe_key);
+
+
+ALTER TABLE notification_outbox ADD COLUMN IF NOT EXISTS dead_lettered_at TIMESTAMP;
+ALTER TABLE notification_outbox ADD COLUMN IF NOT EXISTS dead_letter_reason TEXT;
+CREATE INDEX IF NOT EXISTS idx_notification_outbox_dead_letter
+  ON notification_outbox(dead_lettered_at, id)
+  WHERE dead_lettered_at IS NOT NULL;
