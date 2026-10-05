@@ -122,7 +122,7 @@ export class FastKufarParser extends BaseParser {
   async parseUrl(url: string): Promise<Ad[]> {
     const parsed = new URL(url);
     const parts = parsed.pathname.split('/').filter(Boolean);
-    const params: Record<string, string | number> = { size: 100, sort: 'lst.d' };
+    const params: Record<string, string | number> = { size: 50, sort: 'lst.d' };
 
     for (const [key, value] of parsed.searchParams.entries()) {
       if (key !== 'page' && key !== 'cursor' && key !== 'wb' && value) params[key] = value;
@@ -356,9 +356,9 @@ export class FastKufarParser extends BaseParser {
     try {
       // Realtime mode fans out independent Kufar source paths instead of waiting
       // for one backend after another. Their indexing/cache freshness can differ.
-      const isSniper = monitorIdentity[11] === 'sniper';
+      const isSniper = monitorIdentity[13] === 'sniper';
       const sources = params.cat ? [...API_ENDPOINTS] : [];
-      if (isSniper) sources.push('__html__');
+      if (isSniper) { params.size = 30; sources.push('__html__'); }
 
       if (sources.length) {
         const startedAt = Date.now();
