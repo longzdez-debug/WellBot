@@ -101,13 +101,14 @@ export class ParserScheduler {
       if(skipSlots>0) logger.debug('Skipping listing slots for monitor',{linkId:link.id,skipSlots,availableSlots:normalizedRaw.length});
       const externalIds=scannedRaw.map(ad=>ad.external_id);
       const state=await this.db.getExistingAdStatesForLink(link.id,externalIds);
-      const marketAds=typeof (this.db as any).getGlobalRecentMarketAds==='function'?await (this.db as any).getGlobalRecentMarketAds(2000,link.platform):await this.db.getRecentMarketAds(link.id,250);
+      const marketAds=await this.db.getGlobalRecentMarketAds(2000,link.platform);
+      const marketGroup=link.config ? `${link.platform}:${link.config.categoryId}:${link.config.subcategoryId||''}` : null;
       const marketCandidates=scannedRaw.map(ad=>{
         const last=state.prices.get(ad.external_id); const newPrice=parseMarketPrice(ad.price); const oldPrice=last?parseMarketPrice(last.price):null;
         const unchanged=Boolean(last&&newPrice&&oldPrice&&newPrice.currency===oldPrice.currency&&newPrice.amount===oldPrice.amount);
         const cached=state.market.get(ad.external_id);
         if(state.existingIds.has(ad.external_id)&&unchanged&&cached) return {...ad,market_status:cached.status,market_percent:cached.percent,market_median:cached.median,market_low:cached.low,market_high:cached.high,sell_fast:cached.sellFast,sell_normal:cached.sellNormal,sell_max:cached.sellMax,market_sample_size:cached.sampleSize,market_confidence:cached.confidence,market_quality:cached.quality};
-        return this.attachComparableMarket(ad,marketAds);
+        return this.attachComparableMarket({...ad,market_group:marketGroup},marketAds);
       });
       const configured=this.applyMonitorFilters(link,marketCandidates);
       const configuredIds=new Set(configured.map(ad=>ad.external_id));
