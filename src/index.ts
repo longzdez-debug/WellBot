@@ -33,7 +33,7 @@ async function main() {
   // Keep the WebApp enabled by default for Telegram Mini App deployments.
   const webPort = Number(process.env.WELLBOT_WEB_PORT || 8080);
   const webServer = webPort > 0 && webPort < 65536
-    ? startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined, async () => ({ scheduler: (await scheduler.getMetrics()).scheduler, notifications: (await scheduler.getMetrics()).notifications, db: db.getPoolStats() }))
+    ? startWebAppServer(webPort, db, TELEGRAM_BOT_TOKEN, undefined, async () => { const metrics = await scheduler.getMetrics(); return { scheduler: metrics.scheduler, notifications: metrics.notifications, db: db.getPoolStats() }; })
     : null;
   if (!webServer) logger.error('WellBOT WebApp server disabled; WELLBOT_WEB_PORT must be a valid TCP port');
 
