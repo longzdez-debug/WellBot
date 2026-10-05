@@ -20,7 +20,7 @@ const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
 const DATABASE_URL = requiredEnv('DATABASE_URL');
 
 async function main() {
-  logger.info('Starting WellBOT...', { version: '2.0.2', miniAppApi: 'telegram-init-data' });
+  logger.info('Starting WellBOT...', { version: '2.1.0', miniAppApi: 'telegram-init-data' });
   const db = new DatabaseService(DATABASE_URL);
   await db.initialize();
   logger.info('Database initialized');
