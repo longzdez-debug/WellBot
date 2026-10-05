@@ -125,7 +125,7 @@ docker compose logs -f bot
 docker compose logs --tail=200 bot
 
 # health check
-curl -fsS http://127.0.0.1:8080/health
+curl -fsS http://127.0.0.1:3000/health
 
 # restart after configuration changes
 docker compose up -d --build bot
