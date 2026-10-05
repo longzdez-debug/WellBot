@@ -51,8 +51,8 @@ const API_ENDPOINTS = [
   'https://cre-api.kufar.by/ads-search/v1/engine/v1/search/rendered-paginated',
 ];
 
-const REEF_API_URL = String(process.env.KUFAR_REEF_API_URL || 'https://api.reefapi.com/kufar/v1/search').trim();
-const REEF_API_KEY = String(process.env.KUFAR_REEF_API_KEY || '').trim();
+function reefApiUrl(): string { return String(process.env.KUFAR_REEF_API_URL || 'https://api.reefapi.com/kufar/v1/search').trim(); }
+function reefApiKey(): string { return String(process.env.KUFAR_REEF_API_KEY || '').trim(); }
 
 function axiosStatus(error: unknown): number | null {
   const response = (error as any)?.response;
@@ -290,7 +290,8 @@ export class FastKufarParser extends BaseParser {
     };
 
     const requestReef = async (): Promise<Ad[]> => {
-      if (!REEF_API_KEY) throw new Error('KUFAR_REEF_API_KEY is not configured');
+      const apiKey = reefApiKey();
+      if (!apiKey) throw new Error('KUFAR_REEF_API_KEY is not configured');
       const started = Date.now();
       const body: Record<string, unknown> = {
         size: 50,
@@ -307,10 +308,10 @@ export class FastKufarParser extends BaseParser {
       if (parts.includes('snyat')) body.listing_type = 'rent';
       else if (parts.includes('kupit')) body.listing_type = 'sell';
 
-      const response = await this.axiosInstance.post(REEF_API_URL, body, {
+      const response = await this.axiosInstance.post(reefApiUrl(), body, {
         timeout: 6000,
         headers: {
-          'x-api-key': REEF_API_KEY,
+          'x-api-key': apiKey,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
@@ -457,8 +458,8 @@ export class FastKufarParser extends BaseParser {
       // for one backend after another. Their indexing/cache freshness can differ.
       const isSniper = monitorIdentity[13] === 'sniper';
       const sources = params.cat ? [...API_ENDPOINTS] : [];
-      if (params.cat && REEF_API_KEY) sources.push('__reef__');
-      if (isSniper && !REEF_API_KEY) { params.size = 30; sources.push('__html__'); }
+      if (params.cat && reefApiKey()) sources.push('__reef__');
+      if (isSniper && !reefApiKey()) { params.size = 30; sources.push('__html__'); }
 
       if (sources.length) {
         const startedAt = Date.now();
@@ -543,7 +544,7 @@ export class FastKufarParser extends BaseParser {
         url,
         status,
         error: errorSummary(error),
-        managedFallbackConfigured: Boolean(REEF_API_KEY),
+        managedFallbackConfigured: Boolean(reefApiKey()),
       });
       if (status === 403 && !REEF_API_KEY) throw error;
     }
