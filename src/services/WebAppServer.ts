@@ -99,7 +99,7 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   return parsed as Record<string, unknown>;
 }
 
-export function startWebAppServer(port: number, db: DatabaseService, botToken: string, webRoot = join(process.cwd(), 'web'), metricsProvider?: () => unknown | Promise<unknown>): { close: () => Promise<void> } {
+export async function startWebAppServer(port: number, db: DatabaseService, botToken: string, webRoot = join(process.cwd(), 'web'), metricsProvider?: () => unknown | Promise<unknown>): Promise<{ close: () => Promise<void> }> {
   const server = createServer(async (req, res) => {
     let requestPath = '';
     try {
@@ -107,7 +107,8 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
       requestPath = decodeURIComponent(requestUrl.pathname);
 
       if (requestPath === '/health' || requestPath === '/healthz') {
-        if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); json(res, 405, { error: 'method_not_allowed' }); return; }
+        if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); json(res, 405, { error: 'method_not_allowed' }); return; }
+        if (req.method === 'HEAD') { applySecurityHeaders(res); res.statusCode = 200; res.setHeader('Cache-Control', 'no-store'); res.end(); return; }
         json(res, 200, { status: 'ok', service: 'wellbot-web' }); return;
       }
 
@@ -257,22 +258,25 @@ export function startWebAppServer(port: number, db: DatabaseService, botToken: s
     }
   });
 
-  server.on('error', (error: Error) => {
-    logger.error('WellBOT WebApp server error', {
-      port,
-      host: '0.0.0.0',
-      error: error.message,
-      code: (error as NodeJS.ErrnoException).code,
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => {
+      logger.error('WellBOT WebApp server error', {
+        port,
+        host: '0.0.0.0',
+        error: error.message,
+        code: (error as NodeJS.ErrnoException).code,
+      });
+      reject(error);
+    };
+    server.once('error', onError);
+    server.once('listening', () => {
+      server.removeListener('error', onError);
+      const address = server.address();
+      logger.info('WellBOT WebApp server started', { port, host: '0.0.0.0', webRoot, address });
+      resolve();
     });
-    // A failed listener means the deployment can never become reachable.
-    // Fail fast instead of leaving a worker alive with no HTTP endpoint.
-    process.exitCode = 1;
+    logger.info('WellBOT WebApp server binding', { port, host: '0.0.0.0' });
+    server.listen(port, '0.0.0.0');
   });
-  server.on('listening', () => {
-    const address = server.address();
-    logger.info('WellBOT WebApp server started', { port, host: '0.0.0.0', webRoot, address });
-  });
-  logger.info('WellBOT WebApp server binding', { port, host: '0.0.0.0' });
-  server.listen(port, '0.0.0.0');
   return { close: () => new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve()))) };
 }
