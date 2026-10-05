@@ -118,5 +118,6 @@ export class BotHandler {
 
   async handleStats(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } const links = await this.db.getUserLinks(user.id); const stats = await this.db.getUserAdsCount(user.id); const totalAds = stats.reduce((sum, stat) => sum + stat.count, 0); const statsByLink = stats.map(stat => `  ${stat.linkPlatform.toUpperCase()}: ${stat.count} объявлений`); await this.bot.sendMessage(chatId, `📊 Статистика:\n\n🎯 Поисков: ${links.length}\n📄 Всего объявлений в базе: ${totalAds}\n\n${statsByLink.length ? statsByLink.join('\n') : 'Нет данных'}`, { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to handle /stats', { userId, error: error.message, stack: error.stack }); await this.bot.sendMessage(chatId, `❌ Ошибка: ${error.message}`); } }
 
+  getTelegramBot(): TelegramBotClient { return this.bot; }
   stop(): void { this.bot.stopPolling(); }
 }
