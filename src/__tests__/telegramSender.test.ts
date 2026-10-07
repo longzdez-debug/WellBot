@@ -69,8 +69,9 @@ describe('TelegramSender', () => {
     await sender.send(123, makeAd([imageOne, imageTwo]));
     expect(bot.sendMediaGroup).toHaveBeenCalledTimes(1);
     expect(bot.sendMessage).toHaveBeenCalledTimes(2);
-    expect(bot.sendMessage.mock.calls[1][0]).toBe(123);
-    expect(bot.sendMessage.mock.calls[1][1]).toBe('🔗 ' + adUrl);
+    const secondCall = (bot.sendMessage.mock.calls as unknown as Array<[number,string]>)[1];
+    expect(secondCall[0]).toBe(123);
+    expect(secondCall[1]).toBe('🔗 ' + adUrl);
   });
 
   test('falls back to text when a media group is rejected', async () => {
