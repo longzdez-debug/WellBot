@@ -30,8 +30,13 @@ export class TelegramSender {
   }
   private getReplyMarkup(formatted: FormattedAd): TelegramBot.InlineKeyboardMarkup | undefined {
     const url = this.getButtonUrl(formatted);
-    if (!url) return undefined;
-    return { inline_keyboard: [[{ text: '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', url }]] };
+    const buttons: TelegramBot.InlineKeyboardButton[] = [];
+    if (url) buttons.push({ text: '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', url });
+    if (formatted.dealScore !== undefined && formatted.dealScore >= 65 && Number.isSafeInteger(formatted.adId) && (formatted.adId as number) > 0) {
+      buttons.push({ text: '⏭ Пропустить', callback_data: `dismiss_ad_${formatted.adId}` });
+    }
+    if (!buttons.length) return undefined;
+    return { inline_keyboard: [buttons] };
   }
   private async sendOnce(chatId: number, formatted: FormattedAd): Promise<void> {
     await this.waitForRateLimit(chatId);
