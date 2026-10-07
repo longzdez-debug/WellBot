@@ -133,6 +133,8 @@ export class BotHandler {
   async handleStart(chatId: number, userId: number, username?: string): Promise<void> {
     try {
       await this.db.createUser(userId, username || null);
+      // Remove any legacy persistent reply keyboard left by older bot versions.
+      await this.bot.sendMessage(chatId, 'Интерфейс WellBOT обновлён.', { reply_markup: { remove_keyboard: true } });
       await this.bot.sendMessage(chatId, '👋 Добро пожаловать в WellBOT!\n\nWellBOT автоматически отслеживает новые объявления на Kufar, Onliner и AV.BY и присылает интересные находки прямо сюда.\n\n🎯 Что умеет:\n• искать по полным категориям и подкатегориям\n• фильтровать по цене, городу и условиям\n• находить предложения ниже рынка\n• отслеживать новые объявления без ручной проверки\n\n⚡ Открой WellBOT кнопкой ниже и создай свой первый монитор. Всё остальное сделает бот.', { reply_markup: this.getMainKeyboard() });
       logger.info('User started bot', { userId, username });
     } catch (error: any) { logger.error('Failed to handle /start', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка. Попробуйте позже.'); }
