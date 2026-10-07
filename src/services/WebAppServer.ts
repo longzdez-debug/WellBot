@@ -249,7 +249,7 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
           if (node.children?.length && !config.subcategoryId) { json(res,400,{error:'subcategory_required',message:'Выберите подкатегорию.'}); return; }
           if (config.subcategoryId) {
             const child = source==='kufar' ? findCatalogNode(config.subcategoryId) : findMarketplaceNode(source,config.subcategoryId);
-            if (!child || child.searchable===false || !category || category.id!==config.categoryId || isCatalogDescendant(child.id, category)) { json(res,400,{error:'invalid_subcategory',message:'Выберите подкатегорию из выбранной категории.'}); return; }
+            if (!child || child.searchable===false || !category || category.id!==config.categoryId || !isCatalogDescendant(child.id, category)) { json(res,400,{error:'invalid_subcategory',message:'Выберите подкатегорию из выбранной категории.'}); return; }
           }
           if (config.condition && config.condition!=='new' && config.condition!=='used') { json(res,400,{error:'invalid_condition'}); return; }
           if (config.seller && config.seller!=='private' && config.seller!=='company') { json(res,400,{error:'invalid_seller'}); return; }
