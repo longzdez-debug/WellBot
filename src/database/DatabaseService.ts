@@ -104,13 +104,43 @@ export class DatabaseService {
     }finally{client.release();}
   }
   async revokePro(telegramId:number,adminTelegramId:number,reason:string):Promise<void>{
-    await this.pool.query("UPDATE pro_subscriptions SET status='revoked',expires_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE user_id=(SELECT id FROM users WHERE telegram_id=$1) AND tier='pro' AND status='active'",[telegramId]);
-    await this.pool.query('INSERT INTO wellbot_admin_audit(admin_telegram_id,target_telegram_id,action,details) VALUES($1,$2,$3,$4::jsonb)',[adminTelegramId,telegramId,'REVOKE_PRO',JSON.stringify({reason})]);
+    if(!Number.isSafeInteger(telegramId)||telegramId<=0||!Number.isSafeInteger(adminTelegramId)||adminTelegramId<=0) throw new Error('invalid_user');
+    const client=await this.pool.connect();
+    try{
+      await client.query('BEGIN');
+      await client.query("UPDATE pro_subscriptions SET status='revoked',expires_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE user_id=(SELECT id FROM users WHERE telegram_id=$1) AND tier='pro' AND status='active'",[telegramId]);
+      await client.query('INSERT INTO wellbot_admin_audit(admin_telegram_id,target_telegram_id,action,details) VALUES($1,$2,$3,$4::jsonb)',[adminTelegramId,telegramId,'REVOKE_PRO',JSON.stringify({reason})]);
+      await client.query('COMMIT');
+    }catch(error){
+      try{await client.query('ROLLBACK');}catch{}
+      throw error;
+    }finally{client.release();}
   }
   async adminListUsers(limit=100):Promise<any[]>{const r=await this.pool.query("SELECT u.telegram_id,u.username,u.created_at,COALESCE(s.status,'free') AS pro_status,s.expires_at,s.stars_amount FROM users u LEFT JOIN LATERAL (SELECT status,expires_at,stars_amount FROM pro_subscriptions WHERE user_id=u.id ORDER BY expires_at DESC LIMIT 1)s ON true ORDER BY u.created_at DESC LIMIT $1",[Math.min(500,Math.max(1,limit))]);return r.rows;}
   async createPromoCode(code:string,durationDays:number,maxUses:number,expiresAt:Date|null,adminTelegramId:number):Promise<void>{const clean=code.trim().toUpperCase();if(!/^[A-Z0-9_-]{3,64}$/.test(clean))throw new Error('invalid_promo_code');await this.pool.query('INSERT INTO wellbot_promo_codes(code,duration_days,max_uses,expires_at,created_by) VALUES($1,$2,$3,$4,$5)',[clean,Math.min(3650,Math.max(1,Math.floor(durationDays))),Math.min(100000,Math.max(1,Math.floor(maxUses))),expiresAt,adminTelegramId]);await this.pool.query('INSERT INTO wellbot_admin_audit(admin_telegram_id,action,details) VALUES($1,$2,$3::jsonb)',[adminTelegramId,'CREATE_PROMO',JSON.stringify({code:clean,durationDays,maxUses})]);}
   async listPromoCodes(limit=100):Promise<any[]>{const r=await this.pool.query('SELECT id,code,tier,duration_days,max_uses,uses_count,expires_at,active,created_at FROM wellbot_promo_codes ORDER BY created_at DESC LIMIT $1',[Math.min(500,Math.max(1,limit))]);return r.rows;}
-  async redeemPromoCode(telegramId:number,code:string):Promise<Date>{const user=await this.getUser(telegramId);if(!user)throw new Error('user_not_registered');const client=await this.pool.connect();try{await client.query('BEGIN');const p=await client.query('SELECT * FROM wellbot_promo_codes WHERE code=$1 FOR UPDATE',[code.trim().toUpperCase()]);const row=p.rows[0];if(!row||!row.active||row.uses_count>=row.max_uses||(row.expires_at&&new Date(row.expires_at).getTime()<=Date.now()))throw new Error('promo_invalid');const exists=await client.query('SELECT 1 FROM wellbot_promo_redemptions WHERE promo_id=$1 AND user_id=$2',[row.id,user.id]);if(exists.rowCount)throw new Error('promo_already_used');const current=await this.getProSubscription(telegramId);const base=current?.status==='active'&&current.expiresAt.getTime()>Date.now()?current.expiresAt:new Date();const expires=new Date(base.getTime()+Number(row.duration_days)*86400000);await client.query("INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),stars_amount=0,last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",[user.id,expires,'promo:'+row.code]);await client.query('INSERT INTO wellbot_promo_redemptions(promo_id,user_id,telegram_id) VALUES($1,$2,$3)',[row.id,user.id,telegramId]);await client.query('UPDATE wellbot_promo_codes SET uses_count=uses_count+1 WHERE id=$1',[row.id]);await client.query('COMMIT');return expires;}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}}
+  async redeemPromoCode(telegramId:number,code:string):Promise<Date>{
+    const client=await this.pool.connect();
+    try{
+      await client.query('BEGIN');
+      const user=await client.query<User>('SELECT * FROM users WHERE telegram_id=$1 FOR UPDATE',[telegramId]);
+      if(!user.rows[0]) throw new Error('user_not_registered');
+      const p=await client.query('SELECT * FROM wellbot_promo_codes WHERE code=$1 FOR UPDATE',[code.trim().toUpperCase()]);
+      const row=p.rows[0];
+      if(!row||!row.active||row.uses_count>=row.max_uses||(row.expires_at&&new Date(row.expires_at).getTime()<=Date.now())) throw new Error('promo_invalid');
+      const exists=await client.query('SELECT 1 FROM wellbot_promo_redemptions WHERE promo_id=$1 AND user_id=$2',[row.id,user.rows[0].id]);
+      if(exists.rowCount) throw new Error('promo_already_used');
+      const current=await client.query<{status:string;expires_at:Date}>('SELECT status,expires_at FROM pro_subscriptions WHERE user_id=$1 AND tier=$2 FOR UPDATE',[user.rows[0].id,'pro']);
+      const currentRow=current.rows[0];
+      const currentExpires=currentRow?.status==='active'&&new Date(currentRow.expires_at).getTime()>Date.now()?new Date(currentRow.expires_at):new Date();
+      const expires=new Date(currentExpires.getTime()+Number(row.duration_days)*86400000);
+      await client.query("INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),stars_amount=0,last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",[user.rows[0].id,expires,'promo:'+row.code]);
+      await client.query('INSERT INTO wellbot_promo_redemptions(promo_id,user_id,telegram_id) VALUES($1,$2,$3)',[row.id,user.rows[0].id,telegramId]);
+      await client.query('UPDATE wellbot_promo_codes SET uses_count=uses_count+1 WHERE id=$1',[row.id]);
+      await client.query('COMMIT');
+      return expires;
+    }catch(e){try{await client.query('ROLLBACK');}catch{}throw e;}finally{client.release();}
+  }
   async getAdminAudit(limit=100):Promise<any[]>{const r=await this.pool.query('SELECT id,admin_telegram_id,target_telegram_id,action,details,created_at FROM wellbot_admin_audit ORDER BY created_at DESC LIMIT $1',[Math.min(500,Math.max(1,limit))]);return r.rows;}
 
   async getUser(telegramId:number):Promise<User|null>{const r=await this.pool.query<User>('SELECT * FROM users WHERE telegram_id=$1',[telegramId]);return r.rows[0]||null;}
