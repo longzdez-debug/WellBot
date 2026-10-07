@@ -295,7 +295,7 @@ export class FastKufarParser extends BaseParser {
 
       const rawAds = responses.flatMap(data => Array.isArray(data?.ads) ? data.ads : []);
       const ads = rawAds.filter((ad: any) => {
-        if (!ad?.ad_id) return false; return false;
+        if (!ad?.ad_id) return false;
         if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return false;
         const text = adSearchText(ad);
         if (!queryMatchesAd(text)) return false;
