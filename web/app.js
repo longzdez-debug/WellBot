@@ -1,11 +1,11 @@
-const WELLBOT_BUILD="20261007.17";
+const WELLBOT_BUILD="20261007.18";
 const tg=window.Telegram?.WebApp;
 const state={data:null,catalog:null,filter:"all",search:"",loading:false,submitting:false,lastLoadedAt:0,renderSig:{},refreshQueued:false,dismissedAds:new Set(),savedIds:new Set()};
 
 function applyTelegramTheme(){if(!tg)return;const p=tg.themeParams||{};document.documentElement.style.setProperty("--tg-bg",p.bg_color||"#080a0d");document.documentElement.style.setProperty("--tg-text",p.text_color||"#f4f6f5");try{tg.ready();tg.expand();tg.setHeaderColor?.(p.bg_color||"#080a0d");tg.setBackgroundColor?.(p.bg_color||"#080a0d");tg.onEvent?.("themeChanged",applyTelegramTheme)}catch{}}
 applyTelegramTheme();
 
-function getTelegramInitData(){if(tg?.initData)return tg.initData;try{const v=window.Telegram?.WebView?.initParams?.tgWebAppData;if(v)return v}catch{}try{for(const source of [String(location.hash||""),String(location.search||"")]){const v=new URLSearchParams(source.replace(/^#|^\?/,"")).get("tgWebAppData");if(v)return v}}catch{}return ""}
+function getTelegramInitData(){try{const live=window.Telegram?.WebApp?.initData;if(live)return live}catch{}if(tg?.initData)return tg.initData;try{const v=window.Telegram?.WebView?.initParams?.tgWebAppData;if(v)return v}catch{}try{for(const source of [String(location.hash||""),String(location.search||"")]){const v=new URLSearchParams(source.replace(/^#|^\?/,"")).get("tgWebAppData");if(v)return v}}catch{}return ""}
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const platformLabel=p=>({kufar:"Kufar",onliner:"Onliner",av:"AV.BY"}[p]||String(p||"").toUpperCase());
 const platformIcon=p=>({kufar:"K",onliner:"O",av:"A"}[p]||"W");
@@ -23,7 +23,7 @@ const catalogLabel=(id,platform)=>{
 };
 const fmtDate=v=>{if(!v)return"—";const d=new Date(v);return Number.isNaN(d.getTime())?"—":d.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})};
 const price=v=>v!==null&&v!==undefined&&v!==""?esc(v):"Цена не указана";
-async function api(path,options={}){const initData=getTelegramInitData();if(!initData)throw new Error("Открой WellBOT через Telegram.");const r=await fetch(path,{...options,cache:"no-store",headers:{"Content-Type":"application/json","X-Telegram-Init-Data":initData,...(options.headers||{})}});const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(p.message||({unauthorized:"Сессия Telegram недействительна. Открой WellBOT заново.",user_not_registered:"Сначала нажми /start в боте.",duplicate:"Такой поиск уже есть.",limit_reached:"Достигнут лимит активных поисков."}[p.error])||"Не удалось выполнить действие.");return p}
+async function api(path,options={}){const initData=getTelegramInitData();if(!initData)throw new Error("Открой WellBOT через Telegram.");const r=await fetch(path,{...options,cache:"no-store",headers:{"Content-Type":"application/json","Authorization":"tma "+initData,"X-Telegram-Init-Data":initData,...(options.headers||{})}});const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(p.message||({unauthorized:"Сессия Telegram недействительна. Открой WellBOT заново.",user_not_registered:"Сначала нажми /start в боте.",duplicate:"Такой поиск уже есть.",limit_reached:"Достигнут лимит активных поисков."}[p.error])||"Не удалось выполнить действие.");return p}
 function haptic(type="light"){try{tg?.HapticFeedback?.impactOccurred(type)}catch{}}
 function setLiveStatus(text,active=true){const p=document.querySelector(".bot-status");if(!p)return;p.classList.toggle("stale",!active);const label=p.querySelector("span");if(label)label.textContent=text;const dot=p.querySelector("i");if(dot)dot.style.opacity=active?"1":".45"}
 function updateFreshness(){if(!state.lastLoadedAt)return;const sec=Math.max(0,Math.round((Date.now()-state.lastLoadedAt)/1000));const el=document.querySelector("#hero-sync");if(el)el.textContent=sec<10?"Только что обновлено":"Обновлено "+sec+"с назад";setLiveStatus(sec<90?"ОНЛАЙН":"СИНХРОНИЗАЦИЯ",sec<90)}
