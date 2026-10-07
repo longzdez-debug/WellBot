@@ -34,6 +34,8 @@ jobs:
         run: npm run build
       - name: Run tests
         run: npm test -- --runInBand
+      - name: Validate WellBOT web UI
+        run: node scripts/validate-web-ui.js
       - name: Validate Dockerfile
         run: docker build --check .
       - name: Build production Docker image
