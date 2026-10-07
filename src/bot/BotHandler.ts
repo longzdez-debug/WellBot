@@ -39,7 +39,7 @@ export class BotHandler {
 
   private async configureDefaultMenuButton(): Promise<void> {
     const webAppUrl = process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || process.env.MINI_APP_URL || '';
-    if (!/^https:\\/\\/i.test(webAppUrl)) {
+    if (!/^https:\/\//i.test(webAppUrl)) {
       logger.warn('Telegram menu button not configured: Mini App URL is missing or not HTTPS');
       return;
     }
@@ -175,7 +175,7 @@ export class BotHandler {
       // Remove any legacy persistent reply keyboard left by older bot versions.
       await this.bot.sendMessage(chatId, 'Интерфейс WellBOT обновлён.', { reply_markup: { remove_keyboard: true } });
       const webAppUrl = process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || process.env.MINI_APP_URL || '';
-      if (/^https:\\/\\/i.test(webAppUrl)) {
+      if (/^https:\/\//i.test(webAppUrl)) {
         try {
           await (this.bot as any).setChatMenuButton({
             chat_id: chatId,
