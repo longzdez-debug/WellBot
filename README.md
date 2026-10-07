@@ -7,7 +7,7 @@
 - 🟢 Kufar catalog search monitoring
 - 🔵 Onliner search monitoring
 - 🚗 Av.by search monitoring
-- ⚡ Default polling interval: **0.25 seconds**
+- ⚡ Default polling interval: **1 second**
 - 🚀 Concurrent parsing of up to 16 searches by default
 - 🧠 First-run baseline — existing listings are not spammed as "new"
 - 🔁 Duplicate protection per Telegram user
@@ -21,7 +21,7 @@
 - 🔄 Restart policy for the bot and database
 - 🤖 GitHub Actions build, test and Docker validation
 
-> The 0.5-second value is the scheduler target between cycles. Actual detection latency also depends on source visibility, parser/network latency and Telegram delivery. WellBOT does not claim an exact end-to-end latency guarantee.
+> The configured interval is the scheduler target between cycles. Actual detection latency also depends on source visibility, parser/network latency and Telegram delivery. WellBOT does not claim an exact end-to-end latency guarantee.
 
 ## Production target
 
@@ -55,7 +55,7 @@ Before running the script, set at minimum:
 TELEGRAM_BOT_TOKEN=your_bot_token
 DB_PASSWORD=use-a-long-random-password
 WELLBOT_WEBAPP_URL=https://your-domain.example/
-PARSE_INTERVAL_SECONDS=0.25
+PARSE_INTERVAL_SECONDS=1
 PARSE_CONCURRENCY=16
 ```
 
