@@ -1,0 +1,38 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        WELLBOT_BUILD_REV: ${WELLBOT_BUILD_REV:-1}
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN must be set}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      WELLBOT_WEBAPP_URL: ${WELLBOT_WEBAPP_URL:-}
+      WELLBOT_PRO_PRICE_STARS: ${WELLBOT_PRO_PRICE_STARS:-199}
+      WELLBOT_TERMS_URL: ${WELLBOT_TERMS_URL:-}
+      TELEGRAM_ADMIN_IDS: ${TELEGRAM_ADMIN_IDS:-}
+      PORT: ${PORT:-3000}
+      PARSE_INTERVAL_SECONDS: ${PARSE_INTERVAL_SECONDS:-1}
+      PARSE_CONCURRENCY: ${PARSE_CONCURRENCY:-16}
+      PARSE_TIMEOUT_MS: ${PARSE_TIMEOUT_MS:-6000}
+      KUFAR_REEF_API_KEY: ${KUFAR_REEF_API_KEY:-}
+      KUFAR_REEF_API_URL: ${KUFAR_REEF_API_URL:-https://api.reefapi.com/kufar/v1/search}
+      NOTIFICATION_BATCH_SIZE: ${NOTIFICATION_BATCH_SIZE:-25}
+      NOTIFICATION_DRAIN_MS: ${NOTIFICATION_DRAIN_MS:-500}
+      NOTIFICATION_CONCURRENCY: ${NOTIFICATION_CONCURRENCY:-8}
+      NOTIFICATION_MAX_ATTEMPTS: ${NOTIFICATION_MAX_ATTEMPTS:-12}
+      NOTIFICATION_RETENTION_DAYS: ${NOTIFICATION_RETENTION_DAYS:-14}
+      DATABASE_ERROR_BACKOFF_MS: ${DATABASE_ERROR_BACKOFF_MS:-30000}
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DISPLAY_TIMEZONE: ${DISPLAY_TIMEZONE:-Europe/Minsk}
+    ports:
+      - "${PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
