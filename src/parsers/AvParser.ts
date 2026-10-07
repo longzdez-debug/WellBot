@@ -6,10 +6,55 @@ import * as cheerio from 'cheerio';
 export class AvParser extends BaseParser {
   platform = 'av' as const;
 
+  private async fetchAvHtml(url: string): Promise<string> {
+    const parsed = new URL(url);
+    const hosts = [parsed.hostname, 'av.by', 'm.av.by'].filter((host, index, all) => all.indexOf(host) === index);
+    let lastError: unknown = null;
+
+    for (const host of hosts) {
+      const candidate = new URL(url);
+      candidate.hostname = host;
+      try {
+        const response = await this.axiosInstance.get(candidate.toString(), {
+          timeout: 5000,
+          headers: {
+            'User-Agent': this.getRandomUserAgent(),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Referer': 'https://av.by/',
+            'Host': host,
+            'Cache-Control': 'no-cache',
+          },
+          validateStatus: status => status >= 200 && status < 500,
+        });
+        if (response.status === 200 && typeof response.data === 'string') {
+          if (host !== parsed.hostname) {
+            logger.info('AV.by fallback host succeeded', { originalHost: parsed.hostname, host });
+          }
+          return response.data;
+        }
+        if (response.status === 403) {
+          logger.warn('AV.by host rejected automated request', { host, status: response.status });
+          lastError = new Error(`AV.by returned HTTP 403 for ${host}`);
+          continue;
+        }
+        lastError = new Error(`AV.by returned HTTP ${response.status} for ${host}`);
+      } catch (error) {
+        lastError = error;
+        logger.warn('AV.by host request failed', {
+          host,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('AV.by request failed');
+  }
+
   async parseUrl(url: string): Promise<Ad[]> {
     logger.info('AV.by parsing started', { url });
     try {
-      const html = await this.fetchWithRetry(url);
+      const html = await this.fetchAvHtml(url);
       const $ = cheerio.load(html);
       const nextData = $('#__NEXT_DATA__').html();
 
