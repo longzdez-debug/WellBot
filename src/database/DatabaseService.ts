@@ -4,6 +4,7 @@ import { join } from 'path';
 import { User, Link, Ad, Platform } from '../types';
 import { logger } from '../utils/logger';
 import { MonitorConfig } from '../catalog/KufarCatalog';
+import { hasProAccess } from '../services/ProAccess';
 
 export interface DashboardAd extends Ad { link_platform: Platform; link_url: string; }
 export interface DashboardPriceDrop { id:number; external_id:string; old_price:string|null; new_price:string|null; price_change_percent:number|null; created_at:Date; title:string; image_url:string|null; ad_url:string; link_platform:Platform; }
@@ -44,9 +45,9 @@ export class DatabaseService {
   async createUser(telegramId:number,username:string|null):Promise<User>{const r=await this.pool.query<User>('INSERT INTO users (telegram_id, username) VALUES ($1,$2) ON CONFLICT (telegram_id) DO UPDATE SET username=COALESCE(EXCLUDED.username, users.username) RETURNING *',[telegramId,username]);return r.rows[0];}
   async getProSubscription(telegramId:number):Promise<{tier:string;status:string;expiresAt:Date;starsAmount:number|null}|null>{
     const r=await this.pool.query<{tier:string;status:string;expires_at:Date;stars_amount:number|null}>('SELECT s.tier,s.status,s.expires_at,s.stars_amount FROM pro_subscriptions s JOIN users u ON u.id=s.user_id WHERE u.telegram_id=$1 ORDER BY s.expires_at DESC LIMIT 1',[telegramId]);
-    const row=r.rows[0]; if(!row)return null; const active=row.status==='active' && new Date(row.expires_at).getTime()>Date.now();
-    if(!active && row.status==='active') await this.pool.query('UPDATE pro_subscriptions SET status=$1,updated_at=CURRENT_TIMESTAMP WHERE user_id=(SELECT id FROM users WHERE telegram_id=$2) AND tier=$3',['expired',telegramId,'pro']);
-    return {tier:row.tier,status:active?'active':row.status==='active'?'expired':row.status,expiresAt:new Date(row.expires_at),starsAmount:row.stars_amount};
+    const row=r.rows[0]; if(!row)return null; const expiresAt=new Date(row.expires_at); const rawStatus=String(row.status||''); const access=hasProAccess({status:rawStatus,expiresAt});
+    if(!access && ['active','canceled','failed'].includes(rawStatus) && expiresAt.getTime()<=Date.now()) await this.pool.query('UPDATE pro_subscriptions SET status=$1,updated_at=CURRENT_TIMESTAMP WHERE user_id=(SELECT id FROM users WHERE telegram_id=$2) AND tier=$3 AND status=$4',['expired',telegramId,'pro',rawStatus]);
+    return {tier:row.tier,status:access?rawStatus:rawStatus==='active'&&expiresAt.getTime()<=Date.now()?'expired':rawStatus,expiresAt,starsAmount:row.stars_amount};
   }
 
   async activateProFromTelegramPayment(telegramId:number,expiresAt:Date,starsAmount:number,telegramChargeId:string,providerChargeId:string|null,payload:string):Promise<boolean>{
@@ -83,7 +84,11 @@ export class DatabaseService {
         "INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at + ($4::integer * INTERVAL '1 day'),CURRENT_TIMESTAMP + ($4::integer * INTERVAL '1 day')),last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",
         [user.rows[0].id,expires,'admin_grant:'+adminTelegramId+':'+Date.now(),days],
       );
-      const auditExpiry=new Date(Math.max(expires.getTime(),now.getTime()+days*86400000));
+      const existing=await client.query<{expires_at:Date;status:string}>('SELECT expires_at,status FROM pro_subscriptions WHERE user_id=$1 AND tier=\'pro\' FOR UPDATE',[user.rows[0].id]);
+      const existingRow=existing.rows[0];
+      const auditExpiry=existingRow && !['revoked','refunded','expired'].includes(existingRow.status) && new Date(existingRow.expires_at).getTime()>now.getTime()
+        ? new Date(new Date(existingRow.expires_at).getTime()+days*86400000)
+        : expires;
       await client.query('INSERT INTO wellbot_admin_audit(admin_telegram_id,target_telegram_id,action,details) VALUES($1,$2,$3,$4::jsonb)',[adminTelegramId,telegramId,'GRANT_PRO',JSON.stringify({durationDays:days,reason,expiresAt:auditExpiry.toISOString()})]);
       await client.query('COMMIT');
     }catch(error){
@@ -96,7 +101,7 @@ export class DatabaseService {
     const client=await this.pool.connect();
     try{
       await client.query('BEGIN');
-      await client.query("UPDATE pro_subscriptions SET status='revoked',expires_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE user_id=(SELECT id FROM users WHERE telegram_id=$1) AND tier='pro' AND status='active'",[telegramId]);
+      await client.query("UPDATE pro_subscriptions SET status='revoked',expires_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE user_id=(SELECT id FROM users WHERE telegram_id=$1) AND tier='pro' AND status IN ('active','canceled','failed')",[telegramId]);
       await client.query('INSERT INTO wellbot_admin_audit(admin_telegram_id,target_telegram_id,action,details) VALUES($1,$2,$3,$4::jsonb)',[adminTelegramId,telegramId,'REVOKE_PRO',JSON.stringify({reason})]);
       await client.query('COMMIT');
     }catch(error){
@@ -120,7 +125,7 @@ export class DatabaseService {
       if(exists.rowCount) throw new Error('promo_already_used');
       const current=await client.query<{status:string;expires_at:Date}>('SELECT status,expires_at FROM pro_subscriptions WHERE user_id=$1 AND tier=$2 FOR UPDATE',[user.rows[0].id,'pro']);
       const currentRow=current.rows[0];
-      const currentExpires=currentRow?.status==='active'&&new Date(currentRow.expires_at).getTime()>Date.now()?new Date(currentRow.expires_at):new Date();
+      const currentExpires=currentRow && hasProAccess({status:String(currentRow.status||''),expiresAt:new Date(currentRow.expires_at)})?new Date(currentRow.expires_at):new Date();
       const expires=new Date(currentExpires.getTime()+Number(row.duration_days)*86400000);
       await client.query("INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),stars_amount=0,last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",[user.rows[0].id,expires,'promo:'+row.code]);
       await client.query('INSERT INTO wellbot_promo_redemptions(promo_id,user_id,telegram_id) VALUES($1,$2,$3)',[row.id,user.rows[0].id,telegramId]);
@@ -196,7 +201,7 @@ export class DatabaseService {
 
   async getGlobalRecentMarketAds(limit=2000,platform?:Platform):Promise<Ad[]>{const safeLimit=Math.min(Math.max(Math.floor(limit),100),5000);const r=await this.pool.query<Ad>(`SELECT a.id,a.link_id,a.external_id,a.title,a.description,a.price,a.image_url,a.ad_url,a.location,a.address,a.published_at,a.updated_at,a.created_at,CASE WHEN l.config IS NULL THEN NULL ELSE CONCAT(l.platform,':',COALESCE(l.config->>'categoryId',''),':',COALESCE(l.config->>'subcategoryId','')) END AS market_group FROM ads a JOIN links l ON l.id=a.link_id WHERE a.price IS NOT NULL AND a.price <> '' ${platform ? 'AND l.platform=$2' : ''} ORDER BY COALESCE(a.published_at,a.created_at) DESC,a.id DESC LIMIT $1`,platform?[safeLimit,platform]:[safeLimit]);return r.rows;}
   async getUserAdsCount(userId:number):Promise<{linkId:number;linkPlatform:string;count:number}[]>{const r=await this.pool.query('SELECT l.id as "linkId",l.platform as "linkPlatform",COUNT(a.id) as "count" FROM links l LEFT JOIN ads a ON a.link_id=l.id WHERE l.user_id=$1 GROUP BY l.id ORDER BY l.id',[userId]);return r.rows;}
-  async clearAdsByUserId(userId:number):Promise<number>{const r=await this.pool.query<{id:number}>('SELECT id FROM links WHERE user_id=$1',[userId]);if(!r.rows.length)return 0;const d=await this.pool.query('DELETE FROM ads WHERE link_id=ANY($1::int[])',[r.rows.map(x=>x.id)]);await this.pool.query('DELETE FROM user_ad_seen WHERE user_id=$1',[userId]);return d.rowCount||0;}
+  async clearAdsByUserId(userId:number):Promise<number>{const r=await this.pool.query<{id:number}>('SELECT id FROM links WHERE user_id=$1',[userId]);if(!r.rows.length)return 0;const d=await this.pool.query('DELETE FROM ads WHERE link_id=ANY($1::int[])',[r.rows.map(x=>x.id)]);await this.pool.query('DELETE FROM user_ad_seen WHERE user_id=$1',[userId]);await this.pool.query('DELETE FROM dismissed_ads WHERE user_id=$1',[userId]);return d.rowCount||0;}
   async isAdDismissedForChat(externalId:string,telegramId:number,platform?:string):Promise<boolean>{
     const r=await this.pool.query(
       `SELECT 1 FROM dismissed_ads d JOIN users u ON u.id=d.user_id
@@ -347,3 +352,4 @@ export class DatabaseService {
   }
 
 }
+
