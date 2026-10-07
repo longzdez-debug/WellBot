@@ -42,7 +42,7 @@ jobs:
           python3 -m pip install --user awscli
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Create encrypted-format database dump
+      - name: Create validated database dump
         shell: bash
         run: |
           set -euo pipefail
