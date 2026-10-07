@@ -119,7 +119,7 @@ describe('ParserScheduler notification reliability', () => {
       created_at: new Date(),
     });
 
-    expect(db.isAdDismissedForChat).toHaveBeenCalledWith('ad-43', 123, '');
+    expect(db.isAdDismissedForChat).toHaveBeenCalledWith('ad-43', 123);
     expect(db.markNotificationSent).toHaveBeenCalledWith(43);
     expect(bot.sendPriceDropNotification).not.toHaveBeenCalled();
   });
