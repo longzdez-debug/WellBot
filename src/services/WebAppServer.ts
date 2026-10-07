@@ -147,7 +147,7 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
       if (requestPath === '/health' || requestPath === '/healthz') {
         if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); json(res, 405, { error: 'method_not_allowed' }); return; }
         if (req.method === 'HEAD') { applySecurityHeaders(res); res.statusCode = 200; res.setHeader('Cache-Control', 'no-store'); res.end(); return; }
-        json(res, 200, { status: 'ok', service: 'wellbot-web' }); return;
+        try { const database=await db.healthCheck(); json(res,200,{status:'ok',service:'wellbot-web',database:{status:'ok',name:database.database,serverVersion:database.serverVersion}}); } catch(error) { logger.error('WellBOT health check failed',{error:error instanceof Error?error.message:String(error)}); json(res,503,{status:'degraded',service:'wellbot-web',database:{status:'error'}}); } return;
       }
 
       if (requestPath === '/metrics' && req.method === 'GET') {
