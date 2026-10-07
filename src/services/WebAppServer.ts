@@ -20,7 +20,7 @@ const MAX_BODY = 16 * 1024;
 const MAX_INIT_DATA = 16 * 1024;
 const MAX_LINKS = 50;
 const AUTH_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
-const WELLBOT_SERVER_BUILD = '20261007-authdiag-01';
+const WELLBOT_SERVER_BUILD = '20261007-authdiag-02';
 const PHONE_MODEL_CACHE=new Map<string,{expires:number;models:{id:string;title:string;slug:string}[]}>();
 const PHONE_MODEL_TTL=30*60*1000;
 const API_RATE_WINDOW_MS=60_000;
@@ -103,7 +103,7 @@ export function parseTelegramInitData(raw: string, botToken: string, nowSeconds 
           .map(([key, value]) => key + '=' + value)
           .join('\n');
         const signedData = botId + ':WebAppData\n' + dataCheckString;
-        const publicKeyBytes = Buffer.from('e7bf03a2fa4603d88dda5bb59f32ed8b02a56c187fe7d34caed242', 'hex');
+        const publicKeyBytes = Buffer.from('e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242', 'hex');
         const derPrefix = Buffer.from('302a300506032b6570032100', 'hex');
         const publicKey = createPublicKey({ key: Buffer.concat([derPrefix, publicKeyBytes]), format: 'der', type: 'spki' });
         const signatureBytes = Buffer.from(signature, 'base64url');
@@ -116,6 +116,65 @@ export function parseTelegramInitData(raw: string, botToken: string, nowSeconds 
     if (!Number.isSafeInteger(user.id) || user.id <= 0) return null;
     return { user, authDate };
   } catch { return null; }
+}
+
+function inspectTelegramInitData(raw: string, botToken: string, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const result = {
+    present: Boolean(raw),
+    length: raw.length,
+    hashPresent: false,
+    hashFormatValid: false,
+    signaturePresent: false,
+    signatureFormatValid: false,
+    authDateValid: false,
+    authDateAgeSeconds: null as number | null,
+    userPresent: false,
+    hmacValid: false,
+    ed25519Valid: false,
+    botId: botToken.split(':', 1)[0] || '',
+  };
+  if (!raw || !botToken || raw.length > MAX_INIT_DATA) return result;
+  try {
+    const params = new URLSearchParams(raw);
+    const hash = params.get('hash') || '';
+    const signature = params.get('signature') || '';
+    const authDate = Number(params.get('auth_date'));
+    const userRaw = params.get('user');
+    result.hashPresent = Boolean(hash);
+    result.hashFormatValid = /^[a-f0-9]{64}$/i.test(hash);
+    result.signaturePresent = Boolean(signature);
+    if (signature) {
+      try { result.signatureFormatValid = Buffer.from(signature, 'base64url').length === 64; } catch {}
+    }
+    result.authDateValid = Number.isSafeInteger(authDate) && authDate > 0;
+    result.authDateAgeSeconds = result.authDateValid ? nowSeconds - authDate : null;
+    result.userPresent = Boolean(userRaw);
+    if (result.hashFormatValid) {
+      const dataCheckString = [...params.entries()]
+        .filter(([key]) => key !== 'hash')
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, value]) => key + '=' + value)
+        .join('\n');
+      const secret = createHmac('sha256', botToken).update('WebAppData').digest();
+      const expected = createHmac('sha256', secret).update(dataCheckString).digest();
+      const actual = Buffer.from(hash, 'hex');
+      result.hmacValid = actual.length === expected.length && timingSafeEqual(actual, expected);
+    }
+    if (result.signatureFormatValid && /^\d+$/.test(result.botId)) {
+      const dataCheckString = [...params.entries()]
+        .filter(([key]) => key !== 'hash' && key !== 'signature')
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, value]) => key + '=' + value)
+        .join('\n');
+      const signedData = result.botId + ':WebAppData\\n' + dataCheckString;
+      const publicKeyBytes = Buffer.from('e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242', 'hex');
+      const derPrefix = Buffer.from('302a300506032b6570032100', 'hex');
+      const publicKey = createPublicKey({ key: Buffer.concat([derPrefix, publicKeyBytes]), format: 'der', type: 'spki' });
+      const signatureBytes = Buffer.from(signature, 'base64url');
+      result.ed25519Valid = verifySignature(null, Buffer.from(signedData), publicKey, signatureBytes);
+    }
+  } catch {}
+  return result;
 }
 
 function applySecurityHeaders(res: ServerResponse): void {
