@@ -107,14 +107,17 @@ function normalizeSearchText(value: unknown): string {
 }
 
 function adCondition(ad: any): string { const parameter = ad?.ad_parameters?.find((p: any) => p?.p === 'condition'); return String(parameter?.vl ?? parameter?.v ?? parameter?.value ?? '').trim(); }
-function adIsCompany(ad: any): boolean {
-  if (ad?.company_ad === true || ad?.is_company === true) return true;
+function adSellerType(ad: any): 'company' | 'private' | 'unknown' {
+  if (ad?.company_ad === true || ad?.is_company === true) return 'company';
+  if (ad?.company_ad === false || ad?.is_company === false) return 'private';
   const sellerType = String(
     ad?.account_type ?? ad?.seller_type ??
     ad?.account_parameters?.find((p: any) => p?.p === 'seller_type')?.vl ??
     ad?.account_parameters?.find((p: any) => p?.p === 'seller_type')?.v ?? ''
   ).toLocaleLowerCase('ru-RU');
-  return sellerType.includes('company') || sellerType.includes('компан') || sellerType.includes('юрид');
+  if (sellerType.includes('company') || sellerType.includes('компан') || sellerType.includes('юрид')) return 'company';
+  if (sellerType.includes('private') || sellerType.includes('частн') || sellerType.includes('физ')) return 'private';
+  return 'unknown';
 }
 function adSearchText(ad: any): string {
   const values: string[] = [ad?.subject, ad?.description];
@@ -253,8 +256,9 @@ export class FastKufarParser extends BaseParser {
         const condition = normalizeSearchText(adCondition(ad));
         if (requestedCondition === 'new' && !/(new|нов|новое|новая|новый)/.test(condition)) return false;
         if (requestedCondition === 'used' && /(new|нов|новое|новая|новый)/.test(condition)) return false;
-        if (requestedSeller === 'company' && !adIsCompany(ad)) return false;
-        if (requestedSeller === 'private' && adIsCompany(ad)) return false;
+        const sellerType=adSellerType(ad);
+        if (requestedSeller === 'company' && sellerType !== 'company') return false;
+        if (requestedSeller === 'private' && sellerType !== 'private') return false;
         const rawPrice = ad.price_byn != null ? Number(ad.price_byn) / 100 : ad.price_usd != null ? Number(ad.price_usd) / 100 : undefined;
         if (requestedMinPrice != null && Number.isFinite(requestedMinPrice) && (rawPrice == null || rawPrice < requestedMinPrice)) return false;
         if (requestedMaxPrice != null && Number.isFinite(requestedMaxPrice) && (rawPrice == null || rawPrice > requestedMaxPrice)) return false;
@@ -288,7 +292,7 @@ export class FastKufarParser extends BaseParser {
           published_at: ad.list_time ? new Date(ad.list_time) : undefined,
           updated_at: ad.list_time_up ? new Date(ad.list_time_up) : undefined,
           condition: adCondition(ad) || null,
-          is_company: Boolean(ad.company_ad),
+          is_company: adSellerType(ad)==='company'?true:adSellerType(ad)==='private'?false:null,
           first_seen_source: endpoint.includes('cre-api') ? 'api-cre' : 'api-search',
           first_seen_rank: searchRank > 0 ? searchRank : null,
         } as Ad;
@@ -370,7 +374,7 @@ export class FastKufarParser extends BaseParser {
           published_at: ad.posted_at ? new Date(ad.posted_at) : undefined,
           updated_at: ad.posted_at ? new Date(ad.posted_at) : undefined,
           condition: ad.condition || null,
-          is_company: ad.seller_type === 'company',
+          is_company: adSellerType(ad)==='company'?true:adSellerType(ad)==='private'?false:null,
           first_seen_source: 'reefapi',
           first_seen_rank: index + 1,
         } as Ad;
@@ -431,8 +435,9 @@ export class FastKufarParser extends BaseParser {
         const condition = normalizeSearchText(adCondition(ad));
         if (requestedCondition === 'new' && !/(new|нов|новое|новая|новый)/.test(condition)) return null;
         if (requestedCondition === 'used' && /(new|нов|новое|новая|новый)/.test(condition)) return null;
-        if (requestedSeller === 'company' && !adIsCompany(ad)) return null;
-        if (requestedSeller === 'private' && adIsCompany(ad)) return null;
+        const sellerType=adSellerType(ad);
+        if (requestedSeller === 'company' && sellerType !== 'company') return null;
+        if (requestedSeller === 'private' && sellerType !== 'private') return null;
         const rawPrice = ad.price_byn != null ? Number(ad.price_byn) / 100 : ad.price_usd != null ? Number(ad.price_usd) / 100 : undefined;
         if (requestedMinPrice != null && Number.isFinite(requestedMinPrice) && (rawPrice == null || rawPrice < requestedMinPrice)) return null;
         if (requestedMaxPrice != null && Number.isFinite(requestedMaxPrice) && (rawPrice == null || rawPrice > requestedMaxPrice)) return null;
@@ -452,7 +457,7 @@ export class FastKufarParser extends BaseParser {
           published_at: ad.list_time ? new Date(ad.list_time) : undefined,
           updated_at: ad.list_time_up ? new Date(ad.list_time_up) : undefined,
           condition: adCondition(ad) || null,
-          is_company: Boolean(ad.company_ad),
+          is_company: adSellerType(ad)==='company'?true:adSellerType(ad)==='private'?false:null,
           first_seen_source: 'html',
           first_seen_rank: index + 1,
         } as Ad;
