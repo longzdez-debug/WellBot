@@ -247,7 +247,8 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
         if (requestPath === '/api/admin/overview' && req.method === 'GET') {
           if(!isAdminTelegramId(auth.user.id)){json(res,403,{error:'admin_forbidden'});return;}
           const [users,promos,audit]=await Promise.all([db.adminListUsers(100),db.listPromoCodes(100),db.getAdminAudit(100)]);
-          json(res,200,{users,promos,audit,adminTelegramId:auth.user.id});return;
+          const metrics=metricsProvider?await metricsProvider():null;
+          json(res,200,{users,promos,audit,metrics,adminTelegramId:auth.user.id});return;
         }
         if (requestPath === '/api/admin/pro/grant' && req.method === 'POST') {
           if(!isAdminTelegramId(auth.user.id)){json(res,403,{error:'admin_forbidden'});return;}
