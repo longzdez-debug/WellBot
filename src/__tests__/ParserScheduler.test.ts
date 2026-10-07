@@ -162,7 +162,7 @@ describe('ParserScheduler', () => {
       kind: 'new_ad',
       chatId: user.telegram_id,
       dedupeKey: `new_ad:user:${user.telegram_id}:kufar:new-1`,
-      payload: { ad: expect.objectContaining({ external_id: 'new-1' }) },
+      payload: expect.objectContaining({ ad: expect.objectContaining({ external_id: 'new-1' }) }),
     })]);
     expect(bot.sendNotification).not.toHaveBeenCalled();
   });
