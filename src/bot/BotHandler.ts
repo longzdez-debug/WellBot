@@ -92,6 +92,10 @@ export class BotHandler {
     this.bot.on('message', async (msg: Message) => {
       const payment=(msg as Message & {successful_payment?:any}).successful_payment;if(!payment)return;
       const payload=String(payment.invoice_payload||'');if(!payload.startsWith('wellbot_pro_monthly_v1:')||payment.currency!=='XTR')return;
+      if (msg.from?.id && msg.from.id !== msg.chat.id && payload.split(':')[1] !== String(msg.from.id)) {
+        logger.warn('Ignoring PRO payment with mismatched user payload',{telegramId:msg.from.id,chatId:msg.chat.id,payload});
+        return;
+      }
       try{
         const expiry=payment.subscription_expiration_date?new Date(Number(payment.subscription_expiration_date)*1000):new Date(Date.now()+30*24*60*60*1000);
         const expiresAt=Number.isFinite(expiry.getTime())?expiry:new Date(Date.now()+30*24*60*60*1000);
