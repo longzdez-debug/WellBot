@@ -62,6 +62,17 @@ describe('TelegramSender', () => {
     expect(bot.sendMessage).toHaveBeenCalledWith(123, '<b>test ad</b>\n<b>💰 100 BYN</b>', { parse_mode: 'HTML', reply_markup: undefined });
   });
 
+  test('does not resend media when the follow-up open button fails', async () => {
+    const bot = new FakeBot();
+    bot.sendMessage.mockRejectedValueOnce(new Error('temporary telegram failure')).mockResolvedValueOnce({});
+    const sender = new TelegramSender(bot as any);
+    await sender.send(123, makeAd([imageOne, imageTwo]));
+    expect(bot.sendMediaGroup).toHaveBeenCalledTimes(1);
+    expect(bot.sendMessage).toHaveBeenCalledTimes(2);
+    expect(bot.sendMessage.mock.calls[1][0]).toBe(123);
+    expect(bot.sendMessage.mock.calls[1][1]).toBe('🔗 ' + adUrl);
+  });
+
   test('falls back to text when a media group is rejected', async () => {
     const bot = new FakeBot();
     bot.sendMediaGroup.mockRejectedValueOnce({ response: { statusCode: 400, body: { description: 'bad request' } } });
