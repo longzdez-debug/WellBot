@@ -1,4 +1,5 @@
 import { ParserScheduler } from '../scheduler/ParserScheduler';
+import { analyzeDeal } from '../services/DealScoreEngine';
 
 describe('ParserScheduler notification reliability', () => {
   const bot = {
