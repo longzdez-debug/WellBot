@@ -169,10 +169,10 @@ export class FastKufarParser extends BaseParser {
     }
 
     const requestedQuery = String(parsed.searchParams.get('query') || '').trim();
-    const requestedCondition = monitorIdentity[8] === 'new' || monitorIdentity[8] === 'used' ? monitorIdentity[8] : '';
-    const requestedSeller = monitorIdentity[9] === 'private' || monitorIdentity[9] === 'company' ? monitorIdentity[9] : '';
-    const requestedMinPrice = monitorIdentity[6] ? Number(monitorIdentity[6]) : undefined;
-    const requestedMaxPrice = monitorIdentity[7] ? Number(monitorIdentity[7]) : undefined;
+    const requestedCondition = monitorIdentity[11] === 'new' || monitorIdentity[11] === 'used' ? monitorIdentity[11] : '';
+    const requestedSeller = monitorIdentity[12] === 'private' || monitorIdentity[12] === 'company' ? monitorIdentity[12] : '';
+    const requestedMinPrice = monitorIdentity[9] ? Number(monitorIdentity[9]) : undefined;
+    const requestedMaxPrice = monitorIdentity[10] ? Number(monitorIdentity[10]) : undefined;
     const brandTerms = requestedBrandSlug ? (BRAND_TERMS[requestedBrandSlug] || [requestedBrandSlug]) : [];
     const normalizedBrandTerms = brandTerms.map(normalizeSearchText).filter(Boolean);
     const normalizedRequestedQuery = normalizeSearchText(requestedQuery);
