@@ -48,6 +48,12 @@ export class DatabaseService {
     if(!active && row.status==='active') await this.pool.query('UPDATE pro_subscriptions SET status=$1,updated_at=CURRENT_TIMESTAMP WHERE user_id=(SELECT id FROM users WHERE telegram_id=$2) AND tier=$3',['expired',telegramId,'pro']);
     return {tier:row.tier,status:active?'active':row.status==='active'?'expired':row.status,expiresAt:new Date(row.expires_at),starsAmount:row.stars_amount};
   }
+  async hasProcessedTelegramPayment(telegramChargeId:string):Promise<boolean>{
+    if(!telegramChargeId.trim()) return false;
+    const r=await this.pool.query('SELECT 1 FROM pro_subscriptions WHERE telegram_payment_charge_id=$1 LIMIT 1',[telegramChargeId]);
+    return Boolean(r.rowCount);
+  }
+
   async activateProSubscription(telegramId:number,expiresAt:Date,starsAmount:number,telegramChargeId:string,providerChargeId:string|null,payload:string):Promise<void>{
     const user=await this.getUser(telegramId); if(!user)throw new Error('user_not_registered');
     await this.pool.query("INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,telegram_payment_charge_id,provider_payment_charge_id,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,$3,$4,$5,$6,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),telegram_payment_charge_id=EXCLUDED.telegram_payment_charge_id,provider_payment_charge_id=EXCLUDED.provider_payment_charge_id,stars_amount=EXCLUDED.stars_amount,last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",[user.id,expiresAt,telegramChargeId,providerChargeId,starsAmount,payload]);
