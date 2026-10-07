@@ -51,8 +51,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p restore
-          aws s3 cp "s3://$S3_BUCKET/$${{ inputs.backup_key }}" restore/database.dump --endpoint-url "$S3_ENDPOINT" --only-show-errors
-          aws s3 cp "s3://$S3_BUCKET/$${{ inputs.backup_key }}.sha256" restore/database.dump.sha256 --endpoint-url "$S3_ENDPOINT" --only-show-errors
+          aws s3 cp "s3://$S3_BUCKET/${{ inputs.backup_key }}" restore/database.dump --endpoint-url "$S3_ENDPOINT" --only-show-errors
+          aws s3 cp "s3://$S3_BUCKET/${{ inputs.backup_key }}.sha256" restore/database.dump.sha256 --endpoint-url "$S3_ENDPOINT" --only-show-errors
           cd restore
           expected="$(awk '{print $1}' database.dump.sha256)"
           actual="$(sha256sum database.dump | awk '{print $1}')"
