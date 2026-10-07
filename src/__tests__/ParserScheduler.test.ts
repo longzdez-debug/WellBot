@@ -123,6 +123,15 @@ describe('ParserScheduler', () => {
     }
   });
 
+  test('shares one market snapshot across monitors on the same platform', async () => {
+    const links = [makeLink(1, new Date()), makeLink(2, new Date())];
+    parser.parseUrl.mockResolvedValue([]);
+    const db = makeDb(links);
+    await new ParserScheduler(db as never, bot as never).runParsing();
+    expect(db.getGlobalRecentMarketAds).toHaveBeenCalledTimes(1);
+    expect(db.getGlobalRecentMarketAds).toHaveBeenCalledWith(2000, 'kufar');
+  });
+
   test('batches next-check scheduling for every parsed link', async () => {
     const links = [makeLink(1, new Date()), makeLink(2, new Date())];
     parser.parseUrl.mockResolvedValue([]);
