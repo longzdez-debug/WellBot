@@ -53,7 +53,7 @@ export class ParserScheduler {
   constructor(db:DatabaseService,bot:BotHandler){this.db=db;this.bot=bot;const seconds=Number.parseFloat(process.env.PARSE_INTERVAL_SECONDS||'1');const concurrency=Number.parseInt(process.env.PARSE_CONCURRENCY||'16',10);const notificationConcurrency=Number.parseInt(process.env.NOTIFICATION_CONCURRENCY||'8',10);const parseTimeoutMs=Number.parseInt(process.env.PARSE_TIMEOUT_MS||'6000',10);const batchSize=Number.parseInt(process.env.NOTIFICATION_BATCH_SIZE||'25',10);const drainMs=Number.parseInt(process.env.NOTIFICATION_DRAIN_MS||'500',10);const maxAttempts=Number.parseInt(process.env.NOTIFICATION_MAX_ATTEMPTS||'12',10);const retentionDays=Number.parseInt(process.env.NOTIFICATION_RETENTION_DAYS||'14',10);const maxAgeSeconds=Number.parseInt(process.env.NEW_AD_MAX_AGE_SECONDS||'900',10);this.intervalMs=Math.max(100,Number.isFinite(seconds)?seconds*1000:500);this.concurrency=Math.max(1,Math.min(20,Number.isFinite(concurrency)?concurrency:5));this.notificationConcurrency=Math.max(1,Math.min(10,Number.isFinite(notificationConcurrency)?notificationConcurrency:4));this.parseTimeoutMs=Math.max(1000,Math.min(60000,Number.isFinite(parseTimeoutMs)?parseTimeoutMs:9000));this.notificationBatchSize=Math.max(1,Math.min(100,Number.isFinite(batchSize)?batchSize:25));this.notificationDrainMs=Math.max(25,Math.min(30000,Number.isFinite(drainMs)?drainMs:250));this.maxNotificationAttempts=Math.max(1,Math.min(100,Number.isFinite(maxAttempts)?maxAttempts:12));this.notificationRetentionDays=Math.max(1,Math.min(365,Number.isFinite(retentionDays)?retentionDays:14));this.newAdMaxAgeSeconds=Math.max(0,Math.min(86400,Number.isFinite(maxAgeSeconds)?maxAgeSeconds:900));logger.info('Parser scheduler configured',{intervalSeconds:this.intervalMs/1000,concurrency:this.concurrency,notificationConcurrency:this.notificationConcurrency,parseTimeoutMs:this.parseTimeoutMs,notificationBatchSize:this.notificationBatchSize,notificationDrainMs:this.notificationDrainMs,maxNotificationAttempts:this.maxNotificationAttempts,notificationRetentionDays:this.notificationRetentionDays,newAdMaxAgeSeconds:this.newAdMaxAgeSeconds,overlapProtection:true});}
   start():void{if(this.intervalId)return;this.stopping=false;void this.runParsing();void this.drainNotifications();void this.maintainNotificationOutbox();void this.runDailyDigests();this.digestIntervalId=setInterval(()=>void this.runDailyDigests(),60*1000);this.scheduleParsingWake(this.intervalMs);this.notificationIntervalId=setInterval(()=>void this.drainNotifications(),this.notificationDrainMs);this.outboxMaintenanceIntervalId=setInterval(()=>void this.maintainNotificationOutbox(),60*60*1000);logger.info('Parser scheduler started',{intervalMs:this.intervalMs,notificationDrainMs:this.notificationDrainMs,notificationConcurrency:this.notificationConcurrency,overlapProtection:true,singleParseTimer:true});}
 
-  async runParsing():Promise<void>{if(this.stopping)return;if(this.isDatabaseBackoffActive('parsing'))return;if(this.isRunning){this.pendingTrigger=true;return;}this.isRunning=true;this.pendingTrigger=false;const startedAt=Date.now();this.metrics.cycles+=1;try{const links=await this.db.getActiveLinks() as ParseLink[];const seen=new Set<string>();const unique=links.filter(link=>{const key=`${link.user_id}|${link.url}`;if(seen.has(key))return false;seen.add(key);return true;});const userIds=[...new Set(unique.map(link=>link.user_id))];const userRows=await this.db.getUsersByIds(userIds);const users=new Map<number,{telegram_id:number;id:number}>(userRows.map(user=>[user.id,user]));const preferences=await this.db.getUserPreferencesByUserIds(userIds);
+  async runParsing():Promise<void>{if(this.stopping)return;if(this.isDatabaseBackoffActive('parsing'))return;if(this.isRunning){this.pendingTrigger=true;return;}this.isRunning=true;this.pendingTrigger=false;const startedAt=Date.now();this.metrics.cycles+=1;try{const links=await this.db.getActiveLinks() as ParseLink[];const seen=new Set<string>();const unique=links.filter(link=>{const key=`${link.user_id}|${link.url}`;if(seen.has(key))return false;seen.add(key);return true;});if(unique.length===0){logger.debug('Parsing cycle skipped: no links are due',{nextPollMs:this.intervalMs});return;}const userIds=[...new Set(unique.map(link=>link.user_id))];const userRows=await this.db.getUsersByIds(userIds);const users=new Map<number,{telegram_id:number;id:number}>(userRows.map(user=>[user.id,user]));const preferences=await this.db.getUserPreferencesByUserIds(userIds);
       const marketAdsByPlatform=new Map<Platform,Ad[]>();
       const platforms=[...new Set(unique.map(link=>link.platform))];
       await Promise.all(platforms.map(async platform=>{
@@ -158,7 +158,7 @@ export class ParserScheduler {
   }
   private isValidAd(ad:Ad|null|undefined):ad is Ad{if(!ad)return false;const externalId=typeof ad.external_id==='string'?ad.external_id.trim():'';const title=typeof ad.title==='string'?ad.title.trim():'';const adUrl=typeof ad.ad_url==='string'?ad.ad_url.trim():'';if(!externalId||!title||!adUrl)return false;try{const parsed=new URL(adUrl);return parsed.protocol==='http:'||parsed.protocol==='https:';}catch{return false;}}
   private normalizeAds(rawAds:Ad[]):Ad[]{const valid:Ad[]=[];const seen=new Set<string>();for(const ad of rawAds){if(!this.isValidAd(ad))continue;const externalId=ad.external_id.trim();if(seen.has(externalId))continue;seen.add(externalId);valid.push({...ad,external_id:externalId,title:ad.title.trim(),ad_url:ad.ad_url.trim()});}return valid;}
-  private async parseLink(link:ParseLink,marketAds:Ad[]=[]):Promise<ParseResult>{const newAds:Ad[]=[];const priceDrops:PriceDrop[]=[];let failureCount=Number(link.error_count||0);try{const parser=ParserFactory.getParser(link.platform);if(!parser){failureCount=await this.recordLinkFailure(link,`No parser configured for platform ${link.platform}`);return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}let rawAds:Ad[];try{rawAds=await this.withTimeout(parser.parseUrl(link.url),this.parseTimeoutMs,`Parse timeout after ${this.parseTimeoutMs} milliseconds`);}catch(error:unknown){const message=error instanceof Error?error.message:String(error);failureCount=await this.recordLinkFailure(link,message);return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}if(!Array.isArray(rawAds)){failureCount=await this.recordLinkFailure(link,'Parser returned a non-array result');return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}const normalizedRaw=this.normalizeAds(rawAds);
+  private async parseLink(link:ParseLink,marketAds:Ad[]=[]):Promise<ParseResult>{const newAds:Ad[]=[];const priceDrops:PriceDrop[]=[];let failureCount=Number(link.error_count||0);let insertedCount=0;let filteredCount=0;let claimedCount=0;let staleSuppressed=0;try{const parser=ParserFactory.getParser(link.platform);if(!parser){failureCount=await this.recordLinkFailure(link,`No parser configured for platform ${link.platform}`);return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}let rawAds:Ad[];try{rawAds=await this.withTimeout(parser.parseUrl(link.url),this.parseTimeoutMs,`Parse timeout after ${this.parseTimeoutMs} milliseconds`);}catch(error:unknown){const message=error instanceof Error?error.message:String(error);failureCount=await this.recordLinkFailure(link,message);return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}if(!Array.isArray(rawAds)){failureCount=await this.recordLinkFailure(link,'Parser returned a non-array result');return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}const normalizedRaw=this.normalizeAds(rawAds);
       const skipSlots=Math.min(100,Math.max(0,Math.floor(Number(link.config?.skipSlots||0))));
       const scannedRaw=skipSlots>0?normalizedRaw.slice(skipSlots):normalizedRaw;
       if(skipSlots>0) logger.debug('Skipping listing slots for monitor',{linkId:link.id,skipSlots,availableSlots:normalizedRaw.length});
@@ -254,7 +254,7 @@ export class ParserScheduler {
           const publishedAt=adData.published_at instanceof Date?adData.published_at:adData.published_at?new Date(adData.published_at):null;
           const ageSeconds=publishedAt&&!Number.isNaN(publishedAt.getTime())?Math.max(0,(Date.now()-publishedAt.getTime())/1000):null;
           if(ageSeconds!==null&&this.newAdMaxAgeSeconds>0&&ageSeconds>this.newAdMaxAgeSeconds){
-            logger.debug('Eligible existing ad is stale; notification suppressed',{linkId:link.id,external_id:adData.external_id,ageSeconds:Number(ageSeconds.toFixed(1)),maxAgeSeconds:this.newAdMaxAgeSeconds});
+            staleSuppressed+=1;logger.debug('Eligible existing ad is stale; notification suppressed',{linkId:link.id,external_id:adData.external_id,ageSeconds:Number(ageSeconds.toFixed(1)),maxAgeSeconds:this.newAdMaxAgeSeconds});
             continue;
           }
           newAds.push(adData);
@@ -267,7 +267,7 @@ export class ParserScheduler {
         const inserted = insertedRaw.map(ad => ({ ...ad, ...marketById.get(ad.external_id) }));
         for(const row of inserted) marketUpdates.push({id:Number(row.id),status:row.market_status??null,percent:row.market_percent??null,median:row.market_median??null,low:row.market_low??null,high:row.market_high??null,sellFast:row.sell_fast??null,sellNormal:row.sell_normal??null,sellMax:row.sell_max??null,sampleSize:row.market_sample_size??null,confidence:row.market_confidence??null,quality:row.market_quality??null});
         const notifyCandidates = inserted.filter(ad => configuredIds.has(ad.external_id));
-        const filteredOut = inserted.filter(ad => !configuredIds.has(ad.external_id));
+        const filteredOut = inserted.filter(ad => !configuredIds.has(ad.external_id)); filteredCount=filteredOut.length;
         if (filteredOut.length) {
           logger.info('New ads stored but notification-filtered', {
             linkId: link.id,
@@ -282,7 +282,7 @@ export class ParserScheduler {
             } : null,
           });
         }
-        const claimed = await this.db.claimNewAdsForUser(link.user_id, link.id, notifyCandidates);
+        const claimed = await this.db.claimNewAdsForUser(link.user_id, link.id, notifyCandidates); claimedCount=claimed.size;
 
         for (const adData of inserted) {
           if (!configuredIds.has(adData.external_id)) continue;
@@ -305,7 +305,7 @@ export class ParserScheduler {
             : null;
 
           if (ageSeconds !== null && this.newAdMaxAgeSeconds > 0 && ageSeconds > this.newAdMaxAgeSeconds) {
-            logger.warn('🕒 STALE AD FIRST SEEN; notification suppressed', {
+            staleSuppressed+=1;logger.warn('🕒 STALE AD FIRST SEEN; notification suppressed', {
               linkId: link.id,
               external_id: adData.external_id,
               title: adData.title,
@@ -343,6 +343,9 @@ export class ParserScheduler {
       if(marketUpdates.length) await this.db.updateAdMarketSignals(marketUpdates);
       await this.db.updateLastParsed(link.id);
       if ((link.error_count ?? 0) > 0) await this.db.resetErrorCount(link.id);
+      if(insertedCount||filteredCount||claimedCount||staleSuppressed||priceDrops.length||newAds.length){
+        logger.info('Monitor scan result',{linkId:link.id,platform:link.platform,fetched:rawAds.length,normalized:normalizedRaw.length,scanned:scannedRaw.length,existing:state.existingIds.size,newCandidates:newCandidates.length,inserted:insertedCount,filterPassed:configuredIds.size,filtered:filteredCount,claimed:claimedCount,stale:staleSuppressed,newAds:newAds.length,priceDrops:priceDrops.length});
+      }
       return { newAds, priceDrops, nextCheckDelayMs: this.computeNextCheckDelay(link, failureCount) };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
