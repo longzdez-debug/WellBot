@@ -71,7 +71,7 @@ describe('FastKufarParser catalog/search behavior', () => {
         expect(config.params.cat).toBe('17010');
         return {
           data: { ads: [
-            { ad_id: 'ok', subject: 'Apple iPhone 17 | Pro', description: '256 GB', company_ad: false, price_byn: 150000, ad_link: 'https://www.kufar.by/ad/ok' },
+            { ad_id: 'ok', subject: 'Apple iPhone 17 | Pro', description: '256 GB', ad_parameters: [{ p: 'condition', vl: 'Новое' }, { p: 'area', vl: 'Минск' }], company_ad: false, price_byn: 150000, ad_link: 'https://www.kufar.by/ad/ok' },
             { ad_id: 'wrong', subject: 'Apple iPhone 16 Pro', description: '256 GB', company_ad: false, price_byn: 150000, ad_link: 'https://www.kufar.by/ad/wrong' },
           ] },
         };
