@@ -79,19 +79,23 @@ async function main() {
   logger.info('Database initialized', { database: dbHealth.database, serverVersion: dbHealth.serverVersion });
 
   let scheduler: ParserScheduler | null = null;
+  let shuttingDown = false;
   const webServer = await startWebAppServer(
     webPort,
     db,
     TELEGRAM_BOT_TOKEN,
     undefined,
-    async () => scheduler ? await scheduler.getMetrics() : { scheduler: { running: false }, notifications: {}, generatedAt: new Date().toISOString() },
+    async () => {
+      if (!scheduler) return { scheduler: { running: false }, notifications: {}, generatedAt: new Date().toISOString() };
+      const metrics = await scheduler.getMetrics();
+      return { ...metrics, scheduler: { ...metrics.scheduler, running: !shuttingDown, busy: metrics.scheduler.running } };
+    },
   );
   const bot = new BotHandler(TELEGRAM_BOT_TOKEN, db);
   scheduler = new ParserScheduler(db, bot);
   installWebAppBridge(bot);
   scheduler.start();
 
-  let shuttingDown = false;
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
