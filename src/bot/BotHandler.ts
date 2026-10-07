@@ -99,8 +99,11 @@ export class BotHandler {
     });
     this.bot.on('message', async (msg: Message) => {
       const payment=(msg as Message & {successful_payment?:any}).successful_payment;if(!payment)return;
-      const payload=String(payment.invoice_payload||'');if(!payload.startsWith('wellbot_pro_monthly_v1:')||payment.currency!=='XTR')return;
-      if (msg.from?.id && msg.from.id !== msg.chat.id && payload.split(':')[1] !== String(msg.from.id)) {
+      const payload=String(payment.invoice_payload||'');
+      const payloadParts=payload.split(':');
+      const payloadUserId=Number(payloadParts[1]);
+      if(payloadParts.length!==3||payloadParts[0]!=='wellbot_pro_monthly_v1'||!Number.isSafeInteger(payloadUserId)||payloadUserId<=0||payment.currency!=='XTR')return;
+      if (msg.from?.id && payloadUserId !== msg.from.id) {
         logger.warn('Ignoring PRO payment with mismatched user payload',{telegramId:msg.from.id,chatId:msg.chat.id,payload});
         return;
       }
