@@ -360,6 +360,7 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
           }
           if (config.condition && config.condition!=='new' && config.condition!=='used') { json(res,400,{error:'invalid_condition'}); return; }
           if (config.seller && config.seller!=='private' && config.seller!=='company') { json(res,400,{error:'invalid_seller'}); return; }
+          if ((config.condition || config.seller) && source!=='kufar') { json(res,400,{error:'marketplace_filters_only_kufar',message:'Фильтры состояния и типа продавца сейчас доступны только для Kufar.'}); return; }
           if (config.minMarketDiscount!=null && (typeof config.minMarketDiscount!=='number' || !Number.isFinite(config.minMarketDiscount) || config.minMarketDiscount<0 || config.minMarketDiscount>90)) { json(res,400,{error:'invalid_market_discount',message:'Минимальная скидка от рынка должна быть от 0 до 90%.'}); return; }
           if (config.skipSlots!=null && (typeof config.skipSlots!=='number' || !Number.isSafeInteger(config.skipSlots) || config.skipSlots<0 || config.skipSlots>100)) { json(res,400,{error:'invalid_skip_slots',message:'Пропуск слотов должен быть от 0 до 100.'}); return; }
           if (config.mode && config.mode!=='normal' && config.mode!=='sniper') { json(res,400,{error:'invalid_mode'}); return; }
