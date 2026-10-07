@@ -49,6 +49,6 @@ export function findCatalogCategory(id:string):CatalogNode|null{
  const min=config.minPrice!=null&&Number.isFinite(Number(config.minPrice))?Number(config.minPrice):undefined;
  const max=config.maxPrice!=null&&Number.isFinite(Number(config.maxPrice))?Number(config.maxPrice):undefined;
  if(min!=null||max!=null)url.searchParams.set('prc','r:'+(min??0)+','+(max??''));
- const identity=[config.source,config.categoryId,config.subcategoryId||'',config.brand||'',config.model||'',JSON.stringify(config.phoneFilters||{}),config.region||'',config.city||'',config.query?.trim()||'',min??'',max??'',config.condition||'',config.seller||'',config.mode||'normal',config.minMarketDiscount??'',config.skipSlots??0].join('|');
+ const identity=JSON.stringify({v:2,source:config.source,categoryId:config.categoryId,subcategoryId:config.subcategoryId||'',brand:config.brand||'',model:config.model||'',phoneFilters:config.phoneFilters||{},region:config.region||'',city:config.city||'',query:config.query?.trim()||'',minPrice:min??null,maxPrice:max??null,condition:config.condition||'',seller:config.seller||'',mode:config.mode||'normal',minMarketDiscount:config.minMarketDiscount??null,skipSlots:config.skipSlots??0});
  url.searchParams.set('wb',identity); return url.toString();
 }
