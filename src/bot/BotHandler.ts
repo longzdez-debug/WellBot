@@ -99,8 +99,11 @@ export class BotHandler {
       try{
         const telegramChargeId=String(payment.telegram_payment_charge_id||'');
         if(!telegramChargeId){ logger.warn('PRO payment missing Telegram charge id',{telegramId:msg.from?.id||msg.chat.id}); return; }
-        if(await this.db.hasProcessedTelegramPayment(telegramChargeId)){
-          logger.info('Ignoring duplicate PRO payment update',{telegramId:msg.from?.id||msg.chat.id,chargeId:telegramChargeId});
+        const paymentUserId=msg.from?.id||msg.chat.id;
+        const starsAmount=Number(payment.total_amount||0);
+        const claimed=await this.db.claimTelegramPayment(telegramChargeId,paymentUserId,String(payload),Number.isSafeInteger(starsAmount)?starsAmount:0);
+        if(!claimed){
+          logger.info('Ignoring duplicate PRO payment update',{telegramId:paymentUserId,chargeId:telegramChargeId});
           return;
         }
         const expiry=payment.subscription_expiration_date?new Date(Number(payment.subscription_expiration_date)*1000):new Date(Date.now()+30*24*60*60*1000);
