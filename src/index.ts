@@ -35,7 +35,8 @@ function safeError(error: unknown): { message: string; code?: string; name?: str
 }
 
 async function main() {
-  logger.info('Starting WellBOT...', { version: '2.0.4', miniAppApi: 'telegram-init-data' });
+  const buildRevision = process.env.WELLBOT_BUILD_REV || '4da3f8712bcba07d8c58f92ebeeb9e642256c343';
+  logger.info('Starting WellBOT...', { version: '2.0.4', buildRevision, miniAppApi: 'telegram-init-data' });
   const configuredWebPort = process.env.PORT || '3000';
   const webPort = Number(configuredWebPort);
   console.log('[WellBOT] HTTP startup', JSON.stringify({ port: configuredWebPort, platformPort: process.env.PORT || null, host: '0.0.0.0' }));
@@ -109,7 +110,7 @@ async function main() {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
-  logger.info('WellBOT is running!');
+  logger.info('WellBOT is running!', { buildRevision });
 }
 
 main().catch((error: unknown) => {
