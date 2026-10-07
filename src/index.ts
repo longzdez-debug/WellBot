@@ -51,7 +51,7 @@ async function main() {
   const dbUrl = new URL(DATABASE_URL);
   const dbHost = dbUrl.hostname;
   const dbPort = dbUrl.port || '5432';
-  const dbName = dbUrl.pathname.replace(/^\\//, '') || '(default)';
+  const dbName = dbUrl.pathname.replace(/^\//, '') || '(default)';
   logger.info('PostgreSQL endpoint', { host: dbHost, port: dbPort, database: dbName });
   try {
     const addresses = await dns.promises.lookup(dbHost, { all: true });
