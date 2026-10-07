@@ -6,12 +6,12 @@ RUN npm ci
 COPY tsconfig.json ./
 
 # Force Deplexo to rebuild application source when the deployment revision changes.
-ARG WELLBOT_BUILD_REV=e31fee3f44dadf8772fcba3b6aa9d18a76041b2d
+ARG WELLBOT_BUILD_REV=ba316a1ca512f5e0273fe06437f8d674dc3e4435
 ENV WELLBOT_BUILD_REV=$WELLBOT_BUILD_REV
 RUN echo "WellBOT build revision: $WELLBOT_BUILD_REV"
 COPY src ./src
 COPY web ./web
-RUN npm run build
+RUN rm -rf dist && npm run build
 RUN cp src/database/schema.sql dist/database/
 RUN npm prune --omit=dev
 RUN chown -R node:node /app
