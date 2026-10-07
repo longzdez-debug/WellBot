@@ -173,3 +173,11 @@ web/
 ## License
 
 MIT
+
+## Production monitoring and recovery
+
+WellBOT exposes a public, read-only Prometheus endpoint at `/metrics`. Reference production alert rules are stored in `ops/prometheus/wellbot-alerts.yml`, and an Alertmanager Telegram receiver template is in `ops/alertmanager/alertmanager.yml.example`.
+
+The repository also contains scheduled PostgreSQL backup, retention, and manual restore workflows under `.github/workflows/`. Their credentials must remain in encrypted GitHub Actions secrets; no database or Telegram secrets are committed to the repository.
+
+For production, configure Prometheus to scrape the DEPLEXO HTTPS `/metrics` endpoint, load the WellBOT alert rules, and configure Alertmanager with `WELLBOT_ALERT_BOT_TOKEN` and `WELLBOT_ALERT_CHAT_ID` as runtime secrets. The repository's production watchdog additionally probes `/healthz`, `/health`, and `/metrics` every ten minutes when `WELLBOT_PROD_URL` is configured.
