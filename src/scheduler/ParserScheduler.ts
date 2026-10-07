@@ -69,7 +69,7 @@ export class ParserScheduler {
       const parts=new Intl.DateTimeFormat('en-GB',{timeZone:timezone,hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date());
       const hour=Number(parts.find(p=>p.type==='hour')?.value||'-1');
       const minute=Number(parts.find(p=>p.type==='minute')?.value||'-1');
-      if(minute!==0)return;
+      if(minute<0||minute>5)return;
       const day=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
       for(const user of users){
         if(user.notificationsEnabled===false||!user.digestEnabled||user.digestHour!==hour)continue;
@@ -85,7 +85,7 @@ export class ParserScheduler {
           this.digestSentKeys.set(user.userId,key);
         }catch(error){
           await this.db.releaseDailyDigest(user.userId,day,hour);
-          throw error;
+          logger.warn('Daily digest delivery failed; continuing with next user',{userId:user.userId,error:error instanceof Error?error.message:String(error)});
         }
       }
       for(const [userId,key] of this.digestSentKeys){if(key.split(':')[0]!==day)this.digestSentKeys.delete(userId);}
