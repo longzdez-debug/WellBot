@@ -27,7 +27,8 @@ async function main() {
   const DATABASE_URL = requiredEnv('DATABASE_URL');
   const db = new DatabaseService(DATABASE_URL);
   await db.initialize();
-  logger.info('Database initialized');
+  const dbHealth=await db.healthCheck();
+  logger.info('Database initialized',{database:dbHealth.database,serverVersion:dbHealth.serverVersion});
   let scheduler: ParserScheduler | null = null;
   const webServer = await startWebAppServer(
     webPort,
