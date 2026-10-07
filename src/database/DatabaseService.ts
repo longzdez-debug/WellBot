@@ -205,7 +205,7 @@ export class DatabaseService {
     const r=await this.pool.query(
       `SELECT 1 FROM dismissed_ads d JOIN users u ON u.id=d.user_id
        WHERE u.telegram_id=$1 AND d.external_id=$2
-         AND ($3::text IS NULL OR d.platform=$3)
+         AND ($3::text IS NULL OR d.platform=$3 OR d.platform='unknown')
        LIMIT 1`,
       [telegramId,externalId,platform||null],
     );
