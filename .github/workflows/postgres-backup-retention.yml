@@ -52,5 +52,4 @@ jobs:
               if ts < cutoff:
                   subprocess.run(['aws','s3','rm',f"s3://{os.environ['S3_BUCKET']}/{key}",'--endpoint-url',os.environ['S3_ENDPOINT'],'--only-show-errors'],check=True)
           PY
-        env:
-          CUTOFF_TS: ""
+
