@@ -1,0 +1,65 @@
+name: PostgreSQL Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+concurrency:
+  group: wellbot-postgres-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+      S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.BACKUP_S3_REGION || 'auto' }}
+    steps:
+      - name: Validate backup configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in DATABASE_URL S3_ENDPOINT S3_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required secret: $name"
+              exit 1
+            fi
+          done
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Install AWS CLI
+        run: |
+          python3 -m pip install --user awscli
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Create encrypted-format database dump
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p backup
+          stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          file="backup/wellbot-postgres-${stamp}.dump"
+          pg_dump --format=custom --no-owner --no-privileges --dbname="$DATABASE_URL" --file="$file"
+          sha256sum "$file" > "$file.sha256"
+          echo "BACKUP_FILE=$file" >> "$GITHUB_ENV"
+
+      - name: Upload backup to external object storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3 cp "$BACKUP_FILE" "s3://$S3_BUCKET/wellbot/postgres/$(basename "$BACKUP_FILE")" --endpoint-url "$S3_ENDPOINT" --only-show-errors
+          aws s3 cp "$BACKUP_FILE.sha256" "s3://$S3_BUCKET/wellbot/postgres/$(basename "$BACKUP_FILE").sha256" --endpoint-url "$S3_ENDPOINT" --only-show-errors
+
+      - name: Remove local dump
+        if: always()
+        run: rm -rf backup
