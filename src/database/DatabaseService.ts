@@ -48,14 +48,6 @@ export class DatabaseService {
     if(!active && row.status==='active') await this.pool.query('UPDATE pro_subscriptions SET status=$1,updated_at=CURRENT_TIMESTAMP WHERE user_id=(SELECT id FROM users WHERE telegram_id=$2) AND tier=$3',['expired',telegramId,'pro']);
     return {tier:row.tier,status:active?'active':row.status==='active'?'expired':row.status,expiresAt:new Date(row.expires_at),starsAmount:row.stars_amount};
   }
-  async claimTelegramPayment(telegramChargeId:string,telegramId:number,payload:string,starsAmount:number):Promise<boolean>{
-    if(!telegramChargeId.trim()||!Number.isSafeInteger(telegramId)||telegramId<=0) return false;
-    const r=await this.pool.query(
-      'INSERT INTO wellbot_payment_events(telegram_payment_charge_id,telegram_id,payload,stars_amount) VALUES($1,$2,$3,$4) ON CONFLICT(telegram_payment_charge_id) DO NOTHING',
-      [telegramChargeId,telegramId,payload,starsAmount],
-    );
-    return (r.rowCount||0)>0;
-  }
 
   async activateProFromTelegramPayment(telegramId:number,expiresAt:Date,starsAmount:number,telegramChargeId:string,providerChargeId:string|null,payload:string):Promise<boolean>{
     if(!telegramChargeId.trim()||!Number.isSafeInteger(telegramId)||telegramId<=0) return false;
@@ -75,10 +67,6 @@ export class DatabaseService {
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }
 
-  async activateProSubscription(telegramId:number,expiresAt:Date,starsAmount:number,telegramChargeId:string,providerChargeId:string|null,payload:string):Promise<void>{
-    const user=await this.getUser(telegramId); if(!user)throw new Error('user_not_registered');
-    await this.pool.query("INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,telegram_payment_charge_id,provider_payment_charge_id,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,$3,$4,$5,$6,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),telegram_payment_charge_id=EXCLUDED.telegram_payment_charge_id,provider_payment_charge_id=EXCLUDED.provider_payment_charge_id,stars_amount=EXCLUDED.stars_amount,last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",[user.id,expiresAt,telegramChargeId,providerChargeId,starsAmount,payload]);
-  }
   async revokeProByCharge(telegramChargeId:string):Promise<void>{await this.pool.query("UPDATE pro_subscriptions SET status='refunded',expires_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE telegram_payment_charge_id=$1",[telegramChargeId]);}
 
   async adminGrantPro(telegramId:number,durationDays:number,adminTelegramId:number,reason:string):Promise<void>{
@@ -209,14 +197,6 @@ export class DatabaseService {
       [userId,adId],
     );
     return r.rows.length>0;
-  }
-  async isAdDismissedForChat(externalId:string,telegramId:number):Promise<boolean>{
-    const r=await this.pool.query('SELECT 1 FROM dismissed_ads d JOIN users u ON u.id=d.user_id WHERE u.telegram_id=$1 AND d.external_id=$2 LIMIT 1',[telegramId,externalId]);
-    return r.rowCount===1;
-  }
-  async isAdDismissedForUser(externalId:string,userId:number):Promise<boolean>{
-    const r=await this.pool.query('SELECT 1 FROM dismissed_ads WHERE user_id=$1 AND external_id=$2',[userId,externalId]);
-    return r.rowCount===1;
   }
   async getDismissedExternalIds(userId:number):Promise<Set<string>>{
     const r=await this.pool.query<{external_id:string}>('SELECT external_id FROM dismissed_ads WHERE user_id=$1',[userId]);
