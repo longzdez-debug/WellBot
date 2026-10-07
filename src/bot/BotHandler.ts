@@ -52,6 +52,9 @@ export class BotHandler {
       else if (msg.text === '📋 Мои поиски') await this.handleMyLinks(chatId, userId);
       else if (msg.text === '🔥 Выгодные находки') await this.handleDeals(chatId, userId);
       else if (msg.text === '🗑 Удалить все поиски') await this.handleDeleteAllLinks(chatId, userId);
+      else if (msg.text === '/pro' || msg.text === '👑 WellBOT PRO') await this.sendProInvoice(chatId, userId);
+      else if (msg.text === '/terms') await this.bot.sendMessage(chatId, 'Условия WellBOT PRO: подписка оплачивается в Telegram Stars, срок — 30 дней с автоматическим продлением. Для вопросов по оплате используйте /paysupport.');
+      else if (msg.text === '/paysupport') await this.bot.sendMessage(chatId, 'Поддержка оплаты WellBOT PRO: укажите время платежа и Telegram ID. Мы проверим платёж и статус подписки.');
       
     });
 
@@ -106,12 +109,6 @@ export class BotHandler {
         const claimed=await this.db.claimTelegramPayment(telegramChargeId,paymentUserId,String(payload),Number.isSafeInteger(starsAmount)?starsAmount:0);\n        if(!claimed){ logger.info('Ignoring duplicate PRO payment confirmation',{telegramId:paymentUserId,chargeId:telegramChargeId}); return; }\n        await this.bot.sendMessage(msg.chat.id,'👑 WellBOT PRO активирован до '+expiresAt.toLocaleDateString('ru-RU')+'.');
         logger.info('WellBOT PRO payment confirmed',{telegramId:msg.from?.id||msg.chat.id,chargeId:payment.telegram_payment_charge_id,expiresAt:expiresAt.toISOString(),recurring:Boolean(payment.is_recurring)});
       }catch(error){logger.error('Failed to activate PRO after payment',{telegramId:msg.from?.id||msg.chat.id,error:error instanceof Error?error.message:String(error)});}
-    });
-    this.bot.on('message', async (msg: Message) => {
-      if(!msg.from||!msg.text)return;
-      if(msg.text==='/pro'||msg.text==='👑 WellBOT PRO')await this.sendProInvoice(msg.chat.id,msg.from.id);
-      else if(msg.text==='/terms')await this.bot.sendMessage(msg.chat.id,'Условия WellBOT PRO: подписка оплачивается в Telegram Stars, срок — 30 дней с автоматическим продлением. Для вопросов по оплате используйте /paysupport.');
-      else if(msg.text==='/paysupport')await this.bot.sendMessage(msg.chat.id,'Поддержка оплаты WellBOT PRO: укажите время платежа и Telegram ID. Мы проверим платёж и статус подписки.');
     });
     this.bot.on('polling_error', (error: Error) => logger.error('Telegram polling error', { error: error.message }));
     logger.info('Bot handlers initialized');
