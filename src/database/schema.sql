@@ -284,6 +284,18 @@ CREATE TABLE IF NOT EXISTS wellbot_promo_redemptions (id BIGSERIAL PRIMARY KEY,p
 CREATE INDEX IF NOT EXISTS idx_wellbot_promo_code ON wellbot_promo_codes(code);
 
 
+-- Durable daily digest delivery claims. This prevents duplicate digests across process restarts
+-- while allowing a failed delivery to be retried after a short lease.
+CREATE TABLE IF NOT EXISTS digest_deliveries (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  digest_day DATE NOT NULL,
+  digest_hour SMALLINT NOT NULL CHECK (digest_hour BETWEEN 0 AND 23),
+  claimed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sent_at TIMESTAMP,
+  PRIMARY KEY (user_id, digest_day, digest_hour)
+);
+CREATE INDEX IF NOT EXISTS idx_digest_deliveries_claimed ON digest_deliveries(claimed_at) WHERE sent_at IS NULL;
+
 -- Personal preferences and durable saved listings.
 CREATE TABLE IF NOT EXISTS user_preferences (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
