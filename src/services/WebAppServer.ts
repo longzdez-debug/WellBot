@@ -162,6 +162,17 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
       const requestUrl = new URL(req.url || '/', 'http://localhost');
       requestPath = decodeURIComponent(requestUrl.pathname);
 
+      if (requestPath === '/terms') {
+        if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); json(res, 405, { error: 'method_not_allowed' }); return; }
+        applySecurityHeaders(res);
+        res.statusCode = 200;
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        if (req.method === 'HEAD') { res.end(); return; }
+        res.end(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>WellBOT — Условия использования</title><style>body{margin:0;background:#07090d;color:#f4f6fb;font:16px/1.65 Inter,system-ui,sans-serif}main{max-width:760px;margin:auto;padding:40px 22px 70px}h1{font-size:32px}h2{margin-top:30px}p,li{color:#b9c0cc}.card{background:#0d1118;border:1px solid #202734;border-radius:16px;padding:24px}</style></head><body><main><div class="card"><h1>WellBOT — Условия использования</h1><p>Последнее обновление: 7 октября 2026 г.</p><h2>1. Назначение сервиса</h2><p>WellBOT помогает отслеживать объявления на поддерживаемых площадках, сравнивать цены и получать уведомления о потенциально интересных предложениях.</p><h2>2. Ответственность пользователя</h2><p>Пользователь самостоятельно проверяет продавца, состояние товара, цену, условия сделки и достоверность объявления перед покупкой.</p><h2>3. Аналитика</h2><p>Оценки, Deal Score, рыночные цены, потенциальная прибыль и ROI являются информационной аналитикой и не являются гарантией прибыли или возможности перепродажи.</p><h2>4. PRO</h2><p>Платные функции WellBOT предоставляются в соответствии с отображаемыми в Mini App условиями и стоимостью. Оплата через Telegram Stars обрабатывается Telegram.</p><h2>5. Использование сервиса</h2><p>Запрещается использовать WellBOT для незаконных действий, обхода ограничений площадок или нарушения прав третьих лиц.</p><h2>6. Изменения</h2><p>Условия могут обновляться при изменении функциональности сервиса. Актуальная версия всегда доступна по адресу <strong>/terms</strong>.</p></div></main></body></html>`);
+        return;
+      }
+
       if (requestPath === '/healthz') {
         if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); json(res, 405, { error: 'method_not_allowed' }); return; }
         applySecurityHeaders(res);
