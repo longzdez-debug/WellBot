@@ -161,7 +161,7 @@ describe('ParserScheduler', () => {
     expect(db.enqueueNotifications.mock.calls[0][0]).toEqual([expect.objectContaining({
       kind: 'new_ad',
       chatId: user.telegram_id,
-      dedupeKey: `new_ad:user:${user.telegram_id}:new-1`,
+      dedupeKey: `new_ad:user:${user.telegram_id}:kufar:new-1`,
       payload: { ad: expect.objectContaining({ external_id: 'new-1' }) },
     })]);
     expect(bot.sendNotification).not.toHaveBeenCalled();
