@@ -104,8 +104,8 @@ describe('ParserScheduler', () => {
       existingIds: new Set(['eligible-later']),
       prices: new Map([['eligible-later', { price: '700 BYN', adId: 42 }]]),
       market: new Map([['eligible-later', {
-        status: 'below_market',
-        percent: -25,
+        status: 'market',
+        percent: -10,
         median: 950,
         low: 800,
         high: 1100,
@@ -117,6 +117,15 @@ describe('ParserScheduler', () => {
         quality: 90,
       }]]),
     });
+    db.getGlobalRecentMarketAds.mockResolvedValue(
+      Array.from({ length: 12 }, (_, i) => ({
+        external_id: 'market-' + i,
+        title: 'iPhone 15',
+        price: '950 BYN',
+        ad_url: 'https://kufar.by/ad/market-' + i,
+        market_group: 'kufar:phones:17010',
+      })),
+    );
     await new ParserScheduler(db as never, bot as never).runParsing();
     expect(db.claimNewAdsForUser).not.toHaveBeenCalled();
     expect(db.enqueueNotifications).toHaveBeenCalledTimes(1);
