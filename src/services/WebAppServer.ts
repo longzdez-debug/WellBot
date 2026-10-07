@@ -21,6 +21,24 @@ const MAX_LINKS = 50;
 const AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
 const PHONE_MODEL_CACHE=new Map<string,{expires:number;models:{id:string;title:string;slug:string}[]}>();
 const PHONE_MODEL_TTL=30*60*1000;
+const API_RATE_WINDOW_MS=60_000;
+const API_RATE_LIMIT=180;
+const apiRateLimits=new Map<number,{windowStarted:number;count:number}>();
+function allowApiRequest(telegramId:number):boolean{
+  const now=Date.now();
+  const current=apiRateLimits.get(telegramId);
+  if(!current||now-current.windowStarted>=API_RATE_WINDOW_MS){
+    apiRateLimits.set(telegramId,{windowStarted:now,count:1});
+    return true;
+  }
+  if(current.count>=API_RATE_LIMIT) return false;
+  current.count+=1;
+  return true;
+}
+function pruneApiRateLimits():void{
+  const cutoff=Date.now()-API_RATE_WINDOW_MS*2;
+  for(const [id,state] of apiRateLimits) if(state.windowStarted<cutoff) apiRateLimits.delete(id);
+}
 function isAdminTelegramId(id:number):boolean{return String(process.env.TELEGRAM_ADMIN_IDS||'').split(',').map(x=>x.trim()).filter(Boolean).includes(String(id));}
 
 
@@ -169,6 +187,12 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
         const initData = req.headers['x-telegram-init-data'];
         const auth = parseTelegramInitData(typeof initData === 'string' ? initData : '', botToken);
         if (!auth) { logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method }); json(res, 401, { error: 'unauthorized' }); return; }
+        if (!allowApiRequest(auth.user.id)) {
+          res.setHeader('Retry-After','60');
+          json(res,429,{error:'rate_limited',message:'Слишком много запросов. Повторите через минуту.'});
+          return;
+        }
+        pruneApiRateLimits();
         const user = await db.getUser(auth.user.id);
         if (!user) { logger.warn('WellBOT API user not registered', { telegramId: auth.user.id, requestPath }); json(res, 403, { error: 'user_not_registered' }); return; }
 
@@ -334,6 +358,9 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
       const body = await readFile(filePath);
       const extension = extname(filePath).toLowerCase();
       applySecurityHeaders(res);
+      if(extension==='.html'){
+        res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.telegram.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+      }
       res.statusCode = 200;
       res.setHeader('Content-Type', MIME_TYPES[extension] || 'application/octet-stream');
       res.setHeader('Cache-Control', extension === '.html' ? 'no-cache' : 'public, max-age=300');
