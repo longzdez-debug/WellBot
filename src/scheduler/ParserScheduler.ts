@@ -101,6 +101,11 @@ export class ParserScheduler {
   private applyMonitorFilters(link: ParseLink, ads: Ad[]): Ad[] {
     const config = link.config;
     if (!config) return ads;
+    if (link.platform !== 'kufar') {
+      return config.minMarketDiscount == null
+        ? ads
+        : ads.filter(ad => typeof ad.market_percent === 'number' && ad.market_percent <= -Number(config.minMarketDiscount));
+    }
     const min = config.minPrice != null ? Number(config.minPrice) : undefined;
     const max = config.maxPrice != null ? Number(config.maxPrice) : undefined;
     const condition = config.condition === 'new'
@@ -113,21 +118,21 @@ export class ParserScheduler {
       apple:['apple','iphone','айфон'],samsung:['samsung','самсунг'],xiaomi:['xiaomi','сяоми','ксиаоми'],huawei:['huawei','хуавей'],honor:['honor','хонор'],google:['google','pixel'],oneplus:['oneplus','one plus']
     };
     const queryTerms=normalizeFilterText(config.query||'').split(' ').filter(x=>x.length>=2);
-    const brandTerms=link.platform==='kufar' && String(config.brand||'').trim()
+    const brandTerms=String(config.brand||'').trim()
       ? brandAliases[String(config.brand).toLowerCase()]||[normalizeFilterText(String(config.brand))]
       : [];
-    const modelTerm=link.platform==='kufar' ? normalizeFilterText(String(config.model||'')) : '';
+    const modelTerm=normalizeFilterText(String(config.model||''));
     return ads.filter(ad => {
       const searchText=normalizeFilterText([ad.title,ad.description].filter(Boolean).join(' '));
       if(queryTerms.length&&!queryTerms.every(term=>searchText.includes(term))) return false;
       if(brandTerms.length&&!brandTerms.some(term=>searchText.includes(term))) return false;
       if(modelTerm&&!searchText.includes(modelTerm)) return false;
-      if (condition.length && link.platform==='kufar') {
+      if (condition.length) {
         const value = String(ad.condition || '').trim().toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
         if (!value || !condition.some(token => value.includes(token))) return false;
       }
       if (config.minMarketDiscount != null && (typeof ad.market_percent !== 'number' || ad.market_percent > -Number(config.minMarketDiscount))) return false;
-      if (config.seller && link.platform==='kufar') {
+      if (config.seller) {
         if (config.seller === 'company' && ad.is_company !== true) return false;
         if (config.seller === 'private' && ad.is_company === true) return false;
       }
