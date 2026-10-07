@@ -130,6 +130,27 @@ export class DatabaseService {
     return new Set(r.rows.map(row=>row.external_id));
   }
 
+  async getUserRecentAds(userId:number,limit=100):Promise<Ad[]>{
+    const safeLimit=Math.min(Math.max(Math.floor(limit),1),300);
+    const r=await this.pool.query<Ad>(
+      `SELECT DISTINCT ON (a.external_id)
+         a.*
+       FROM ads a
+       JOIN links l ON l.id=a.link_id
+       LEFT JOIN dismissed_ads d ON d.user_id=l.user_id AND d.external_id=a.external_id
+       WHERE l.user_id=$1 AND l.is_active=true AND d.external_id IS NULL
+       ORDER BY a.external_id,COALESCE(a.published_at,a.created_at) DESC,a.id DESC`,
+      [userId],
+    );
+    return r.rows
+      .sort((a,b)=>{
+        const at=new Date(a.published_at||a.created_at||0).getTime();
+        const bt=new Date(b.published_at||b.created_at||0).getTime();
+        return bt-at;
+      })
+      .slice(0,safeLimit);
+  }
+
   async getExistingAdStatesForLink(linkId:number,externalIds:string[]):Promise<{existingIds:Set<string>;prices:Map<string,{price:string;adId:number}>;market:Map<string,{status:Ad['market_status'];percent:number|null;median:number|null;low:number|null;high:number|null;sellFast:number|null;sellNormal:number|null;sellMax:number|null;sampleSize:number|null;confidence:Ad['market_confidence'];quality:number|null}>}>{if(!externalIds.length)return{existingIds:new Set(),prices:new Map(),market:new Map()};const r=await this.pool.query<{external_id:string;price:string|null;ad_id:number;market_status:Ad['market_status'];market_percent:string|null;market_median:string|null;market_low:string|null;market_high:string|null;sell_fast:string|null;sell_normal:string|null;sell_max:string|null;market_sample_size:number|null;market_confidence:Ad['market_confidence'];market_quality:string|null}>('SELECT DISTINCT ON (external_id) external_id,price,id AS ad_id,market_status,market_percent,market_median,market_low,market_high,sell_fast,sell_normal,sell_max,market_sample_size,market_confidence,market_quality FROM ads WHERE link_id=$1 AND external_id=ANY($2::text[]) ORDER BY external_id,updated_at DESC NULLS LAST,id DESC',[linkId,externalIds]);const existingIds=new Set(r.rows.map(row=>row.external_id));const prices=new Map(r.rows.filter(row=>row.price!=null).map(row=>[row.external_id,{price:row.price as string,adId:row.ad_id}]));const market=new Map(r.rows.map(row=>[row.external_id,{status:row.market_status,percent:row.market_percent==null?null:Number(row.market_percent),median:row.market_median==null?null:Number(row.market_median),low:row.market_low==null?null:Number(row.market_low),high:row.market_high==null?null:Number(row.market_high),sellFast:row.sell_fast==null?null:Number(row.sell_fast),sellNormal:row.sell_normal==null?null:Number(row.sell_normal),sellMax:row.sell_max==null?null:Number(row.sell_max),sampleSize:row.market_sample_size,confidence:row.market_confidence,quality:row.market_quality==null?null:Number(row.market_quality)}]));return{existingIds,prices,market};}
   async claimNewAdsForUser(userId:number,linkId:number,ads:Ad[]):Promise<Set<string>>{
     const rows=[...new Set(ads.filter(ad=>ad?.external_id).map(ad=>ad.external_id))];
