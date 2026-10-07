@@ -101,24 +101,10 @@ export class ParserScheduler {
   private applyMonitorFilters(link: ParseLink, ads: Ad[]): Ad[] {
     const config = link.config;
     if (!config) return ads;
-    const condition = config.condition === 'new'
-      ? ['new','новое','новый','новая']
-      : config.condition === 'used'
-        ? ['used','б/у','б\\u002fu','бу','бывший в употреблении']
-        : [];
     if (link.platform !== 'kufar') {
-      return ads.filter(ad => {
-        if (config.minMarketDiscount != null && (typeof ad.market_percent !== 'number' || ad.market_percent > -Number(config.minMarketDiscount))) return false;
-        if (condition.length) {
-          const value = String(ad.condition || '').trim().toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
-          if (!value || !condition.some(token => value.includes(token))) return false;
-        }
-        if (config.seller) {
-          if (config.seller === 'company' && ad.is_company !== true) return false;
-          if (config.seller === 'private' && ad.is_company === true) return false;
-        }
-        return true;
-      });
+      return config.minMarketDiscount == null
+        ? ads
+        : ads.filter(ad => typeof ad.market_percent === 'number' && ad.market_percent <= -Number(config.minMarketDiscount));
     }
     const min = config.minPrice != null ? Number(config.minPrice) : undefined;
     const max = config.maxPrice != null ? Number(config.maxPrice) : undefined;
