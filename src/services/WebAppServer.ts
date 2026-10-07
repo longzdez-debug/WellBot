@@ -7,6 +7,7 @@ import { logger } from '../utils/logger';
 import { KUFAR_CATALOG, MonitorConfig, buildKufarSearchUrl, findCatalogNode, findCatalogCategory } from '../catalog/KufarCatalog';
 import { MARKETPLACE_CATALOGS, MARKETPLACES, MarketplaceSource, buildMarketplaceSearchUrl, findMarketplaceNode, findMarketplaceCategory } from '../catalog/MarketplaceCatalog';
 import { KUFAR_PHONE_BRANDS, KUFAR_PHONE_FILTERS, isKufarPhoneCategory } from '../catalog/KufarPhoneCatalog';
+import { hasProAccess } from './ProAccess';
 
 const isCatalogDescendant=(id:string,root:{children?:Array<{id:string;children?:any[]}>}):boolean=>{const walk=(nodes:any[]):boolean=>nodes.some(n=>n.id===id||(n.children&&walk(n.children)));return walk(root.children||[])};
 
@@ -268,14 +269,14 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
 
         if (requestPath === '/api/pro' && req.method === 'GET') {
           const subscription=await db.getProSubscription(auth.user.id);
-          const active=subscription?.status==='active'&&subscription.expiresAt.getTime()>Date.now();
+          const active=hasProAccess(subscription);
           json(res,200,{tier:active?'pro':'free',active,subscription:subscription?{tier:subscription.tier,status:active?'active':subscription.status,expiresAt:subscription.expiresAt.toISOString(),starsAmount:subscription.starsAmount}:null,priceStars:Number(process.env.WELLBOT_PRO_PRICE_STARS||'199')});
           return;
         }
         if (requestPath === '/api/pro/invoice' && req.method === 'POST') {
           const priceStars=Math.min(10000,Math.max(1,Math.floor(Number(process.env.WELLBOT_PRO_PRICE_STARS||'199'))));
           const current=await db.getProSubscription(auth.user.id);
-          if(current?.status==='active'&&current.expiresAt.getTime()>Date.now()){json(res,409,{error:'pro_already_active',message:'WellBOT PRO уже активен.'});return;}
+          if(hasProAccess(current)){json(res,409,{error:'pro_already_active',message:'WellBOT PRO уже активен.'});return;}
           const payload='wellbot_pro_monthly_v1:'+auth.user.id+':'+Date.now();
           const telegramResponse=await fetch('https://api.telegram.org/bot'+encodeURIComponent(botToken)+'/sendInvoice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:auth.user.id,title:'WellBOT PRO',description:'Умный Deal Score, расширенная аналитика рынка, быстрые находки и PRO-возможности.',payload,currency:'XTR',prices:[{label:'WellBOT PRO — 30 дней',amount:priceStars}],subscription_period:2592000,terms_url:process.env.WELLBOT_TERMS_URL||undefined})});
           const telegramResult=await telegramResponse.json() as {ok?:boolean;result?:{message_id:number};description?:string};
