@@ -207,6 +207,16 @@ export class BotHandler {
 
   async handleCheckLink(chatId: number, userId: number, linkId: number): Promise<void> { try { const link = await this.db.getLinkForUser(linkId, userId); if (!link) { await this.bot.sendMessage(chatId, '❌ Поиск не найден или вам недоступна.'); return; } await this.bot.sendMessage(chatId, '⏳ Проверяю поиск...'); const parser = ParserFactory.getParser(link.platform as Platform); if (!parser) { await this.bot.sendMessage(chatId, `❌ Парсер для платформы "${link.platform}" не найден.`); return; } const ads = await parser.parseUrl(link.url); const previewAds = NewAdSelector.pick(ads, 5).reverse(); await this.bot.sendMessage(chatId, `📋 Найдено ${ads.length} объявлений. Показываю 5 самых свежих:`); const formattedAds = await Promise.all(previewAds.map(ad => this.adPresenter.format(ad))); for (const formatted of formattedAds) await this.telegramSender.send(chatId, formatted); logger.info('Link checked', { linkId, userId, adsFound: ads.length }); } catch (error: any) { logger.error('Failed to check link', { linkId, userId, error: error.message, stack: error.stack }); await this.bot.sendMessage(chatId, mapError(error)); } }
 
+  async sendDailyDigest(telegramId:number, items:Array<{ad:Ad;score:number}>):Promise<void>{
+    if(!items.length){
+      await this.bot.sendMessage(telegramId,'📊 <b>Ежедневный дайджест</b>\n\nСегодня пока нет новых выгодных находок по вашему порогу Deal Score.',{parse_mode:'HTML'});
+      return;
+    }
+    const top=items.slice(0,10);
+    const lines=top.map((item,index)=>`${index+1}. 🔥 ${item.ad.title.slice(0,90)} — Deal Score ${item.score}${item.ad.price ? ` — ${item.ad.price}` : ''}`);
+    await this.bot.sendMessage(telegramId,`📊 <b>Ежедневный дайджест WellBOT</b>\n\n${lines.join('\n')}\n\nПоказываю лучшие ${top.length} находок за день. Откройте WellBOT, чтобы посмотреть детали.`,{parse_mode:'HTML',reply_markup:this.getMainKeyboard()});
+  }
+
   async sendNotification(telegramId: number, ad: Ad): Promise<void> {
     try {
       const formatted = await this.adPresenter.format(ad);
