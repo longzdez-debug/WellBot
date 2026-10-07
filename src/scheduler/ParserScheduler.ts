@@ -168,7 +168,7 @@ export class ParserScheduler {
         const last=state.prices.get(ad.external_id); const newPrice=parseMarketPrice(ad.price); const oldPrice=last?parseMarketPrice(last.price):null;
         const unchanged=Boolean(last&&newPrice&&oldPrice&&newPrice.currency===oldPrice.currency&&newPrice.amount===oldPrice.amount);
         const cached=state.market.get(ad.external_id);
-        if(state.existingIds.has(ad.external_id)&&unchanged&&cached) return {...ad,market_status:cached.status,market_percent:cached.percent,market_median:cached.median,market_low:cached.low,market_high:cached.high,sell_fast:cached.sellFast,sell_normal:cached.sellNormal,sell_max:cached.sellMax,market_sample_size:cached.sampleSize,market_confidence:cached.confidence,market_quality:cached.quality};
+        if(state.existingIds.has(ad.external_id)&&unchanged&&cached&&link.config?.minMarketDiscount==null) return {...ad,market_status:cached.status,market_percent:cached.percent,market_median:cached.median,market_low:cached.low,market_high:cached.high,sell_fast:cached.sellFast,sell_normal:cached.sellNormal,sell_max:cached.sellMax,market_sample_size:cached.sampleSize,market_confidence:cached.confidence,market_quality:cached.quality};
         return this.attachComparableMarket({...ad,market_group:marketGroup},marketAds);
       });
       const configured=this.applyMonitorFilters(link,marketCandidates);
