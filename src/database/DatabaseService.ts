@@ -269,6 +269,29 @@ export class DatabaseService {
     }));
   }
 
+  async getUserPreferencesByUserIds(userIds:number[]):Promise<Map<number,{notificationsEnabled:boolean;minDealScore:number;digestEnabled:boolean;digestHour:number}>>{
+    const ids=[...new Set(userIds.filter(id=>Number.isSafeInteger(id)&&id>0))];
+    const out=new Map<number,{notificationsEnabled:boolean;minDealScore:number;digestEnabled:boolean;digestHour:number}>();
+    if(!ids.length)return out;
+    const r=await this.pool.query(
+      `SELECT u.id AS user_id,
+              COALESCE(p.notifications_enabled,true) AS notifications_enabled,
+              COALESCE(p.min_deal_score,65) AS min_deal_score,
+              COALESCE(p.digest_enabled,false) AS digest_enabled,
+              COALESCE(p.digest_hour,19) AS digest_hour
+       FROM users u LEFT JOIN user_preferences p ON p.user_id=u.id
+       WHERE u.id=ANY($1::int[])`,
+      [ids],
+    );
+    for(const row of r.rows) out.set(Number(row.user_id),{
+      notificationsEnabled:Boolean(row.notifications_enabled),
+      minDealScore:Number(row.min_deal_score),
+      digestEnabled:Boolean(row.digest_enabled),
+      digestHour:Number(row.digest_hour),
+    });
+    return out;
+  }
+
   async getUserPreferences(userId:number):Promise<{notificationsEnabled:boolean;minDealScore:number;digestEnabled:boolean;digestHour:number}>{
     const r=await this.pool.query('SELECT notifications_enabled,min_deal_score,digest_enabled,digest_hour FROM user_preferences WHERE user_id=$1',[userId]);
     const row=r.rows[0];
