@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import { MonitorConfig } from '../catalog/KufarCatalog';
 import { getComparableMarketSignal } from '../services/ComparableMarketEngine';
 import { parseMarketPrice } from '../services/MarketEngine';
+import { analyzeDeal } from '../services/DealScoreEngine';
 
 interface ParseLink { id:number; user_id:number; url:string; platform:Platform; config?:MonitorConfig|null; last_parsed_at?:Date|null; error_count?:number; next_check_at?:Date|null; }
 interface PriceDrop { adId:number; oldPrice:string; newPrice:string; changePercent:string; externalId:string; linkId:number; }
@@ -51,7 +52,7 @@ export class ParserScheduler {
 
   private async mapWithConcurrency<T,R>(items:T[],limit:number,worker:(item:T)=>Promise<R>):Promise<R[]>{const results=new Array<R>(items.length);let next=0;const run=async():Promise<void>=>{while(true){const index=next++;if(index>=items.length)return;try{results[index]=await worker(items[index]);}catch(error:unknown){const message=error instanceof Error?error.message:String(error);logger.error('Scheduler worker failed',{index,error:message});}}};await Promise.all(Array.from({length:Math.min(limit,items.length)},()=>run()));return results;}
 
-  private async notifyNewAds(items:NewAdNotification[]):Promise<void>{const jobs:NotificationEnqueueJob[]=[];const seen=new Set<string>();for(const {ad,telegramId} of items){const key=`new_ad:user:${telegramId}:${ad.external_id}`;if(seen.has(key))continue;seen.add(key);jobs.push({kind:'new_ad',chatId:telegramId,dedupeKey:key,payload:{ad},priority:100});}if(!jobs.length)return;const inserted=await this.db.enqueueNotifications(jobs);this.metrics.duplicateNotifications+=Math.max(0,jobs.length-inserted);}
+  private async notifyNewAds(items:NewAdNotification[]):Promise<void>{const jobs:NotificationEnqueueJob[]=[];const seen=new Set<string>();for(const {ad,telegramId} of items){const key=`new_ad:user:${telegramId}:${ad.external_id}`;if(seen.has(key))continue;seen.add(key);const dealScore=analyzeDeal(ad).score;const priority=dealScore==null?100:100+dealScore;jobs.push({kind:'new_ad',chatId:telegramId,dedupeKey:key,payload:{ad},priority});}if(!jobs.length)return;const inserted=await this.db.enqueueNotifications(jobs);this.metrics.duplicateNotifications+=Math.max(0,jobs.length-inserted);}
 
   private async notifyPriceDrops(items:Array<{drop:PriceDrop;telegramId:number;userId:number}>):Promise<void>{const jobs:NotificationEnqueueJob[]=[];const seen=new Set<string>();for(const {drop,telegramId,userId} of items){const key=`price_drop:user:${telegramId}:${drop.externalId}:${drop.oldPrice}:${drop.newPrice}`;if(seen.has(key))continue;seen.add(key);jobs.push({kind:'price_drop',chatId:telegramId,dedupeKey:key,payload:{drop,userId},priority:50});}if(!jobs.length)return;const inserted=await this.db.enqueueNotifications(jobs);this.metrics.duplicateNotifications+=Math.max(0,jobs.length-inserted);}
 
