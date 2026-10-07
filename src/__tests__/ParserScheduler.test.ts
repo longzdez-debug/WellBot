@@ -70,6 +70,7 @@ describe('ParserScheduler', () => {
       claimNotificationJobs: jest.fn().mockResolvedValue([]),
       isAdDismissedForChat: jest.fn().mockResolvedValue(false),
       purgeNotificationOutbox: jest.fn().mockResolvedValue(0),
+      purgeDigestDeliveries: jest.fn().mockResolvedValue(0),
       getPendingNotificationStats: jest.fn().mockResolvedValue({ count: 0, oldestAgeMs: 0 }),
       getActiveLinkFreshnessStats: jest.fn().mockResolvedValue({ activeLinks: linkList.length, oldestAgeMs: 0, avgAgeMs: 0 }),
       scheduleNextChecks: jest.fn().mockResolvedValue(undefined),
