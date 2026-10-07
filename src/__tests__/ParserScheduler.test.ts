@@ -77,6 +77,55 @@ describe('ParserScheduler', () => {
     };
   }
 
+  test('requires confirmed private seller metadata for private filters', () => {
+    const scheduler = new ParserScheduler(makeDb([]) as never, bot as never);
+    const filter = (scheduler as unknown as { applyMonitorFilters: (link: Link, ads: Ad[]) => Ad[] }).applyMonitorFilters;
+    const link = { ...makeLink(1), config: { source: 'kufar', categoryId: 'phones', seller: 'private' } } as Link;
+    const ads: Ad[] = [
+      { external_id: 'private', title: 'Private', ad_url: 'https://kufar.by/private', is_company: false },
+      { external_id: 'company', title: 'Company', ad_url: 'https://kufar.by/company', is_company: true },
+      { external_id: 'unknown', title: 'Unknown', ad_url: 'https://kufar.by/unknown', is_company: null },
+    ];
+    expect(filter.call(scheduler, link, ads).map(ad => ad.external_id)).toEqual(['private']);
+  });
+
+  test('notifies an existing listing when market data makes it newly eligible', async () => {
+    const link = makeLink(1, new Date());
+    link.config = { source: 'kufar', categoryId: 'phones', subcategoryId: '17010', minMarketDiscount: 20 };
+    const ad: Ad = {
+      external_id: 'eligible-later',
+      title: 'iPhone 15',
+      price: '700 BYN',
+      ad_url: 'https://kufar.by/ad/eligible-later',
+    };
+    parser.parseUrl.mockResolvedValue([ad]);
+    const db = makeDb([link]);
+    db.getExistingAdStatesForLink.mockResolvedValue({
+      existingIds: new Set(['eligible-later']),
+      prices: new Map([['eligible-later', { price: '700 BYN', adId: 42 }]]),
+      market: new Map([['eligible-later', {
+        status: 'below_market',
+        percent: -25,
+        median: 950,
+        low: 800,
+        high: 1100,
+        sellFast: 850,
+        sellNormal: 900,
+        sellMax: 1000,
+        sampleSize: 20,
+        confidence: 'high',
+        quality: 90,
+      }]]),
+    });
+    await new ParserScheduler(db as never, bot as never).runParsing();
+    expect(db.claimNewAdsForUser).toHaveBeenCalledWith(1, 1, [expect.objectContaining(ad)]);
+    expect(db.enqueueNotifications).toHaveBeenCalledTimes(1);
+    expect(db.enqueueNotifications.mock.calls[0][0][0]).toEqual(expect.objectContaining({
+      kind: 'new_ad',
+      payload: expect.objectContaining({ ad: expect.objectContaining({ external_id: 'eligible-later' }) }),
+    }));
+  });
+
   test('applies market discount filters to non-Kufar monitors', () => {
     const scheduler = new ParserScheduler(makeDb([]) as never, bot as never);
     const filter = (scheduler as unknown as { applyMonitorFilters: (link: Link, ads: Ad[]) => Ad[] }).applyMonitorFilters;
