@@ -140,6 +140,10 @@ export class FastKufarParser extends BaseParser {
     const parsed = new URL(url);
     const parts = parsed.pathname.split('/').filter(Boolean);
     const params: Record<string, string | number> = { size: 50, sort: 'lst.d' };
+    // Scan a bounded hot window instead of trusting a single page.
+    // Kufar can reorder results between requests, so page 2 closes a common
+    // visibility gap while keeping request volume bounded.
+    const hotPages = Math.max(1, Math.min(5, Number.parseInt(process.env.KUFAR_HOT_PAGES || '2', 10) || 2));
 
     for (const [key, value] of parsed.searchParams.entries()) {
       if (key !== 'page' && key !== 'cursor' && key !== 'wb' && value) params[key] = value;
@@ -244,8 +248,10 @@ export class FastKufarParser extends BaseParser {
 
     const requestApi = async (endpoint: string): Promise<Ad[]> => {
       const requestStartedAt = Date.now();
-      const response = await this.axiosInstance.get(endpoint, {
-        params,
+      const pages = Array.from({ length: hotPages }, (_, index) => index + 1);
+      const responses = await Promise.all(pages.map(async page => {
+        const response = await this.axiosInstance.get(endpoint, {
+          params: { ...params, page },
         timeout: 2600,
         headers: {
           Host: new URL(endpoint).host,
@@ -258,9 +264,10 @@ export class FastKufarParser extends BaseParser {
           Referer: 'https://www.kufar.by/',
           Origin: 'https://www.kufar.by',
         },
-      });
-
-      const rawAds = Array.isArray(response.data?.ads) ? response.data.ads : [];
+        });
+        return response.data;
+      }));
+      const rawAds = responses.flatMap(data => Array.isArray(data?.ads) ? data.ads : []);
       const ads = rawAds.filter((ad: any) => {
         if (!ad?.ad_id) return false;
         if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return false;
@@ -285,6 +292,7 @@ export class FastKufarParser extends BaseParser {
         count: ads.length,
         rawCount: rawAds.length,
         requestMs: Date.now() - requestStartedAt,
+        pages: hotPages,
       });
 
       return ads.map((ad: any) => {
