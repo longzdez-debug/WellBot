@@ -11,6 +11,8 @@ import { mapError } from '../utils/errorMapper';
 import { analyzeDeal } from '../services/DealScoreEngine';
 import { hasProAccess } from '../services/ProAccess';
 
+const escapeTelegramHtml=(value:unknown):string=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
 export class BotHandler {
   private bot: TelegramBot;
   private db: DatabaseService;
@@ -227,7 +229,7 @@ export class BotHandler {
       return;
     }
     const top=items.slice(0,10);
-    const lines=top.map((item,index)=>`${index+1}. 🔥 ${item.ad.title.slice(0,90)} — Deal Score ${item.score}${item.ad.price ? ` — ${item.ad.price}` : ''}`);
+    const lines=top.map((item,index)=>`${index+1}. 🔥 ${escapeTelegramHtml(item.ad.title.slice(0,90))} — Deal Score ${item.score}${item.ad.price ? ` — ${escapeTelegramHtml(item.ad.price)}` : ''}`);
     await this.bot.sendMessage(telegramId,`📊 <b>Ежедневный дайджест WellBOT</b>\n\n${lines.join('\n')}\n\nПоказываю лучшие ${top.length} находок за день. Откройте WellBOT, чтобы посмотреть детали.`,{parse_mode:'HTML',reply_markup:this.getMainKeyboard()});
   }
 
@@ -273,7 +275,7 @@ export class BotHandler {
       const ad = await this.db.getAdByIdForUser(priceDrop.adId, userId ?? 0);
       if (!ad) return;
       const formatted = await this.adPresenter.format(ad);
-      await this.telegramSender.send(telegramId, { ...formatted, text: `💰 СНИЖЕНИЕ ЦЕНЫ!\n\n${formatted.text}\n\n💸 Было: ${priceDrop.oldPrice}\n🆕 Стало: ${priceDrop.newPrice}\n📉 Изменение: ${priceDrop.changePercent}%` });
+      await this.telegramSender.send(telegramId, { ...formatted, text: `💰 СНИЖЕНИЕ ЦЕНЫ!\n\n${formatted.text}\n\n💸 Было: ${escapeTelegramHtml(priceDrop.oldPrice)}\n🆕 Стало: ${escapeTelegramHtml(priceDrop.newPrice)}\n📉 Изменение: ${escapeTelegramHtml(priceDrop.changePercent)}%` });
     } catch (error: any) {
       logger.error('Failed to send price drop notification', { telegramId, adId: priceDrop.adId, error: error?.message || String(error) });
       throw error;
