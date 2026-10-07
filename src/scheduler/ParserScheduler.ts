@@ -144,7 +144,7 @@ export class ParserScheduler {
       if (config.minMarketDiscount != null && (typeof ad.market_percent !== 'number' || ad.market_percent > -Number(config.minMarketDiscount))) return false;
       if (config.seller) {
         if (config.seller === 'company' && ad.is_company !== true) return false;
-        if (config.seller === 'private' && ad.is_company === true) return false;
+        if (config.seller === 'private' && ad.is_company !== false) return false;
       }
       if (min == null && max == null) return true;
       const match = String(ad.price || '').toUpperCase().match(/([0-9]+(?:[.,][0-9]+)?)\\s*(BYN|USD|EUR|RUB|UAH|PLN)\\b/);
