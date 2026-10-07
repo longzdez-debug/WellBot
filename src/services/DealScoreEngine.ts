@@ -16,6 +16,7 @@ export function analyzeDeal(ad:Ad):DealAnalysis{
  if(ad.is_company===false){score+=3;reasons.push('частный продавец')}if(ad.condition==='new')score+=3;
  if(ad.published_at){const t=ad.published_at instanceof Date?ad.published_at.getTime():Date.parse(String(ad.published_at));if(Number.isFinite(t)){const age=Math.max(0,(Date.now()-t)/60000);if(age<=5){score+=7;reasons.push('только что опубликовано')}else if(age<=30)score+=4;else if(age<=120)score+=2;}}
  const sell=Number.isFinite(ad.sell_normal)?Number(ad.sell_normal):Number((market*.97).toFixed(2));const profit=Number((sell-current.amount).toFixed(2));const roi=current.amount>0?Number(((profit/current.amount)*100).toFixed(1)):null;
- if(profit<=0){score-=12;reasons.push('слабая маржа')}else{score+=Math.min(12,Math.max(0,Math.round((roi??0)/4)));if((roi??0)>=15)reasons.push('маржа интересная');}
+ if(profit<=0)return{score:null,buyPrice:current.amount,marketPrice:market,sellPrice:sell,profit,roi,currency:current.currency,reasons:['Нет положительной маржи для перепродажи'],confidence:ad.market_confidence??null};
+ score+=Math.min(12,Math.max(0,Math.round((roi??0)/4)));if((roi??0)>=15)reasons.push('маржа интересная');
  const finalScore=Math.max(0,Math.min(100,Math.round(score))); return{score:finalScore,buyPrice:current.amount,marketPrice:market,sellPrice:sell,profit,roi,currency:current.currency,reasons:reasons.slice(0,4),confidence:ad.market_confidence??null};
 }
