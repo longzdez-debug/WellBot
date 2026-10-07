@@ -385,7 +385,7 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
       const extension = extname(filePath).toLowerCase();
       applySecurityHeaders(res);
       if(extension==='.html'){
-        res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.telegram.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+        res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline' https://telegram.org https://*.telegram.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.telegram.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
       }
       res.statusCode = 200;
       res.setHeader('Content-Type', MIME_TYPES[extension] || 'application/octet-stream');
