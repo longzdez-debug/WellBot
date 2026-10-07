@@ -304,3 +304,5 @@ body{letter-spacing:-.01em}
 /* Mobile admin entry point */
 @media(max-width:820px){.mobile-admin-nav[hidden]{display:none!important}.mobile-nav{grid-template-columns:repeat(6,1fr)}.mobile-nav-item{min-width:0}.mobile-nav-item b{font-size:9px}.mobile-admin-nav span{font-size:16px}}
 @media(max-width:390px){.mobile-nav-item b{font-size:8px}.mobile-admin-nav span{font-size:15px}}
+
+.settings-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid #202734;color:#dfe4ed;font-size:10px}.settings-row input[type=number]{width:90px;border:1px solid #2a3240;border-radius:7px;background:#111720;color:#fff;padding:7px}.settings-row input[type=checkbox]{width:20px;height:20px;accent-color:#6f3cff}.saved-item{cursor:pointer;border:0;background:none;width:100%;text-align:left}.saved-item:hover{background:#111720;border-radius:8px}
