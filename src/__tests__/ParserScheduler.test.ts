@@ -11,6 +11,7 @@ describe('ParserScheduler', () => {
   const bot = {
     sendNotification: jest.fn().mockResolvedValue(undefined),
     sendPriceDropNotification: jest.fn().mockResolvedValue(undefined),
+    sendDailyDigest: jest.fn().mockResolvedValue(undefined),
   };
   const user: User = { id: 1, telegram_id: 12345, username: 'tester', created_at: new Date() };
 
@@ -40,6 +41,8 @@ describe('ParserScheduler', () => {
     return {
       getActiveLinks: jest.fn().mockResolvedValue(linkList),
       getUsersByIds: jest.fn().mockResolvedValue([user]),
+      getUserPreferencesByUserIds: jest.fn().mockResolvedValue(new Map([[user.id, { notificationsEnabled: true, minDealScore: 65, digestEnabled: false, digestHour: 19 }]])),
+      getDigestUsers: jest.fn().mockResolvedValue([]),
       bulkCreateAdsReturning: jest.fn().mockImplementation(async (linkId: number, input: Ad[]) => {
         const inserted = input.map(ad => ({ ...ad, id: ads.size + 1, link_id: linkId, created_at: new Date() }));
         for (const ad of inserted) ads.set(ad.external_id, ad);
