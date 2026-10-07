@@ -110,18 +110,24 @@ $$;
 -- duplicate Telegram alerts across overlapping searches.
 CREATE TABLE IF NOT EXISTS user_ad_seen (
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  platform VARCHAR(50) NOT NULL DEFAULT 'unknown',
   external_id VARCHAR(255) NOT NULL,
   first_link_id INTEGER REFERENCES links(id) ON DELETE SET NULL,
   first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (user_id, external_id)
+  PRIMARY KEY (user_id, platform, external_id)
 );
 
-INSERT INTO user_ad_seen (user_id, external_id, first_link_id)
-SELECT l.user_id, a.external_id, MIN(a.link_id)
-FROM ads a
-JOIN links l ON l.id = a.link_id
-GROUP BY l.user_id, a.external_id
-ON CONFLICT (user_id, external_id) DO NOTHING;
+-- Upgrade installations that used the old global external_id identity.
+ALTER TABLE user_ad_seen ADD COLUMN IF NOT EXISTS platform VARCHAR(50);
+UPDATE user_ad_seen s
+SET platform=COALESCE(l.platform,'unknown')
+FROM links l
+WHERE s.first_link_id=l.id AND (s.platform IS NULL OR s.platform='');
+ALTER TABLE user_ad_seen ALTER COLUMN platform SET DEFAULT 'unknown';
+ALTER TABLE user_ad_seen ALTER COLUMN platform SET NOT NULL;
+ALTER TABLE user_ad_seen DROP CONSTRAINT IF EXISTS user_ad_seen_pkey;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_ad_seen_identity
+  ON user_ad_seen(user_id, platform, external_id);
 
 CREATE INDEX IF NOT EXISTS idx_user_ad_seen_user_first_seen
   ON user_ad_seen(user_id, first_seen_at DESC);
@@ -130,10 +136,26 @@ CREATE INDEX IF NOT EXISTS idx_user_ad_seen_user_first_seen
 -- the Mini App without deleting the underlying marketplace data.
 CREATE TABLE IF NOT EXISTS dismissed_ads (
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  platform VARCHAR(50) NOT NULL DEFAULT 'unknown',
   external_id VARCHAR(255) NOT NULL,
   dismissed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (user_id, external_id)
+  PRIMARY KEY (user_id, platform, external_id)
 );
+
+ALTER TABLE dismissed_ads ADD COLUMN IF NOT EXISTS platform VARCHAR(50);
+UPDATE dismissed_ads d
+SET platform=COALESCE(l.platform,'unknown')
+FROM links l
+JOIN ads a ON a.link_id=l.id
+WHERE a.external_id=d.external_id
+  AND l.user_id=d.user_id
+  AND (d.platform IS NULL OR d.platform='');
+ALTER TABLE dismissed_ads ALTER COLUMN platform SET DEFAULT 'unknown';
+ALTER TABLE dismissed_ads ALTER COLUMN platform SET NOT NULL;
+ALTER TABLE dismissed_ads DROP CONSTRAINT IF EXISTS dismissed_ads_pkey;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dismissed_ads_identity
+  ON dismissed_ads(user_id, platform, external_id);
+
 CREATE INDEX IF NOT EXISTS idx_dismissed_ads_user_time
   ON dismissed_ads(user_id, dismissed_at DESC);
 
