@@ -230,6 +230,16 @@ describe('ParserScheduler', () => {
     expect(db.getActiveLinks).toHaveBeenCalledTimes(1);
   });
 
+  test('honors disabled notifications and minimum Deal Score', async () => {
+    const link = makeLink(1, new Date());
+    const ad: Ad = { external_id: 'filtered-1', title: 'Filtered', price: '1000 BYN', ad_url: 'https://kufar.by/filtered-1' };
+    parser.parseUrl.mockResolvedValue([ad]);
+    const db = makeDb([link]);
+    db.getUserPreferencesByUserIds.mockResolvedValue(new Map([[user.id, { notificationsEnabled: false, minDealScore: 99, digestEnabled: false, digestHour: 19 }]]));
+    await new ParserScheduler(db as never, bot as never).runParsing();
+    expect(db.enqueueNotifications).not.toHaveBeenCalled();
+  });
+
   test('deduplicates the same new ad across multiple searches for one user', async () => {
     const links = [makeLink(1, new Date()), makeLink(2, new Date())];
     const ad: Ad = { external_id: 'shared-1', title: 'Shared', ad_url: 'https://kufar.by/shared-1' };
