@@ -7,7 +7,7 @@ import { MonitorConfig } from '../catalog/KufarCatalog';
 import { hasProAccess } from '../services/ProAccess';
 
 export interface DashboardAd extends Ad { link_platform: Platform; link_url: string; }
-function normalizeDatabaseDate(value: unknown): Date|null {
+export function normalizeDatabaseDate(value: unknown): Date|null {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   if (typeof value === 'number' && Number.isFinite(value)) {
     const millis = value < 100_000_000_000 ? value * 1000 : value;
