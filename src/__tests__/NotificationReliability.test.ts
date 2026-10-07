@@ -1,6 +1,5 @@
 import { ParserScheduler } from '../scheduler/ParserScheduler';
 
-import { analyzeDeal } from '../services/DealScoreEngine.js';
 describe('ParserScheduler notification reliability', () => {
   const bot = {
     sendNotification: jest.fn().mockResolvedValue(undefined),
