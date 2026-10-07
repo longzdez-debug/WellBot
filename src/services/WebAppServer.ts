@@ -162,7 +162,18 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
       const requestUrl = new URL(req.url || '/', 'http://localhost');
       requestPath = decodeURIComponent(requestUrl.pathname);
 
-      if (requestPath === '/health' || requestPath === '/healthz') {
+      if (requestPath === '/healthz') {
+        if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); json(res, 405, { error: 'method_not_allowed' }); return; }
+        applySecurityHeaders(res);
+        res.statusCode = 200;
+        res.setHeader('Cache-Control', 'no-store');
+        if (req.method === 'HEAD') { res.end(); return; }
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify({ status: 'ok', service: 'wellbot-web' }));
+        return;
+      }
+
+      if (requestPath === '/health') {
         if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); json(res, 405, { error: 'method_not_allowed' }); return; }
         if (req.method === 'HEAD') {
           try {
