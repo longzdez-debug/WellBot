@@ -248,27 +248,53 @@ export class FastKufarParser extends BaseParser {
 
     const requestApi = async (endpoint: string): Promise<Ad[]> => {
       const requestStartedAt = Date.now();
-      const pages = Array.from({ length: hotPages }, (_, index) => index + 1);
-      const responses = await Promise.all(pages.map(async page => {
-        const response = await this.axiosInstance.get(endpoint, {
-          params: { ...params, page },
-        timeout: 2600,
-        headers: {
-          Host: new URL(endpoint).host,
-          'User-Agent': this.getRandomUserAgent(),
-          Accept: 'application/json, text/plain, */*',
-          'Cache-Control': 'no-cache, no-store, max-age=0',
-          Pragma: 'no-cache',
-          'X-Request-Id': `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          'Accept-Language': 'ru-RU,ru;q=0.9',
-          Referer: 'https://www.kufar.by/',
-          Origin: 'https://www.kufar.by',
-        },
-        });
-        return response.data;
-      }));
+      const responses: any[] = [];
+      let cursor = '';
+
+      // Kufar uses opaque cursor pagination. Sending page=N to the live
+      // rendered-paginated endpoints causes HTTP 422.
+      for (let pageNumber = 1; pageNumber <= hotPages; pageNumber += 1) {
+        const requestParams: Record<string, string | number> = { ...params };
+        if (cursor) requestParams.cursor = cursor;
+
+        try {
+          const response = await this.axiosInstance.get(endpoint, {
+            params: requestParams,
+            timeout: 2600,
+            headers: {
+              Host: new URL(endpoint).host,
+              'User-Agent': this.getRandomUserAgent(),
+              Accept: 'application/json, text/plain, */*',
+              'Cache-Control': 'no-cache, no-store, max-age=0',
+              Pragma: 'no-cache',
+              'X-Request-Id': `1791414863416-${Math.random().toString(36).slice(2)}`,
+              'Accept-Language': 'ru-RU,ru;q=0.9',
+              Referer: 'https://www.kufar.by/',
+              Origin: 'https://www.kufar.by',
+            },
+          });
+          responses.push(response.data);
+
+          const nextPage = Array.isArray(response.data?.pagination?.pages)
+            ? response.data.pagination.pages.find((item: any) => item?.label === 'next')
+            : null;
+          const nextCursor = typeof nextPage?.token === 'string' ? nextPage.token.trim() : '';
+          if (!nextCursor || pageNumber >= hotPages) break;
+          cursor = nextCursor;
+        } catch (error) {
+          logger.warn('Kufar hot-path API page failed', {
+            endpoint,
+            page: pageNumber,
+            hasCursor: Boolean(cursor),
+            error: errorSummary(error),
+            response: (error as any)?.response?.data ?? null,
+          });
+          throw error;
+        }
+      }
+
       const rawAds = responses.flatMap(data => Array.isArray(data?.ads) ? data.ads : []);
-      const ads = rawAds.filter((ad: any) => {
+
         if (!ad?.ad_id) return false;
         if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return false;
         const text = adSearchText(ad);
@@ -292,7 +318,7 @@ export class FastKufarParser extends BaseParser {
         count: ads.length,
         rawCount: rawAds.length,
         requestMs: Date.now() - requestStartedAt,
-        pages: hotPages,
+        pages: responses.length,
       });
 
       return ads.map((ad: any) => {
