@@ -43,7 +43,7 @@ const buttons=[...index.matchAll(/<button\b([^>]*)>/gi)].map(m=>m[1]);
 const allowedAttrs=["data-action","data-scroll","data-filter"];
 buttons.forEach((attrs,i)=>{if(!allowedAttrs.some(a=>new RegExp(a+"=").test(attrs)))throw new Error("Static button #"+(i+1)+" has no action contract.");});
 const actions=[...index.matchAll(/data-action="([^"]+)"/g)].map(m=>m[1]);
-const supported=["add","refresh","profile"];
+const supported=["add","refresh","profile","admin"];
 for(const action of actions)if(!supported.includes(action))throw new Error("Unsupported static data-action: "+action);
 for(const id of [...index.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1])){if(id==="global-search")continue;}
 for(const target of [...index.matchAll(/data-scroll="([^"]+)"/g)].map(m=>m[1]))if(!new RegExp('id="'+target+'"').test(index))throw new Error("data-scroll target missing: "+target);
