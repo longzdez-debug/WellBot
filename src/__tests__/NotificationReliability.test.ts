@@ -91,4 +91,36 @@ describe('ParserScheduler notification reliability', () => {
     expect(db.rescheduleNotification).not.toHaveBeenCalled();
     expect(db.markNotificationSent).not.toHaveBeenCalled();
   });
+  test('suppresses dismissed price-drop notifications', async () => {
+    const db = {
+      rescheduleNotification: jest.fn().mockResolvedValue(undefined),
+      markNotificationSent: jest.fn().mockResolvedValue(undefined),
+      discardNotification: jest.fn().mockResolvedValue(undefined),
+      isAdDismissedForChat: jest.fn().mockResolvedValue(true),
+    };
+    const bot = {
+      sendNotification: jest.fn(),
+      sendPriceDropNotification: jest.fn(),
+    };
+    const scheduler = new ParserScheduler(db as never, bot as never) as any;
+
+    await scheduler.deliverNotification({
+      id: 43,
+      kind: 'price_drop',
+      chat_id: 123,
+      dedupe_key: 'price_drop:user:123:ad-43:100 BYN:80 BYN',
+      payload: { drop: { externalId: 'ad-43', oldPrice: '100 BYN', newPrice: '80 BYN' }, userId: 7 },
+      attempts: 0,
+      available_at: new Date(),
+      locked_until: new Date(),
+      sent_at: null,
+      last_error: null,
+      created_at: new Date(),
+    });
+
+    expect(db.isAdDismissedForChat).toHaveBeenCalledWith('ad-43', 123);
+    expect(db.markNotificationSent).toHaveBeenCalledWith(43);
+    expect(bot.sendPriceDropNotification).not.toHaveBeenCalled();
+  });
+
 });
