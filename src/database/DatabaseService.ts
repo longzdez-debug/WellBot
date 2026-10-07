@@ -7,6 +7,30 @@ import { MonitorConfig } from '../catalog/KufarCatalog';
 import { hasProAccess } from '../services/ProAccess';
 
 export interface DashboardAd extends Ad { link_platform: Platform; link_url: string; }
+function normalizeDatabaseDate(value: unknown): Date|null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const millis = value < 100_000_000_000 ? value * 1000 : value;
+    const date = new Date(millis);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text) return null;
+    if (/^-?\\d+(?:\\.\\d+)?$/.test(text)) {
+      const numeric = Number(text);
+      if (Number.isFinite(numeric)) {
+        const millis = numeric < 100_000_000_000 ? numeric * 1000 : numeric;
+        const date = new Date(millis);
+        if (!Number.isNaN(date.getTime())) return date;
+      }
+    }
+    const date = new Date(text);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  return null;
+}
+
 export interface DashboardPriceDrop { id:number; external_id:string; old_price:string|null; new_price:string|null; price_change_percent:number|null; created_at:Date; title:string; image_url:string|null; ad_url:string; link_platform:Platform; }
 export type NotificationKind = 'new_ad' | 'price_drop';
 export interface NotificationEnqueueJob { kind:NotificationKind; chatId:number; dedupeKey:string; payload:Record<string, unknown>; priority?:number; }
@@ -160,7 +184,7 @@ export class DatabaseService {
   async incrementErrorCount(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET error_count=error_count+1 WHERE id=$1',[linkId]);}
   async updateLastParsed(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET last_parsed_at=CURRENT_TIMESTAMP WHERE id=$1',[linkId]);}
   async resetErrorCount(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET error_count=0 WHERE id=$1',[linkId]);}
-  async bulkCreateAdsReturning(linkId:number,ads:Ad[]):Promise<Ad[]>{const unique=new Map<string,Ad>();for(const ad of ads)if(ad?.external_id&&!unique.has(ad.external_id))unique.set(ad.external_id,ad);const rows=[...unique.values()];if(!rows.length)return[];const inserted:Ad[]=[];const chunkSize=400;for(let start=0;start<rows.length;start+=chunkSize){const chunk=rows.slice(start,start+chunkSize);const values:unknown[]=[];const placeholders=chunk.map((ad,i)=>{const b=i*15;values.push(linkId,ad.external_id,ad.title,ad.description||null,ad.price||null,ad.image_url||null,ad.ad_url,ad.location||null,ad.address||null,ad.published_at||null,ad.detected_at||new Date(),ad.first_seen_at||ad.detected_at||new Date(),ad.first_seen_source||null,ad.first_seen_rank??null,ad.updated_at||null);return`(${b+1},${b+2},${b+3},${b+4},${b+5},${b+6},${b+7},${b+8},${b+9},${b+10},${b+11},${b+12},${b+13},${b+14},${b+15})`;}).join(',');const result=await this.pool.query<Ad>(`INSERT INTO ads (link_id,external_id,title,description,price,image_url,ad_url,location,address,published_at,detected_at,first_seen_at,first_seen_source,first_seen_rank,updated_at) VALUES ${placeholders} ON CONFLICT (external_id,link_id) DO NOTHING RETURNING *`,values);inserted.push(...result.rows);}return inserted;}
+  async bulkCreateAdsReturning(linkId:number,ads:Ad[]):Promise<Ad[]>{const unique=new Map<string,Ad>();for(const ad of ads)if(ad?.external_id&&!unique.has(ad.external_id))unique.set(ad.external_id,ad);const rows=[...unique.values()];if(!rows.length)return[];const inserted:Ad[]=[];const chunkSize=400;for(let start=0;start<rows.length;start+=chunkSize){const chunk=rows.slice(start,start+chunkSize);const values:unknown[]=[];const placeholders=chunk.map((ad,i)=>{const b=i*15;const detectedAt=normalizeDatabaseDate(ad.detected_at)||new Date();const publishedAt=normalizeDatabaseDate(ad.published_at);const firstSeenAt=normalizeDatabaseDate(ad.first_seen_at)||detectedAt;const updatedAt=normalizeDatabaseDate(ad.updated_at);values.push(linkId,ad.external_id,ad.title,ad.description||null,ad.price||null,ad.image_url||null,ad.ad_url,ad.location||null,ad.address||null,publishedAt,detectedAt,firstSeenAt,ad.first_seen_source||null,ad.first_seen_rank??null,updatedAt);return`(${b+1},${b+2},${b+3},${b+4},${b+5},${b+6},${b+7},${b+8},${b+9},${b+10},${b+11},${b+12},${b+13},${b+14},${b+15})`;}).join(',');const result=await this.pool.query<Ad>(`INSERT INTO ads (link_id,external_id,title,description,price,image_url,ad_url,location,address,published_at,detected_at,first_seen_at,first_seen_source,first_seen_rank,updated_at) VALUES ${placeholders} ON CONFLICT (external_id,link_id) DO NOTHING RETURNING *`,values);inserted.push(...result.rows);}return inserted;}
   async getAdByIdForUser(adId:number,userId:number):Promise<Ad|null>{const r=await this.pool.query<Ad>('SELECT a.* FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$1 AND l.user_id=$2',[adId,userId]);return r.rows[0]||null;}
   async getUserRecentAds(userId:number,limit=100):Promise<Ad[]>{
     const safeLimit=Math.min(Math.max(Math.floor(limit),1),300);
