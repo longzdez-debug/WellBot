@@ -6,7 +6,7 @@ RUN npm ci
 COPY tsconfig.json ./
 
 # Force Deplexo to rebuild application source when the deployment revision changes.
-ARG WELLBOT_BUILD_REV=ab8ef3e7902de1d478bbc7658ef667838a2031f8
+ARG WELLBOT_BUILD_REV=6cb7fb975a0ba2d31a36fb1c3c79b0b0771ee66e
 ENV WELLBOT_BUILD_REV=$WELLBOT_BUILD_REV
 RUN echo "WellBOT build revision: $WELLBOT_BUILD_REV"
 COPY src ./src
