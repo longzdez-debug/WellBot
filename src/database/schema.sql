@@ -322,5 +322,12 @@ CREATE TABLE IF NOT EXISTS saved_ads (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (user_id, ad_id)
 );
+-- Remove legacy duplicate identities before enforcing the identity index.
+DELETE FROM saved_ads a
+USING saved_ads b
+WHERE a.ad_id > b.ad_id
+  AND a.user_id = b.user_id
+  AND a.platform = b.platform
+  AND a.external_id = b.external_id;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_ads_identity ON saved_ads(user_id, platform, external_id);
 CREATE INDEX IF NOT EXISTS idx_saved_ads_user_created ON saved_ads(user_id, created_at DESC);
