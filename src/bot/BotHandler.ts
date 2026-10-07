@@ -99,17 +99,11 @@ export class BotHandler {
       try{
         const telegramChargeId=String(payment.telegram_payment_charge_id||'');
         if(!telegramChargeId){ logger.warn('PRO payment missing Telegram charge id',{telegramId:msg.from?.id||msg.chat.id}); return; }
-        const paymentUserId=msg.from?.id||msg.chat.id;
-        const starsAmount=Number(payment.total_amount||0);
-        const claimed=await this.db.claimTelegramPayment(telegramChargeId,paymentUserId,String(payload),Number.isSafeInteger(starsAmount)?starsAmount:0);
-        if(!claimed){
-          logger.info('Ignoring duplicate PRO payment update',{telegramId:paymentUserId,chargeId:telegramChargeId});
-          return;
-        }
+        const paymentUserId=msg.from?.id||msg.chat.id;\n        const starsAmount=Number(payment.total_amount||0);
         const expiry=payment.subscription_expiration_date?new Date(Number(payment.subscription_expiration_date)*1000):new Date(Date.now()+30*24*60*60*1000);
         const expiresAt=Number.isFinite(expiry.getTime())?expiry:new Date(Date.now()+30*24*60*60*1000);
-        await this.db.activateProSubscription(msg.from?.id||msg.chat.id,expiresAt,Number(payment.total_amount||0),String(payment.telegram_payment_charge_id||''),payment.provider_payment_charge_id?String(payment.provider_payment_charge_id):null,payload);
-        await this.bot.sendMessage(msg.chat.id,'👑 WellBOT PRO активирован до '+expiresAt.toLocaleDateString('ru-RU')+'.');
+        await this.db.activateProSubscription(paymentUserId,expiresAt,Number.isSafeInteger(starsAmount)?starsAmount:0,telegramChargeId,payment.provider_payment_charge_id?String(payment.provider_payment_charge_id):null,payload);
+        const claimed=await this.db.claimTelegramPayment(telegramChargeId,paymentUserId,String(payload),Number.isSafeInteger(starsAmount)?starsAmount:0);\n        if(!claimed){ logger.info('Ignoring duplicate PRO payment confirmation',{telegramId:paymentUserId,chargeId:telegramChargeId}); return; }\n        await this.bot.sendMessage(msg.chat.id,'👑 WellBOT PRO активирован до '+expiresAt.toLocaleDateString('ru-RU')+'.');
         logger.info('WellBOT PRO payment confirmed',{telegramId:msg.from?.id||msg.chat.id,chargeId:payment.telegram_payment_charge_id,expiresAt:expiresAt.toISOString(),recurring:Boolean(payment.is_recurring)});
       }catch(error){logger.error('Failed to activate PRO after payment',{telegramId:msg.from?.id||msg.chat.id,error:error instanceof Error?error.message:String(error)});}
     });
