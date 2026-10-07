@@ -268,7 +268,8 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
         res.setHeader('Cache-Control', 'no-store');
         if (req.method === 'HEAD') { res.end(); return; }
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify({ status: 'ok', service: 'wellbot-web' }));
+        res.setHeader('X-WellBot-Server-Build', WELLBOT_SERVER_BUILD);
+        res.end(JSON.stringify({ status: 'ok', service: 'wellbot-web', build: WELLBOT_SERVER_BUILD }));
         return;
       }
 
