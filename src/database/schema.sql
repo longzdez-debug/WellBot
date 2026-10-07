@@ -235,6 +235,8 @@ ALTER TABLE pro_subscriptions ADD COLUMN IF NOT EXISTS stars_amount INTEGER;
 ALTER TABLE pro_subscriptions ADD COLUMN IF NOT EXISTS last_invoice_payload TEXT;
 ALTER TABLE pro_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pro_subscriptions_user_tier ON pro_subscriptions(user_id,tier);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pro_subscriptions_telegram_charge ON pro_subscriptions(telegram_payment_charge_id) WHERE telegram_payment_charge_id IS NOT NULL AND telegram_payment_charge_id <> '';
+
 CREATE INDEX IF NOT EXISTS idx_pro_subscriptions_active ON pro_subscriptions(status,expires_at);
 
 
