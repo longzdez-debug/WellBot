@@ -92,7 +92,7 @@ export class DatabaseService {
       const now=new Date();
       const expires=new Date(now.getTime()+days*86400000);
       await client.query(
-        "INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,CURRENT_TIMESTAMP + ($4::integer * INTERVAL '1 day')),last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",
+        "INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at + ($4::integer * INTERVAL '1 day'),CURRENT_TIMESTAMP + ($4::integer * INTERVAL '1 day')),last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",
         [user.rows[0].id,expires,'admin_grant:'+adminTelegramId+':'+Date.now(),days],
       );
       const auditExpiry=new Date(Math.max(expires.getTime(),now.getTime()+days*86400000));
