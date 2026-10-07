@@ -1,0 +1,38 @@
+groups:
+  - name: wellbot-production
+    rules:
+      - alert: WellBOTDown
+        expr: up{job="wellbot"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "WellBOT is unreachable"
+          description: "Prometheus cannot scrape the WellBOT production metrics endpoint."
+
+      - alert: WellBOTSchedulerStopped
+        expr: wellbot_scheduler_running{job="wellbot"} != 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "WellBOT scheduler stopped"
+          description: "The parser scheduler has not reported a running state for 2 minutes."
+
+      - alert: WellBOTNotificationBacklog
+        expr: wellbot_notifications_pending{job="wellbot"} > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WellBOT notification backlog is growing"
+          description: "More than 100 notification jobs have been pending for 10 minutes."
+
+      - alert: WellBOTNotificationFailures
+        expr: increase(wellbot_notifications_failed_total{job="wellbot"}[10m]) > 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "WellBOT notification delivery failures"
+          description: "More than 10 notification deliveries failed in the last 10 minutes."
