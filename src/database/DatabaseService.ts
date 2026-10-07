@@ -187,6 +187,17 @@ export class DatabaseService {
   async getGlobalRecentMarketAds(limit=2000,platform?:Platform):Promise<Ad[]>{const safeLimit=Math.min(Math.max(Math.floor(limit),100),5000);const r=await this.pool.query<Ad>(`SELECT a.id,a.link_id,a.external_id,a.title,a.description,a.price,a.image_url,a.ad_url,a.location,a.address,a.published_at,a.updated_at,a.created_at,CASE WHEN l.config IS NULL THEN NULL ELSE CONCAT(l.platform,':',COALESCE(l.config->>'categoryId',''),':',COALESCE(l.config->>'subcategoryId','')) END AS market_group FROM ads a JOIN links l ON l.id=a.link_id WHERE a.price IS NOT NULL AND a.price <> '' ${platform ? 'AND l.platform=$2' : ''} ORDER BY COALESCE(a.published_at,a.created_at) DESC,a.id DESC LIMIT $1`,platform?[safeLimit,platform]:[safeLimit]);return r.rows;}
   async getUserAdsCount(userId:number):Promise<{linkId:number;linkPlatform:string;count:number}[]>{const r=await this.pool.query('SELECT l.id as "linkId",l.platform as "linkPlatform",COUNT(a.id) as "count" FROM links l LEFT JOIN ads a ON a.link_id=l.id WHERE l.user_id=$1 GROUP BY l.id ORDER BY l.id',[userId]);return r.rows;}
   async clearAdsByUserId(userId:number):Promise<number>{const r=await this.pool.query<{id:number}>('SELECT id FROM links WHERE user_id=$1',[userId]);if(!r.rows.length)return 0;const d=await this.pool.query('DELETE FROM ads WHERE link_id=ANY($1::int[])',[r.rows.map(x=>x.id)]);await this.pool.query('DELETE FROM user_ad_seen WHERE user_id=$1',[userId]);return d.rowCount||0;}
+  async isAdDismissedForChat(externalId:string,telegramId:number,platform?:string):Promise<boolean>{
+    const r=await this.pool.query(
+      `SELECT 1 FROM dismissed_ads d JOIN users u ON u.id=d.user_id
+       WHERE u.telegram_id=$1 AND d.external_id=$2
+         AND ($3::text IS NULL OR d.platform=$3)
+       LIMIT 1`,
+      [telegramId,externalId,platform||null],
+    );
+    return r.rowCount===1;
+  }
+
   async dismissAdForUser(adId:number,userId:number):Promise<boolean>{
     const r=await this.pool.query<{external_id:string}>(
       `INSERT INTO dismissed_ads (user_id,platform,external_id)
