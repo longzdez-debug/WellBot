@@ -335,10 +335,19 @@ export class DatabaseService {
     const row=r.rows[0]; return {notificationsEnabled:Boolean(row.notifications_enabled),minDealScore:Number(row.min_deal_score),digestEnabled:Boolean(row.digest_enabled),digestHour:Number(row.digest_hour)};
   }
   async saveAdForUser(adId:number,userId:number):Promise<boolean>{
-    const r=await this.pool.query('INSERT INTO saved_ads(user_id,ad_id,platform,external_id) SELECT $1,a.id,l.platform,a.external_id FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$2 AND l.user_id=$1 ON CONFLICT(user_id,ad_id) DO NOTHING',[userId,adId]);
-    return (r.rowCount||0)>0;
+    const target=await this.pool.query<{platform:string;external_id:string}>('SELECT l.platform,a.external_id FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$2 AND l.user_id=$1',[userId,adId]);
+    const row=target.rows[0];
+    if(!row)return false;
+    const inserted=await this.pool.query('INSERT INTO saved_ads(user_id,ad_id,platform,external_id) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[userId,adId,row.platform,row.external_id]);
+    return (inserted.rowCount||0)>0;
   }
-  async unsaveAdForUser(adId:number,userId:number):Promise<boolean>{const r=await this.pool.query('DELETE FROM saved_ads WHERE user_id=$1 AND ad_id=$2',[userId,adId]);return (r.rowCount||0)>0;}
+  async unsaveAdForUser(adId:number,userId:number):Promise<boolean>{
+    const target=await this.pool.query<{platform:string;external_id:string}>('SELECT l.platform,a.external_id FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$2 AND l.user_id=$1',[userId,adId]);
+    const row=target.rows[0];
+    if(!row)return false;
+    const deleted=await this.pool.query('DELETE FROM saved_ads WHERE user_id=$1 AND platform=$2 AND external_id=$3',[userId,row.platform,row.external_id]);
+    return (deleted.rowCount||0)>0;
+  }
   async getSavedAds(userId:number,limit=100):Promise<DashboardAd[]>{const safe=Math.min(300,Math.max(1,Math.floor(limit)));const r=await this.pool.query<DashboardAd>('SELECT a.*,l.platform AS link_platform,l.url AS link_url FROM saved_ads s JOIN ads a ON a.id=s.ad_id JOIN links l ON l.id=a.link_id WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT $2',[userId,safe]);return r.rows;}
   async getUserAnalytics(userId:number):Promise<any>{
     const [summary,platforms,drops,saved]=await Promise.all([
