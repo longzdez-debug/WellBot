@@ -123,6 +123,7 @@ UPDATE user_ad_seen s
 SET platform=COALESCE(l.platform,'unknown')
 FROM links l
 WHERE s.first_link_id=l.id AND (s.platform IS NULL OR s.platform='');
+UPDATE user_ad_seen SET platform='unknown' WHERE platform IS NULL OR platform='';
 ALTER TABLE user_ad_seen ALTER COLUMN platform SET DEFAULT 'unknown';
 ALTER TABLE user_ad_seen ALTER COLUMN platform SET NOT NULL;
 ALTER TABLE user_ad_seen DROP CONSTRAINT IF EXISTS user_ad_seen_pkey;
@@ -150,6 +151,7 @@ JOIN ads a ON a.link_id=l.id
 WHERE a.external_id=d.external_id
   AND l.user_id=d.user_id
   AND (d.platform IS NULL OR d.platform='');
+UPDATE dismissed_ads SET platform='unknown' WHERE platform IS NULL OR platform='';
 ALTER TABLE dismissed_ads ALTER COLUMN platform SET DEFAULT 'unknown';
 ALTER TABLE dismissed_ads ALTER COLUMN platform SET NOT NULL;
 ALTER TABLE dismissed_ads DROP CONSTRAINT IF EXISTS dismissed_ads_pkey;
