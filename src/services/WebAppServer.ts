@@ -80,7 +80,7 @@ export function parseTelegramInitData(raw: string, botToken: string, nowSeconds 
     const age = nowSeconds - authDate;
     if (age < -300 || age > AUTH_MAX_AGE_SECONDS) return null;
     const dataCheckString = [...params.entries()].filter(([key]) => key !== 'hash').sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${key}=${value}`).join('\n');
-    const secret = createHmac('sha256', 'WebAppData').update(botToken).digest();
+    const secret = createHmac('sha256', botToken).update('WebAppData').digest();
     const expected = createHmac('sha256', secret).update(dataCheckString).digest('hex');
     const actual = Buffer.from(hash, 'hex');
     const expectedBuffer = Buffer.from(expected, 'hex');
