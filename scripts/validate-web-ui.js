@@ -53,5 +53,8 @@ if(!app.includes('/api/catalog')||!app.includes('/api/monitors'))throw new Error
 if(!app.includes('/api/catalog'))throw new Error("Official marketplace catalog API is missing.");
 for(const endpoint of ['/api/admin/overview','/api/admin/pro/grant','/api/admin/pro/revoke','/api/admin/promo/create','/api/ads/'])if(!app.includes(endpoint)&&endpoint!=='/api/admin/overview')throw new Error("Required WellBOT action contract missing: "+endpoint);
 if(!app.includes('/api/admin/overview'))throw new Error("Admin overview API contract missing.");
+if(!index.includes('id="mobile-admin-nav"'))throw new Error("Mobile admin navigation entry point is missing.");
+if(!app.includes('querySelector("#mobile-admin-nav")'))throw new Error("Mobile admin visibility contract is missing.");
+if(!app.includes('closest?.("[data-action=admin]")'))throw new Error("Admin click delegation must support mobile and desktop navigation.");
 for(const env of ['TELEGRAM_ADMIN_IDS','WELLBOT_PRO_PRICE_STARS','WELLBOT_TERMS_URL'])if(!new RegExp('^\\s*'+env+':','m').test(compose))throw new Error("Docker Compose does not pass "+env+" to the bot container.");
 console.log("WellBOT web UI contract: OK ("+buttons.length+" static buttons, "+actions.length+" actions, marketplace wizard enabled).");
