@@ -118,7 +118,7 @@ describe('ParserScheduler', () => {
       }]]),
     });
     const scheduler = new ParserScheduler(db as never, bot as never);
-    jest.spyOn(scheduler as any, 'attachComparableMarket').mockImplementation((item: Ad) => ({
+    jest.spyOn(scheduler as any, 'attachComparableMarket').mockImplementation((item: unknown) => ({
       ...item,
       market_status: 'below_market',
       market_percent: -25,
