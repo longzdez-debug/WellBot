@@ -1,4 +1,7 @@
 import * as dotenv from 'dotenv';
+import { URL } from 'node:url';
+import dns from 'node:dns';
+import net from 'node:net';
 import { DatabaseService } from './database/DatabaseService';
 import { BotHandler } from './bot/BotHandler';
 import { installWebAppBridge } from './services/WebAppBridge';
@@ -9,6 +12,8 @@ import { logger } from './utils/logger';
 
 dotenv.config();
 installRuntimeGuards();
+net.setDefaultAutoSelectFamily(true);
+net.setDefaultAutoSelectFamilyAttemptTimeout(500);
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
@@ -43,6 +48,18 @@ async function main() {
   const DATABASE_URL = requiredEnv('DATABASE_URL');
   logger.info('DATABASE_URL is configured');
 
+  const dbUrl = new URL(DATABASE_URL);
+  const dbHost = dbUrl.hostname;
+  const dbPort = dbUrl.port || '5432';
+  const dbName = dbUrl.pathname.replace(/^\\//, '') || '(default)';
+  logger.info('PostgreSQL endpoint', { host: dbHost, port: dbPort, database: dbName });
+  try {
+    const addresses = await dns.promises.lookup(dbHost, { all: true });
+    logger.info('PostgreSQL DNS resolved', { host: dbHost, addresses: addresses.map(item => ({ address: item.address, family: item.family })) });
+  } catch (error) {
+    const details = safeError(error);
+    logger.warn('PostgreSQL DNS lookup failed', { host: dbHost, message: details.message, code: details.code });
+  }
   const db = new DatabaseService(DATABASE_URL);
   logger.info('Connecting to PostgreSQL...');
   try {
