@@ -82,14 +82,26 @@ export class DatabaseService {
   async revokeProByCharge(telegramChargeId:string):Promise<void>{await this.pool.query("UPDATE pro_subscriptions SET status='refunded',expires_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE telegram_payment_charge_id=$1",[telegramChargeId]);}
 
   async adminGrantPro(telegramId:number,durationDays:number,adminTelegramId:number,reason:string):Promise<void>{
-    const user=await this.getUser(telegramId); if(!user)throw new Error('user_not_registered');
-    const days=Math.min(3650,Math.max(1,Math.floor(durationDays))); const current=await this.getProSubscription(telegramId);
-    const base=current?.status==='active'&&current.expiresAt.getTime()>Date.now()?current.expiresAt:new Date(); const expires=new Date(base.getTime()+days*86400000);
-    await this.pool.query(
-      "INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",
-      [user.id,expires,'admin_grant:'+adminTelegramId+':'+Date.now()],
-    );
-    await this.pool.query('INSERT INTO wellbot_admin_audit(admin_telegram_id,target_telegram_id,action,details) VALUES($1,$2,$3,$4::jsonb)',[adminTelegramId,telegramId,'GRANT_PRO',JSON.stringify({durationDays:days,reason,expiresAt:expires.toISOString()})]);
+    const days=Math.min(3650,Math.max(1,Math.floor(durationDays)));
+    if(!Number.isSafeInteger(telegramId)||telegramId<=0||!Number.isSafeInteger(adminTelegramId)||adminTelegramId<=0) throw new Error('invalid_user');
+    const client=await this.pool.connect();
+    try{
+      await client.query('BEGIN');
+      const user=await client.query<User>('SELECT * FROM users WHERE telegram_id=$1 FOR UPDATE',[telegramId]);
+      if(!user.rows[0]) throw new Error('user_not_registered');
+      const now=new Date();
+      const expires=new Date(now.getTime()+days*86400000);
+      await client.query(
+        "INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,CURRENT_TIMESTAMP + ($4::integer * INTERVAL '1 day')),last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",
+        [user.rows[0].id,expires,'admin_grant:'+adminTelegramId+':'+Date.now(),days],
+      );
+      const auditExpiry=new Date(Math.max(expires.getTime(),now.getTime()+days*86400000));
+      await client.query('INSERT INTO wellbot_admin_audit(admin_telegram_id,target_telegram_id,action,details) VALUES($1,$2,$3,$4::jsonb)',[adminTelegramId,telegramId,'GRANT_PRO',JSON.stringify({durationDays:days,reason,expiresAt:auditExpiry.toISOString()})]);
+      await client.query('COMMIT');
+    }catch(error){
+      try{await client.query('ROLLBACK');}catch{}
+      throw error;
+    }finally{client.release();}
   }
   async revokePro(telegramId:number,adminTelegramId:number,reason:string):Promise<void>{
     await this.pool.query("UPDATE pro_subscriptions SET status='revoked',expires_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE user_id=(SELECT id FROM users WHERE telegram_id=$1) AND tier='pro' AND status='active'",[telegramId]);
