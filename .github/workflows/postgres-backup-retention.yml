@@ -22,7 +22,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: ${{ secrets.BACKUP_S3_REGION || 'auto' }}
-      RETENTION_DAYS: 30
+      RETENTION_DAYS: 35
     steps:
       - name: Validate configuration
         run: |
@@ -39,11 +39,12 @@ jobs:
         run: |
           set -euo pipefail
           cutoff="$(date -u -d "-${RETENTION_DAYS} days" +%s)"
+          export CUTOFF_TS="$cutoff"
           aws s3api list-objects-v2 --bucket "$S3_BUCKET" --prefix wellbot/postgres/ --endpoint-url "$S3_ENDPOINT" --output json > /tmp/objects.json
           python3 - <<'PY'
           import json, os, subprocess, datetime
           data=json.load(open('/tmp/objects.json'))
-          cutoff=int(os.environ['cutoff']) if 'cutoff' in os.environ else int(datetime.datetime.now(datetime.timezone.utc).timestamp())-30*86400
+          cutoff=int(os.environ.get('CUTOFF_TS') or (int(datetime.datetime.now(datetime.timezone.utc).timestamp())-35*86400))
           for obj in data.get('Contents',[]):
               key=obj['Key']
               if not key.endswith(('.dump','.dump.sha256')): continue
@@ -52,4 +53,4 @@ jobs:
                   subprocess.run(['aws','s3','rm',f"s3://{os.environ['S3_BUCKET']}/{key}",'--endpoint-url',os.environ['S3_ENDPOINT'],'--only-show-errors'],check=True)
           PY
         env:
-          cutoff: ${{ '' }}
+          CUTOFF_TS: ""
