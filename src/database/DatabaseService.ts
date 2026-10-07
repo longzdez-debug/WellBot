@@ -404,7 +404,6 @@ export class DatabaseService {
     return {summary:summary.rows[0],platforms:platforms.rows,drops:drops.rows,savedCount:Number(saved.rows[0]?.count||0)};
   }
 
-}
 
   async getAdByIdForUser(adId:number,userId:number):Promise<Ad|null>{const r=await this.pool.query<Ad>('SELECT a.* FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$1 AND l.user_id=$2',[adId,userId]);return r.rows[0]||null;}
   async getUserRecentAds(userId:number,limit=100):Promise<Ad[]>{
