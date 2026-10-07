@@ -37,7 +37,8 @@ export class AvParser extends BaseParser {
         return dateB - dateA;
       });
 
-      return ads.map((ad: any) => {
+      const validAds=ads.filter((ad:any)=>ad?.id!=null&&String(ad.id).trim()!=='');
+      return validAds.map((ad: any) => {
         // Формируем цену из доступной валюты
         let priceStr = 'Договорная';
         if (ad.price) {
