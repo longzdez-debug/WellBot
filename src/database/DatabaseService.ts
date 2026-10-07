@@ -88,6 +88,48 @@ export class DatabaseService {
   async resetErrorCount(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET error_count=0 WHERE id=$1',[linkId]);}
   async bulkCreateAdsReturning(linkId:number,ads:Ad[]):Promise<Ad[]>{const unique=new Map<string,Ad>();for(const ad of ads)if(ad?.external_id&&!unique.has(ad.external_id))unique.set(ad.external_id,ad);const rows=[...unique.values()];if(!rows.length)return[];const inserted:Ad[]=[];const chunkSize=400;for(let start=0;start<rows.length;start+=chunkSize){const chunk=rows.slice(start,start+chunkSize);const values:unknown[]=[];const placeholders=chunk.map((ad,i)=>{const b=i*15;values.push(linkId,ad.external_id,ad.title,ad.description||null,ad.price||null,ad.image_url||null,ad.ad_url,ad.location||null,ad.address||null,ad.published_at||null,ad.detected_at||new Date(),ad.first_seen_at||ad.detected_at||new Date(),ad.first_seen_source||null,ad.first_seen_rank??null,ad.updated_at||null);return`(${b+1},${b+2},${b+3},${b+4},${b+5},${b+6},${b+7},${b+8},${b+9},${b+10},${b+11},${b+12},${b+13},${b+14},${b+15})`;}).join(',');const result=await this.pool.query<Ad>(`INSERT INTO ads (link_id,external_id,title,description,price,image_url,ad_url,location,address,published_at,detected_at,first_seen_at,first_seen_source,first_seen_rank,updated_at) VALUES ${placeholders} ON CONFLICT (external_id,link_id) DO NOTHING RETURNING *`,values);inserted.push(...result.rows);}return inserted;}
   async getAdByIdForUser(adId:number,userId:number):Promise<Ad|null>{const r=await this.pool.query<Ad>('SELECT a.* FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$1 AND l.user_id=$2',[adId,userId]);return r.rows[0]||null;}
+  async dismissAdForUser(adId:number,telegramId:number):Promise<boolean>{
+    if(!Number.isSafeInteger(adId)||adId<=0||!Number.isSafeInteger(telegramId)||telegramId<=0)return false;
+    const r=await this.pool.query<{external_id:string}>(
+      `INSERT INTO dismissed_ads(user_id,external_id)
+       SELECT u.id,a.external_id
+       FROM ads a
+       JOIN links l ON l.id=a.link_id
+       JOIN users u ON u.id=l.user_id
+       WHERE a.id=$1 AND u.telegram_id=$2
+       ON CONFLICT(user_id,external_id) DO NOTHING
+       RETURNING external_id`,
+      [adId,telegramId],
+    );
+    return (r.rowCount||0)>0;
+  }
+
+  async isAdDismissedForUser(externalId:string,telegramId:number):Promise<boolean>{
+    if(!externalId||!Number.isSafeInteger(telegramId)||telegramId<=0)return false;
+    const r=await this.pool.query(
+      `SELECT 1
+       FROM dismissed_ads d
+       JOIN users u ON u.id=d.user_id
+       WHERE d.external_id=$1 AND u.telegram_id=$2
+       LIMIT 1`,
+      [externalId,telegramId],
+    );
+    return (r.rowCount||0)>0;
+  }
+
+  async getDismissedExternalIdsForUser(telegramId:number,externalIds:string[]):Promise<Set<string>>{
+    const ids=[...new Set(externalIds.filter(Boolean))];
+    if(!ids.length)return new Set();
+    const r=await this.pool.query<{external_id:string}>(
+      `SELECT d.external_id
+       FROM dismissed_ads d
+       JOIN users u ON u.id=d.user_id
+       WHERE u.telegram_id=$1 AND d.external_id=ANY($2::text[])`,
+      [telegramId,ids],
+    );
+    return new Set(r.rows.map(row=>row.external_id));
+  }
+
   async getExistingAdStatesForLink(linkId:number,externalIds:string[]):Promise<{existingIds:Set<string>;prices:Map<string,{price:string;adId:number}>;market:Map<string,{status:Ad['market_status'];percent:number|null;median:number|null;low:number|null;high:number|null;sellFast:number|null;sellNormal:number|null;sellMax:number|null;sampleSize:number|null;confidence:Ad['market_confidence'];quality:number|null}>}>{if(!externalIds.length)return{existingIds:new Set(),prices:new Map(),market:new Map()};const r=await this.pool.query<{external_id:string;price:string|null;ad_id:number;market_status:Ad['market_status'];market_percent:string|null;market_median:string|null;market_low:string|null;market_high:string|null;sell_fast:string|null;sell_normal:string|null;sell_max:string|null;market_sample_size:number|null;market_confidence:Ad['market_confidence'];market_quality:string|null}>('SELECT DISTINCT ON (external_id) external_id,price,id AS ad_id,market_status,market_percent,market_median,market_low,market_high,sell_fast,sell_normal,sell_max,market_sample_size,market_confidence,market_quality FROM ads WHERE link_id=$1 AND external_id=ANY($2::text[]) ORDER BY external_id,updated_at DESC NULLS LAST,id DESC',[linkId,externalIds]);const existingIds=new Set(r.rows.map(row=>row.external_id));const prices=new Map(r.rows.filter(row=>row.price!=null).map(row=>[row.external_id,{price:row.price as string,adId:row.ad_id}]));const market=new Map(r.rows.map(row=>[row.external_id,{status:row.market_status,percent:row.market_percent==null?null:Number(row.market_percent),median:row.market_median==null?null:Number(row.market_median),low:row.market_low==null?null:Number(row.market_low),high:row.market_high==null?null:Number(row.market_high),sellFast:row.sell_fast==null?null:Number(row.sell_fast),sellNormal:row.sell_normal==null?null:Number(row.sell_normal),sellMax:row.sell_max==null?null:Number(row.sell_max),sampleSize:row.market_sample_size,confidence:row.market_confidence,quality:row.market_quality==null?null:Number(row.market_quality)}]));return{existingIds,prices,market};}
   async claimNewAdsForUser(userId:number,linkId:number,ads:Ad[]):Promise<Set<string>>{
     const rows=[...new Set(ads.filter(ad=>ad?.external_id).map(ad=>ad.external_id))];
