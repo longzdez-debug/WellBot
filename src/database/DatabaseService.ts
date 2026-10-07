@@ -85,7 +85,7 @@ export class DatabaseService {
       const existingHasAccess=existingRow && !['revoked','refunded','expired'].includes(existingRow.status) && new Date(existingRow.expires_at).getTime()>now.getTime();
       const auditExpiry=existingHasAccess ? new Date(new Date(existingRow.expires_at).getTime()+days*86400000) : expires;
       await client.query(
-        "INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at + ($4::integer * INTERVAL '1 day'),CURRENT_TIMESTAMP + ($4::integer * INTERVAL '1 day')),last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",
+        "INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,telegram_payment_charge_id,provider_payment_charge_id,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,NULL,NULL,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at + ($4::integer * INTERVAL '1 day'),CURRENT_TIMESTAMP + ($4::integer * INTERVAL '1 day')),telegram_payment_charge_id=NULL,provider_payment_charge_id=NULL,stars_amount=0,last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",
         [user.rows[0].id,expires,'admin_grant:'+adminTelegramId+':'+Date.now(),days],
       );
       await client.query('INSERT INTO wellbot_admin_audit(admin_telegram_id,target_telegram_id,action,details) VALUES($1,$2,$3,$4::jsonb)',[adminTelegramId,telegramId,'GRANT_PRO',JSON.stringify({durationDays:days,reason,expiresAt:auditExpiry.toISOString()})]);
@@ -126,7 +126,7 @@ export class DatabaseService {
       const currentRow=current.rows[0];
       const currentExpires=currentRow && hasProAccess({status:String(currentRow.status||''),expiresAt:new Date(currentRow.expires_at)})?new Date(currentRow.expires_at):new Date();
       const expires=new Date(currentExpires.getTime()+Number(row.duration_days)*86400000);
-      await client.query("INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),stars_amount=0,last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",[user.rows[0].id,expires,'promo:'+row.code]);
+      await client.query("INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,telegram_payment_charge_id,provider_payment_charge_id,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,NULL,NULL,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),telegram_payment_charge_id=NULL,provider_payment_charge_id=NULL,stars_amount=0,last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",[user.rows[0].id,expires,'promo:'+row.code]);
       await client.query('INSERT INTO wellbot_promo_redemptions(promo_id,user_id,telegram_id) VALUES($1,$2,$3)',[row.id,user.rows[0].id,telegramId]);
       await client.query('UPDATE wellbot_promo_codes SET uses_count=uses_count+1 WHERE id=$1',[row.id]);
       await client.query('COMMIT');
