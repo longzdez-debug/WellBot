@@ -19,7 +19,7 @@ const MIME_TYPES: Record<string, string> = {
 const MAX_BODY = 16 * 1024;
 const MAX_INIT_DATA = 16 * 1024;
 const MAX_LINKS = 50;
-const AUTH_MAX_AGE_SECONDS = 24 * 60 * 60;
+const AUTH_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const PHONE_MODEL_CACHE=new Map<string,{expires:number;models:{id:string;title:string;slug:string}[]}>();
 const PHONE_MODEL_TTL=30*60*1000;
 const API_RATE_WINDOW_MS=60_000;
@@ -234,8 +234,23 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
           return;
         }
         const initData = req.headers['x-telegram-init-data'];
-        const auth = parseTelegramInitData(typeof initData === 'string' ? initData : '', botToken);
-        if (!auth) { logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method }); json(res, 401, { error: 'unauthorized' }); return; }
+        const rawInitData = typeof initData === 'string' ? initData : '';
+        const auth = parseTelegramInitData(rawInitData, botToken);
+        if (!auth) {
+          let authReason = 'invalid_init_data';
+          try {
+            const params = new URLSearchParams(rawInitData);
+            const authDate = Number(params.get('auth_date'));
+            const hash = params.get('hash') || '';
+            if (!rawInitData) authReason = 'missing_init_data';
+            else if (!hash) authReason = 'missing_hash';
+            else if (!Number.isSafeInteger(authDate) || authDate <= 0) authReason = 'invalid_auth_date';
+            else if (Math.floor(Date.now() / 1000) - authDate > AUTH_MAX_AGE_SECONDS) authReason = 'expired_init_data';
+          } catch {}
+          logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method, authReason, initDataLength: rawInitData.length });
+          json(res, 401, { error: 'unauthorized', message: 'Сессия Telegram недействительна. Закрой Mini App и открой WellBOT заново.' });
+          return;
+        }
         if (!allowApiRequest(auth.user.id)) {
           res.setHeader('Retry-After','60');
           json(res,429,{error:'rate_limited',message:'Слишком много запросов. Повторите через минуту.'});
