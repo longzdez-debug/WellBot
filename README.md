@@ -25,13 +25,13 @@
 
 ## Production target
 
-Production runs on **DEPLEXO**. The repository is designed so the same Docker Compose stack can be rebuilt and restarted there without changing application code.
+Production runs on **DEPLEXO**. The repository is designed so the application container can be rebuilt and restarted there without changing application code. PostgreSQL is managed by Supabase in the current production architecture.
 
 ## Stack
 
 - Node.js 22
 - TypeScript (strict)
-- Telegram Bot API via `node-telegram-bot-api`
+- Telegram Bot API via the typed native `fetch` client
 - PostgreSQL 16
 - Axios / Cheerio
 - Docker Compose
