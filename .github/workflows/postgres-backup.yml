@@ -76,7 +76,18 @@ jobs:
           set -euo pipefail
           cutoff="$(date -u -d '35 days ago' +%s)"
           aws s3api list-objects-v2             --bucket "$S3_BUCKET"             --prefix "wellbot/postgres/"             --query 'Contents[].[Key,LastModified]'             --output text             --endpoint-url "$S3_ENDPOINT" |
-          while IFS=\t' read -r key modified; do
+          while IFS=
+            [ -n "$key" ] || continue
+            modified_ts="$(date -u -d "$modified" +%s)"
+            if [ "$modified_ts" -lt "$cutoff" ]; then
+              aws s3 rm "s3://$S3_BUCKET/$key" --endpoint-url "$S3_ENDPOINT" --only-show-errors
+            fi
+          done
+
+      - name: Remove local dump
+        if: always()
+        run: rm -rf backup
+\t' read -r key modified; do
             [ -n "$key" ] || continue
             modified_ts="$(date -u -d "$modified" +%s)"
             if [ "$modified_ts" -lt "$cutoff" ]; then
