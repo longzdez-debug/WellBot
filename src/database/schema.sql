@@ -282,3 +282,31 @@ CREATE INDEX IF NOT EXISTS idx_wellbot_admin_audit_created ON wellbot_admin_audi
 CREATE TABLE IF NOT EXISTS wellbot_promo_codes (id BIGSERIAL PRIMARY KEY,code VARCHAR(64) UNIQUE NOT NULL,tier VARCHAR(32) NOT NULL DEFAULT 'pro',duration_days INTEGER NOT NULL CHECK(duration_days BETWEEN 1 AND 3650),max_uses INTEGER NOT NULL DEFAULT 1 CHECK(max_uses BETWEEN 1 AND 100000),uses_count INTEGER NOT NULL DEFAULT 0,expires_at TIMESTAMP,created_by BIGINT NOT NULL,created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,active BOOLEAN NOT NULL DEFAULT true);
 CREATE TABLE IF NOT EXISTS wellbot_promo_redemptions (id BIGSERIAL PRIMARY KEY,promo_id BIGINT NOT NULL REFERENCES wellbot_promo_codes(id) ON DELETE CASCADE,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,telegram_id BIGINT NOT NULL,redeemed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(promo_id,user_id));
 CREATE INDEX IF NOT EXISTS idx_wellbot_promo_code ON wellbot_promo_codes(code);
+
+
+-- Personal preferences and durable saved listings.
+CREATE TABLE IF NOT EXISTS user_preferences (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  notifications_enabled BOOLEAN NOT NULL DEFAULT true,
+  min_deal_score SMALLINT NOT NULL DEFAULT 65 CHECK (min_deal_score BETWEEN 0 AND 100),
+  digest_enabled BOOLEAN NOT NULL DEFAULT false,
+  digest_hour SMALLINT NOT NULL DEFAULT 19 CHECK (digest_hour BETWEEN 0 AND 23),
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS min_deal_score SMALLINT NOT NULL DEFAULT 65;
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS digest_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS digest_hour SMALLINT NOT NULL DEFAULT 19;
+ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+CREATE TABLE IF NOT EXISTS saved_ads (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ad_id INTEGER NOT NULL REFERENCES ads(id) ON DELETE CASCADE,
+  platform VARCHAR(50) NOT NULL,
+  external_id VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, ad_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_ads_identity ON saved_ads(user_id, platform, external_id);
+CREATE INDEX IF NOT EXISTS idx_saved_ads_user_created ON saved_ads(user_id, created_at DESC);
