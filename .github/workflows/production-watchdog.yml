@@ -1,0 +1,45 @@
+name: Production Watchdog
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wellbot-production-watchdog
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PROD_URL: ${{ secrets.WELLBOT_PROD_URL }}
+      ALERT_BOT_TOKEN: ${{ secrets.WELLBOT_ALERT_BOT_TOKEN }}
+      ALERT_CHAT_ID: ${{ secrets.WELLBOT_ALERT_CHAT_ID }}
+    steps:
+      - name: Validate configuration
+        run: |
+          set -euo pipefail
+          test -n "${PROD_URL:-}" || { echo "::error::Missing WELLBOT_PROD_URL"; exit 1; }
+      - name: Probe health and metrics
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${PROD_URL%/}"
+          curl --fail --silent --show-error --max-time 15 "$base/healthz" >/tmp/healthz.json
+          curl --fail --silent --show-error --max-time 15 "$base/health" >/tmp/health.json
+          curl --fail --silent --show-error --max-time 15 "$base/metrics" >/tmp/metrics.txt
+          grep -q '^wellbot_scheduler_running 1$' /tmp/metrics.txt
+          grep -q '^wellbot_notifications_pending ' /tmp/metrics.txt
+      - name: Send Telegram alert on failure
+        if: failure() && env.ALERT_BOT_TOKEN != '' && env.ALERT_CHAT_ID != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          msg="🚨 WellBOT production watchdog failed. Check DEPLEXO /healthz, /health and /metrics."
+          curl --fail --silent --show-error --max-time 15             -X POST "https://api.telegram.org/bot${ALERT_BOT_TOKEN}/sendMessage"             -d chat_id="${ALERT_CHAT_ID}" --data-urlencode text="$msg" >/dev/null
