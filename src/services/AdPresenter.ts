@@ -94,6 +94,7 @@ export class AdPresenter {
 
     const deal = analyzeDeal(ad);
     if (deal.score !== null && deal.score >= 65) {
+      lines.push('🔥 <b>ВЫГОДНАЯ НАХОДКА</b>');
       lines.push('🎯 <b>Deal Score: ' + deal.score + '/100</b>');
       if (deal.profit !== null && deal.profit > 0 && deal.sellPrice !== null) {
         const currency = deal.currency || '';
