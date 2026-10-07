@@ -88,7 +88,7 @@ export function parseTelegramInitData(raw: string, botToken: string, nowSeconds 
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([key, value]) => key + '=' + value)
         .join('\n');
-      const secret = createHmac('sha256', botToken).update('WebAppData').digest();
+      const secret = createHmac('sha256', 'WebAppData').update(botToken).digest();
       const expected = createHmac('sha256', secret).update(dataCheckString).digest();
       const actual = Buffer.from(hash, 'hex');
       valid = actual.length === expected.length && timingSafeEqual(actual, expected);
@@ -155,7 +155,7 @@ function inspectTelegramInitData(raw: string, botToken: string, nowSeconds = Mat
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([key, value]) => key + '=' + value)
         .join('\n');
-      const secret = createHmac('sha256', botToken).update('WebAppData').digest();
+      const secret = createHmac('sha256', 'WebAppData').update(botToken).digest();
       const expected = createHmac('sha256', secret).update(dataCheckString).digest();
       const actual = Buffer.from(hash, 'hex');
       result.hmacValid = actual.length === expected.length && timingSafeEqual(actual, expected);
@@ -166,7 +166,7 @@ function inspectTelegramInitData(raw: string, botToken: string, nowSeconds = Mat
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([key, value]) => key + '=' + value)
         .join('\n');
-      const signedData = result.botId + ':WebAppData\\n' + dataCheckString;
+      const signedData = result.botId + ':WebAppData\n' + dataCheckString;
       const publicKeyBytes = Buffer.from('e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242', 'hex');
       const derPrefix = Buffer.from('302a300506032b6570032100', 'hex');
       const publicKey = createPublicKey({ key: Buffer.concat([derPrefix, publicKeyBytes]), format: 'der', type: 'spki' });
