@@ -282,6 +282,39 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
           json(res,200,{ok:true,messageId:telegramResult.result?.message_id||null,priceStars});return;
         }
 
+        if (requestPath === '/api/preferences' && req.method === 'GET') {
+          json(res,200,{preferences:await db.getUserPreferences(user.id)}); return;
+        }
+        if (requestPath === '/api/preferences' && req.method === 'PATCH') {
+          try {
+            const body=await readJson(req);
+            if(body.notificationsEnabled!=null&&typeof body.notificationsEnabled!=='boolean') throw new Error('invalid_notifications');
+            if(body.digestEnabled!=null&&typeof body.digestEnabled!=='boolean') throw new Error('invalid_digest');
+            const prefs=await db.updateUserPreferences(user.id,{
+              notificationsEnabled:body.notificationsEnabled as boolean|undefined,
+              minDealScore:body.minDealScore==null?undefined:Number(body.minDealScore),
+              digestEnabled:body.digestEnabled as boolean|undefined,
+              digestHour:body.digestHour==null?undefined:Number(body.digestHour),
+            });
+            json(res,200,{preferences:prefs});
+          } catch(e){json(res,400,{error:e instanceof Error?e.message:'invalid_preferences'});}
+          return;
+        }
+        if (requestPath === '/api/analytics' && req.method === 'GET') {
+          json(res,200,await db.getUserAnalytics(user.id)); return;
+        }
+        if (requestPath === '/api/saved' && req.method === 'GET') {
+          const ads=await db.getSavedAds(user.id,100);
+          json(res,200,{ads,count:ads.length}); return;
+        }
+        const savedMatch=requestPath.match(/^\/api\/saved\/(\d+)$/);
+        if(savedMatch&&(req.method==='POST'||req.method==='DELETE')){
+          const adId=Number(savedMatch[1]);
+          if(!Number.isSafeInteger(adId)||adId<=0){json(res,400,{error:'invalid_ad_id'});return;}
+          const ok=req.method==='POST'?await db.saveAdForUser(adId,user.id):await db.unsaveAdForUser(adId,user.id);
+          json(res,ok?200:404,ok?{ok:true,adId}:{error:'not_found'}); return;
+        }
+
         if (requestPath === '/api/metrics' && req.method === 'GET') { json(res, 200, metricsProvider ? await metricsProvider() : { scheduler: { running: false }, notifications: {}, generatedAt: new Date().toISOString() }); return; }
 
         if (requestPath === '/api/bootstrap' && req.method === 'GET') {
