@@ -26,6 +26,14 @@ export function findMarketplaceCategory(source:MarketplaceSource,id:string):Mark
  const walk=(nodes:MarketplaceNode[],root:MarketplaceNode):MarketplaceNode|null=>{for(const item of nodes){if(item.id===id)return root;const found=item.children?walk(item.children,item):null;if(found)return found;}return null};
  for(const root of list){const found=walk(root.children||[],root);if(found)return found;} return null;
 }
+const AV_SECTION_URLS:Record<string,string>={
+ av_0:'https://cars.av.by/search/',av_1:'https://cars.av.by/electrocars',av_2:'https://salon.av.by/',
+ av_3:'https://moto.av.by/',av_4:'https://agro.av.by/',av_5:'https://truck.av.by/',av_6:'https://trailer.av.by/',
+ av_7:'https://boat.av.by/',av_8:'https://spec.av.by/',av_9:'https://bus.av.by/',av_10:'https://parts.av.by/',
+ av_11:'https://koleso.av.by/',av_12:'https://parts.av.by/',av_13:'https://parts.av.by/accessories',
+ av_14:'https://parts.av.by/moto',av_15:'https://parts.av.by/agro',av_16:'https://parts.av.by/spec'
+};
+
 export function buildMarketplaceSearchUrl(source:MarketplaceSource,config:any):string{
  const category=findMarketplaceNode(source,config.subcategoryId||config.categoryId);
  const parts=[category?.title||'',String(config.query||'').trim()].filter(Boolean).join(' ');
@@ -54,7 +62,7 @@ export function buildMarketplaceSearchUrl(source:MarketplaceSource,config:any):s
    u.searchParams.set('wb',identity);
    return u.toString();
  }
- const u=new URL('https://cars.av.by/search/');
+ const u=new URL(AV_SECTION_URLS[String(config.categoryId)]||'https://cars.av.by/search/');
  if(parts)u.searchParams.set('q',parts);
  if(config.city)u.searchParams.set('location',String(config.city));
  if(config.minPrice!=null)u.searchParams.set('price[min]',String(config.minPrice));
