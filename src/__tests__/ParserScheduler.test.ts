@@ -79,20 +79,26 @@ describe('ParserScheduler', () => {
   test('continues daily digest delivery when one user fails', async () => {
     const links = [makeLink(1)];
     const db = makeDb(links);
-    db.getDigestUsers.mockResolvedValue([
-      { userId: 1, telegramId: 12345, notificationsEnabled: true, minDealScore: 0, digestEnabled: true, digestHour: new Date().getHours() },
-      { userId: 2, telegramId: 67890, notificationsEnabled: true, minDealScore: 0, digestEnabled: true, digestHour: new Date().getHours() },
-    ]);
-    db.getUserRecentAds.mockResolvedValue([]);
-    bot.sendDailyDigest.mockRejectedValueOnce(new Error('telegram unavailable')).mockResolvedValueOnce(undefined);
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-07T16:02:00.000Z'));
+    try {
+      db.getDigestUsers.mockResolvedValue([
+        { userId: 1, telegramId: 12345, notificationsEnabled: true, minDealScore: 0, digestEnabled: true, digestHour: 19 },
+        { userId: 2, telegramId: 67890, notificationsEnabled: true, minDealScore: 0, digestEnabled: true, digestHour: 19 },
+      ]);
+      db.getUserRecentAds.mockResolvedValue([]);
+      bot.sendDailyDigest.mockRejectedValueOnce(new Error('telegram unavailable')).mockResolvedValueOnce(undefined);
 
-    const scheduler = new ParserScheduler(db as never, bot as never);
-    const runDailyDigests = (scheduler as unknown as { runDailyDigests: () => Promise<void> }).runDailyDigests;
-    await runDailyDigests.call(scheduler);
+      const scheduler = new ParserScheduler(db as never, bot as never);
+      const runDailyDigests = (scheduler as unknown as { runDailyDigests: () => Promise<void> }).runDailyDigests;
+      await runDailyDigests.call(scheduler);
 
-    expect(bot.sendDailyDigest).toHaveBeenCalledTimes(2);
-    expect(db.releaseDailyDigest).toHaveBeenCalledWith(1, expect.any(String), expect.any(Number));
-    expect(db.markDailyDigestSent).toHaveBeenCalledWith(2, expect.any(String), expect.any(Number));
+      expect(bot.sendDailyDigest).toHaveBeenCalledTimes(2);
+      expect(db.releaseDailyDigest).toHaveBeenCalledWith(1, '2026-10-07', 19);
+      expect(db.markDailyDigestSent).toHaveBeenCalledWith(2, '2026-10-07', 19);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('batches next-check scheduling for every parsed link', async () => {
