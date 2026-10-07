@@ -80,15 +80,14 @@ export class DatabaseService {
       if(!user.rows[0]) throw new Error('user_not_registered');
       const now=new Date();
       const expires=new Date(now.getTime()+days*86400000);
+      const existing=await client.query<{expires_at:Date;status:string}>('SELECT expires_at,status FROM pro_subscriptions WHERE user_id=$1 AND tier=\'pro\' FOR UPDATE',[user.rows[0].id]);
+      const existingRow=existing.rows[0];
+      const existingHasAccess=existingRow && !['revoked','refunded','expired'].includes(existingRow.status) && new Date(existingRow.expires_at).getTime()>now.getTime();
+      const auditExpiry=existingHasAccess ? new Date(new Date(existingRow.expires_at).getTime()+days*86400000) : expires;
       await client.query(
         "INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at + ($4::integer * INTERVAL '1 day'),CURRENT_TIMESTAMP + ($4::integer * INTERVAL '1 day')),last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",
         [user.rows[0].id,expires,'admin_grant:'+adminTelegramId+':'+Date.now(),days],
       );
-      const existing=await client.query<{expires_at:Date;status:string}>('SELECT expires_at,status FROM pro_subscriptions WHERE user_id=$1 AND tier=\'pro\' FOR UPDATE',[user.rows[0].id]);
-      const existingRow=existing.rows[0];
-      const auditExpiry=existingRow && !['revoked','refunded','expired'].includes(existingRow.status) && new Date(existingRow.expires_at).getTime()>now.getTime()
-        ? new Date(new Date(existingRow.expires_at).getTime()+days*86400000)
-        : expires;
       await client.query('INSERT INTO wellbot_admin_audit(admin_telegram_id,target_telegram_id,action,details) VALUES($1,$2,$3,$4::jsonb)',[adminTelegramId,telegramId,'GRANT_PRO',JSON.stringify({durationDays:days,reason,expiresAt:auditExpiry.toISOString()})]);
       await client.query('COMMIT');
     }catch(error){
