@@ -49,6 +49,11 @@ describe('KufarCatalog', () => {
     expect(isKufarPhoneCategory('electronics','17010')).toBe(false);
   });
 
+  test('preserves location for Kufar rental searches', () => {
+    const url=buildKufarSearchUrl({source:'kufar',categoryId:'realty',subcategoryId:'1011',city:'minsk'});
+    expect(url).toContain('https://re.kufar.by/l/minsk/snyat/kvartiru');
+  });
+
   test('builds exact Kufar manufacturer/model paths', () => {
     const url=buildKufarSearchUrl({source:'kufar',categoryId:'phones',subcategoryId:'17010',brand:'apple',model:'iPhone 17',query:'256GB'});
     expect(url).toContain('/l/mobilnye-telefony/mt~apple-iphone-17');
