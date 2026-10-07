@@ -267,7 +267,7 @@ export class FastKufarParser extends BaseParser {
               Accept: 'application/json, text/plain, */*',
               'Cache-Control': 'no-cache, no-store, max-age=0',
               Pragma: 'no-cache',
-              'X-Request-Id': `1791414863416-${Math.random().toString(36).slice(2)}`,
+              'X-Request-Id': `${Date.now()}-${Math.random().toString(36).slice(2)}`,
               'Accept-Language': 'ru-RU,ru;q=0.9',
               Referer: 'https://www.kufar.by/',
               Origin: 'https://www.kufar.by',
@@ -294,8 +294,8 @@ export class FastKufarParser extends BaseParser {
       }
 
       const rawAds = responses.flatMap(data => Array.isArray(data?.ads) ? data.ads : []);
-
-        if (!ad?.ad_id) return false;
+      const ads = rawAds.filter((ad: any) => {
+        if (!ad?.ad_id) return false; return false;
         if (requestedCitySlug && !adCityMatches(ad, requestedCitySlug)) return false;
         const text = adSearchText(ad);
         if (!queryMatchesAd(text)) return false;
