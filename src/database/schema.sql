@@ -247,6 +247,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_pro_subscriptions_telegram_charge ON pro_s
 CREATE INDEX IF NOT EXISTS idx_pro_subscriptions_active ON pro_subscriptions(status,expires_at);
 
 
+CREATE TABLE IF NOT EXISTS wellbot_payment_events (
+  telegram_payment_charge_id VARCHAR(255) PRIMARY KEY,
+  telegram_id BIGINT NOT NULL,
+  payload TEXT NOT NULL,
+  stars_amount INTEGER NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS wellbot_admin_audit (id BIGSERIAL PRIMARY KEY,admin_telegram_id BIGINT NOT NULL,target_telegram_id BIGINT,action VARCHAR(64) NOT NULL,details JSONB NOT NULL DEFAULT '{}'::jsonb,created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS idx_wellbot_admin_audit_created ON wellbot_admin_audit(created_at DESC);
 CREATE TABLE IF NOT EXISTS wellbot_promo_codes (id BIGSERIAL PRIMARY KEY,code VARCHAR(64) UNIQUE NOT NULL,tier VARCHAR(32) NOT NULL DEFAULT 'pro',duration_days INTEGER NOT NULL CHECK(duration_days BETWEEN 1 AND 3650),max_uses INTEGER NOT NULL DEFAULT 1 CHECK(max_uses BETWEEN 1 AND 100000),uses_count INTEGER NOT NULL DEFAULT 0,expires_at TIMESTAMP,created_by BIGINT NOT NULL,created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,active BOOLEAN NOT NULL DEFAULT true);
