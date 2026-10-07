@@ -52,8 +52,9 @@ docker compose -f docker-compose.prod.yml build --pull bot
 docker compose -f docker-compose.prod.yml up -d bot
 
 echo "Waiting for WellBOT health endpoint..."
+HEALTH_PORT="${PORT:-3000}"
 for _ in {1..30}; do
-  if curl -fsS http://127.0.0.1:3000/healthz >/dev/null 2>&1; then
+  if curl -fsS "http://127.0.0.1:$HEALTH_PORT/healthz" >/dev/null 2>&1; then
     echo "WellBOT is healthy."
     docker compose -f docker-compose.prod.yml ps
     echo
