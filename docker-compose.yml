@@ -43,7 +43,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DISPLAY_TIMEZONE: ${DISPLAY_TIMEZONE:-Europe/Minsk}
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     depends_on:
       postgres:
         condition: service_healthy
