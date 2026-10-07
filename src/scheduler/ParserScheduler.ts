@@ -75,10 +75,18 @@ export class ParserScheduler {
         if(user.notificationsEnabled===false||!user.digestEnabled||user.digestHour!==hour)continue;
         const key=`${day}:${hour}`;
         if(this.digestSentKeys.get(user.userId)===key)continue;
-        const ads=await this.db.getUserRecentAds(user.userId,100);
-        const items=ads.map(ad=>({ad,score:analyzeDeal(ad).score})).filter(item=>item.score!==null&&item.score>=user.minDealScore).slice(0,10) as Array<{ad:Ad;score:number}>;
-        await this.bot.sendDailyDigest(user.telegramId,items);
-        this.digestSentKeys.set(user.userId,key);
+        const claimed=await this.db.claimDailyDigest(user.userId,day,hour);
+        if(!claimed)continue;
+        try{
+          const ads=await this.db.getUserRecentAds(user.userId,100);
+          const items=ads.map(ad=>({ad,score:analyzeDeal(ad).score})).filter(item=>item.score!==null&&item.score>=user.minDealScore).slice(0,10) as Array<{ad:Ad;score:number}>;
+          await this.bot.sendDailyDigest(user.telegramId,items);
+          await this.db.markDailyDigestSent(user.userId,day,hour);
+          this.digestSentKeys.set(user.userId,key);
+        }catch(error){
+          await this.db.releaseDailyDigest(user.userId,day,hour);
+          throw error;
+        }
       }
       for(const [userId,key] of this.digestSentKeys){if(key.split(':')[0]!==day)this.digestSentKeys.delete(userId);}
     }catch(error:unknown){
