@@ -50,6 +50,7 @@ jobs:
           stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
           file="backup/wellbot-postgres-${stamp}.dump"
           pg_dump --format=custom --no-owner --no-privileges --dbname="$DATABASE_URL" --file="$file"
+          pg_restore --list "$file" >/dev/null
           sha256sum "$file" > "$file.sha256"
           echo "BACKUP_FILE=$file" >> "$GITHUB_ENV"
 
