@@ -31,6 +31,12 @@ ALTER TABLE links ADD COLUMN IF NOT EXISTS source_key TEXT;
 ALTER TABLE links ADD COLUMN IF NOT EXISTS next_check_at TIMESTAMP;
 ALTER TABLE links ADD COLUMN IF NOT EXISTS priority SMALLINT NOT NULL DEFAULT 0;
 
+-- Migrate the retired legacy `realt` platform before enforcing the current platform set.
+UPDATE links SET platform='onliner' WHERE platform='realt' AND url ILIKE '%onliner.%';
+UPDATE links SET is_active=false, error_count=0, next_check_at=NULL WHERE platform='realt';
+ALTER TABLE links DROP CONSTRAINT IF EXISTS check_platform;
+ALTER TABLE links ADD CONSTRAINT check_platform CHECK (platform IN ('kufar','onliner','av'));
+
 CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id);
 CREATE INDEX IF NOT EXISTS idx_links_active ON links(is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_links_next_check ON links(next_check_at) WHERE is_active = true;
