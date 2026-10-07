@@ -29,7 +29,7 @@ export class BotHandler {
     const webAppUrl = process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || '';
     if (!/^https:\/\//i.test(webAppUrl)) return undefined;
     return {
-      inline_keyboard: [[{ text: '🚀 Открыть WellBOT', web_app: { url: webAppUrl } }]],
+      inline_keyboard: [[{ text: '🚀 WELLBOT', web_app: { url: webAppUrl } }]],
     } as TelegramBot.SendMessageOptions['reply_markup'];
   }
 
