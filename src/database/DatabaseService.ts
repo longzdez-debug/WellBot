@@ -339,7 +339,9 @@ export class DatabaseService {
     const row=target.rows[0];
     if(!row)return false;
     const inserted=await this.pool.query('INSERT INTO saved_ads(user_id,ad_id,platform,external_id) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[userId,adId,row.platform,row.external_id]);
-    return (inserted.rowCount||0)>0;
+    if((inserted.rowCount||0)>0)return true;
+    const existing=await this.pool.query('SELECT 1 FROM saved_ads WHERE user_id=$1 AND platform=$2 AND external_id=$3 LIMIT 1',[userId,row.platform,row.external_id]);
+    return (existing.rowCount||0)>0;
   }
   async unsaveAdForUser(adId:number,userId:number):Promise<boolean>{
     const target=await this.pool.query<{platform:string;external_id:string}>('SELECT l.platform,a.external_id FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$2 AND l.user_id=$1',[userId,adId]);
