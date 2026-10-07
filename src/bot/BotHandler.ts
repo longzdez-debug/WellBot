@@ -26,6 +26,7 @@ export class BotHandler {
     this.adPresenter = new AdPresenter();
     this.telegramSender = new TelegramSender(this.bot);
     this.setupHandlers();
+    void this.configureDefaultMenuButton();
   }
 
   private getMainKeyboard() {
@@ -34,6 +35,28 @@ export class BotHandler {
     return {
       inline_keyboard: [[{ text: '🚀 WELLBOT', web_app: { url: webAppUrl } }]],
     } as TelegramBot.SendMessageOptions['reply_markup'];
+  }
+
+  private async configureDefaultMenuButton(): Promise<void> {
+    const webAppUrl = process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || process.env.MINI_APP_URL || '';
+    if (!/^https:\\/\\/i.test(webAppUrl)) {
+      logger.warn('Telegram menu button not configured: Mini App URL is missing or not HTTPS');
+      return;
+    }
+    try {
+      await (this.bot as any).setChatMenuButton({
+        menu_button: {
+          type: 'web_app',
+          text: '🚀 WELLBOT',
+          web_app: { url: webAppUrl },
+        },
+      });
+      logger.info('Telegram default menu button configured', { text: '🚀 WELLBOT' });
+    } catch (error) {
+      logger.error('Failed to configure Telegram default menu button', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private setupHandlers(): void {
@@ -151,6 +174,25 @@ export class BotHandler {
       await this.db.createUser(userId, username || null);
       // Remove any legacy persistent reply keyboard left by older bot versions.
       await this.bot.sendMessage(chatId, 'Интерфейс WellBOT обновлён.', { reply_markup: { remove_keyboard: true } });
+      const webAppUrl = process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || process.env.MINI_APP_URL || '';
+      if (/^https:\\/\\/i.test(webAppUrl)) {
+        try {
+          await (this.bot as any).setChatMenuButton({
+            chat_id: chatId,
+            menu_button: {
+              type: 'web_app',
+              text: '🚀 WELLBOT',
+              web_app: { url: webAppUrl },
+            },
+          });
+          logger.info('Telegram chat menu button synchronized', { chatId, text: '🚀 WELLBOT' });
+        } catch (error) {
+          logger.error('Failed to synchronize Telegram chat menu button', {
+            chatId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
       await this.bot.sendMessage(chatId, '👋 Добро пожаловать в WellBOT!\n\nWellBOT автоматически отслеживает новые объявления на Kufar, Onliner и AV.BY и присылает интересные находки прямо сюда.\n\n🎯 Что умеет:\n• искать по полным категориям и подкатегориям\n• фильтровать по цене, городу и условиям\n• находить предложения ниже рынка\n• отслеживать новые объявления без ручной проверки\n\n⚡ Открой WellBOT кнопкой ниже и создай свой первый монитор. Всё остальное сделает бот.', { reply_markup: this.getMainKeyboard() });
       logger.info('User started bot', { userId, username });
     } catch (error: any) { logger.error('Failed to handle /start', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка. Попробуйте позже.'); }
