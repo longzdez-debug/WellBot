@@ -100,40 +100,45 @@ export class ParserScheduler {
 
   private applyMonitorFilters(link: ParseLink, ads: Ad[]): Ad[] {
     const config = link.config;
-    if (!config || link.platform !== 'kufar') return ads;
+    if (!config) return ads;
     const min = config.minPrice != null ? Number(config.minPrice) : undefined;
     const max = config.maxPrice != null ? Number(config.maxPrice) : undefined;
-    const condition = config.condition === 'new' ? ['new','новое','новый','новая'] : config.condition === 'used' ? ['used','б/у','б\u002fu','бу','бывший в употреблении'] : [];
-    const normalizeFilterText=(value:string)=>String(value||'').toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/gi,' ').replace(/\s+/g,' ').trim();
+    const condition = config.condition === 'new'
+      ? ['new','новое','новый','новая']
+      : config.condition === 'used'
+        ? ['used','б/у','б\\u002fu','бу','бывший в употреблении']
+        : [];
+    const normalizeFilterText=(value:string)=>String(value||'').toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[^a-zа-я0-9]+/gi,' ').replace(/\\s+/g,' ').trim();
     const brandAliases:Record<string,string[]>={
       apple:['apple','iphone','айфон'],samsung:['samsung','самсунг'],xiaomi:['xiaomi','сяоми','ксиаоми'],huawei:['huawei','хуавей'],honor:['honor','хонор'],google:['google','pixel'],oneplus:['oneplus','one plus']
     };
     const queryTerms=normalizeFilterText(config.query||'').split(' ').filter(x=>x.length>=2);
-    const brandTerms=String(config.brand||'').trim()?brandAliases[String(config.brand).toLowerCase()]||[normalizeFilterText(String(config.brand))]:[];
-    const modelTerm=normalizeFilterText(String(config.model||''));
+    const brandTerms=link.platform==='kufar' && String(config.brand||'').trim()
+      ? brandAliases[String(config.brand).toLowerCase()]||[normalizeFilterText(String(config.brand))]
+      : [];
+    const modelTerm=link.platform==='kufar' ? normalizeFilterText(String(config.model||'')) : '';
     return ads.filter(ad => {
       const searchText=normalizeFilterText([ad.title,ad.description].filter(Boolean).join(' '));
       if(queryTerms.length&&!queryTerms.every(term=>searchText.includes(term))) return false;
       if(brandTerms.length&&!brandTerms.some(term=>searchText.includes(term))) return false;
       if(modelTerm&&!searchText.includes(modelTerm)) return false;
-      if (condition.length) {
+      if (condition.length && link.platform==='kufar') {
         const value = String(ad.condition || '').trim().toLocaleLowerCase('ru-RU').replace(/ё/g,'е');
         if (!value || !condition.some(token => value.includes(token))) return false;
       }
       if (config.minMarketDiscount != null && (typeof ad.market_percent !== 'number' || ad.market_percent > -Number(config.minMarketDiscount))) return false;
-      if (config.seller) {
+      if (config.seller && link.platform==='kufar') {
         if (config.seller === 'company' && ad.is_company !== true) return false;
         if (config.seller === 'private' && ad.is_company === true) return false;
       }
       if (min == null && max == null) return true;
-      const match = String(ad.price || '').toUpperCase().match(/([0-9]+(?:[.,][0-9]+)?)\s*(BYN|USD|EUR|RUB|UAH|PLN)\b/);
+      const match = String(ad.price || '').toUpperCase().match(/([0-9]+(?:[.,][0-9]+)?)\\s*(BYN|USD|EUR|RUB|UAH|PLN)\\b/);
       if (!match) return false;
       const amount = Number(match[1].replace(',','.'));
       if (!Number.isFinite(amount)) return false;
       return (min == null || amount >= min) && (max == null || amount <= max);
     });
   }
-
   private isValidAd(ad:Ad|null|undefined):ad is Ad{if(!ad)return false;const externalId=typeof ad.external_id==='string'?ad.external_id.trim():'';const title=typeof ad.title==='string'?ad.title.trim():'';const adUrl=typeof ad.ad_url==='string'?ad.ad_url.trim():'';if(!externalId||!title||!adUrl)return false;try{const parsed=new URL(adUrl);return parsed.protocol==='http:'||parsed.protocol==='https:';}catch{return false;}}
   private normalizeAds(rawAds:Ad[]):Ad[]{const valid:Ad[]=[];const seen=new Set<string>();for(const ad of rawAds){if(!this.isValidAd(ad))continue;const externalId=ad.external_id.trim();if(seen.has(externalId))continue;seen.add(externalId);valid.push({...ad,external_id:externalId,title:ad.title.trim(),ad_url:ad.ad_url.trim()});}return valid;}
   private async parseLink(link:ParseLink):Promise<ParseResult>{const newAds:Ad[]=[];const priceDrops:PriceDrop[]=[];let failureCount=Number(link.error_count||0);try{const parser=ParserFactory.getParser(link.platform);if(!parser){failureCount=await this.recordLinkFailure(link,`No parser configured for platform ${link.platform}`);return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}let rawAds:Ad[];try{rawAds=await this.withTimeout(parser.parseUrl(link.url),this.parseTimeoutMs,`Parse timeout after ${this.parseTimeoutMs} milliseconds`);}catch(error:unknown){const message=error instanceof Error?error.message:String(error);failureCount=await this.recordLinkFailure(link,message);return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}if(!Array.isArray(rawAds)){failureCount=await this.recordLinkFailure(link,'Parser returned a non-array result');return{newAds,priceDrops,nextCheckDelayMs:this.computeNextCheckDelay(link,failureCount)};}const normalizedRaw=this.normalizeAds(rawAds);
