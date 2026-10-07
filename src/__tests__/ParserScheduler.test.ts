@@ -43,6 +43,10 @@ describe('ParserScheduler', () => {
       getUsersByIds: jest.fn().mockResolvedValue([user]),
       getUserPreferencesByUserIds: jest.fn().mockResolvedValue(new Map([[user.id, { notificationsEnabled: true, minDealScore: 65, digestEnabled: false, digestHour: 19 }]])),
       getDigestUsers: jest.fn().mockResolvedValue([]),
+      claimDailyDigest: jest.fn().mockResolvedValue(true),
+      markDailyDigestSent: jest.fn().mockResolvedValue(undefined),
+      releaseDailyDigest: jest.fn().mockResolvedValue(undefined),
+      getUserRecentAds: jest.fn().mockResolvedValue([]),
       bulkCreateAdsReturning: jest.fn().mockImplementation(async (linkId: number, input: Ad[]) => {
         const inserted = input.map(ad => ({ ...ad, id: ads.size + 1, link_id: linkId, created_at: new Date() }));
         for (const ad of inserted) ads.set(ad.external_id, ad);
@@ -71,6 +75,25 @@ describe('ParserScheduler', () => {
       scheduleNextChecks: jest.fn().mockResolvedValue(undefined),
     };
   }
+
+  test('continues daily digest delivery when one user fails', async () => {
+    const links = [makeLink(1)];
+    const db = makeDb(links);
+    db.getDigestUsers.mockResolvedValue([
+      { userId: 1, telegramId: 12345, notificationsEnabled: true, minDealScore: 0, digestEnabled: true, digestHour: new Date().getHours() },
+      { userId: 2, telegramId: 67890, notificationsEnabled: true, minDealScore: 0, digestEnabled: true, digestHour: new Date().getHours() },
+    ]);
+    db.getUserRecentAds.mockResolvedValue([]);
+    bot.sendDailyDigest.mockRejectedValueOnce(new Error('telegram unavailable')).mockResolvedValueOnce(undefined);
+
+    const scheduler = new ParserScheduler(db as never, bot as never);
+    const runDailyDigests = (scheduler as unknown as { runDailyDigests: () => Promise<void> }).runDailyDigests;
+    await runDailyDigests.call(scheduler);
+
+    expect(bot.sendDailyDigest).toHaveBeenCalledTimes(2);
+    expect(db.releaseDailyDigest).toHaveBeenCalledWith(1, expect.any(String), expect.any(Number));
+    expect(db.markDailyDigestSent).toHaveBeenCalledWith(2, expect.any(String), expect.any(Number));
+  });
 
   test('batches next-check scheduling for every parsed link', async () => {
     const links = [makeLink(1, new Date()), makeLink(2, new Date())];
