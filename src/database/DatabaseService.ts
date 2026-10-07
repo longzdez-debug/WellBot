@@ -17,7 +17,7 @@ export function normalizeDatabaseDate(value: unknown): Date|null {
   if (typeof value === 'string') {
     const text = value.trim();
     if (!text) return null;
-    if (/^-?\\d+(?:\\.\\d+)?$/.test(text)) {
+    if (/^-?\d+(?:\.\d+)?$/.test(text)) {
       const numeric = Number(text);
       if (Number.isFinite(numeric)) {
         const millis = numeric < 100_000_000_000 ? numeric * 1000 : numeric;
