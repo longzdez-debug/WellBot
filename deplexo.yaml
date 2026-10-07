@@ -1,8 +1,9 @@
-framework: dockerfile
-dockerfile: Dockerfile
-port: 3000
-healthcheck:
-  path: /healthz
-  interval: 30s
-  timeout: 5s
-  retries: 3
+version: 1
+type: web
+
+build:
+  framework: dockerfile
+  dockerfile: Dockerfile
+
+run:
+  port: 3000
