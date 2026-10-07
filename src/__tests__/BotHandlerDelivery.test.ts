@@ -52,3 +52,17 @@ describe('BotHandler notification delivery', () => {
     }, 55)).rejects.toBe(error);
   });
 });
+
+
+describe('BotHandler digest formatting', () => {
+  test('escapes listing content before Telegram HTML delivery', async () => {
+    const handler = Object.create(BotHandler.prototype) as any;
+    handler.bot = { sendMessage: jest.fn().mockResolvedValue(undefined) };
+    await handler.sendDailyDigest(12345, [{ ad: { title: '<iPhone> & deal', price: '100 < BYN', ad_url: 'https://example.com/1' }, score: 88 }]);
+    expect(handler.bot.sendMessage).toHaveBeenCalledWith(
+      12345,
+      expect.stringContaining('&lt;iPhone&gt; &amp; deal'),
+      expect.objectContaining({ parse_mode: 'HTML' }),
+    );
+  });
+});
