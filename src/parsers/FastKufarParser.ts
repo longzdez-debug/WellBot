@@ -148,11 +148,22 @@ export class FastKufarParser extends BaseParser {
     let requestedBrandSlug = '';
     let requestedModel = '';
     let requestedCitySlug = '';
-    const monitorIdentity = String(parsed.searchParams.get('wb') || '').split('|');
-    const requestedCategoryId = monitorIdentity[1] || '';
-    const requestedSubcategoryId = monitorIdentity[2] || '';
-    const identityBrand = String(monitorIdentity[3] || '').trim().toLocaleLowerCase('ru-RU');
-    const identityModel = normalizeSearchText(monitorIdentity[4] || '');
+    const rawIdentity = String(parsed.searchParams.get('wb') || '').trim();
+    let identityObject:Record<string,unknown>|null=null;
+    if(rawIdentity.startsWith('{')){
+      try{
+        const parsedIdentity=JSON.parse(rawIdentity);
+        if(parsedIdentity&&typeof parsedIdentity==='object'&&!Array.isArray(parsedIdentity)) identityObject=parsedIdentity as Record<string,unknown>;
+      }catch(error){
+        logger.warn('Invalid JSON monitor identity; falling back to legacy identity format',{error:error instanceof Error?error.message:String(error)});
+      }
+    }
+    const monitorIdentity = rawIdentity.split('|');
+    const identityValue=(index:number,key:string):unknown=>identityObject?.[key]??monitorIdentity[index]??'';
+    const requestedCategoryId = String(identityValue(1,'categoryId')||'');
+    const requestedSubcategoryId = String(identityValue(2,'subcategoryId')||'');
+    const identityBrand = String(identityValue(3,'brand')||'').trim().toLocaleLowerCase('ru-RU');
+    const identityModel = normalizeSearchText(identityValue(4,'model')||'');
     if (identityBrand && BRAND_TERMS[identityBrand]) requestedBrandSlug = identityBrand;
     if (identityModel) requestedModel = identityModel;
     const explicitCategoryId = /^\d+$/.test(requestedSubcategoryId)
@@ -176,11 +187,15 @@ export class FastKufarParser extends BaseParser {
       if (brandSlug && BRAND_MAP[brandSlug]) requestedBrandSlug = brandSlug;
     }
 
-    const requestedQuery = String(parsed.searchParams.get('query') || '').trim();
-    const requestedCondition = monitorIdentity[11] === 'new' || monitorIdentity[11] === 'used' ? monitorIdentity[11] : '';
-    const requestedSeller = monitorIdentity[12] === 'private' || monitorIdentity[12] === 'company' ? monitorIdentity[12] : '';
-    const requestedMinPrice = monitorIdentity[9] ? Number(monitorIdentity[9]) : undefined;
-    const requestedMaxPrice = monitorIdentity[10] ? Number(monitorIdentity[10]) : undefined;
+    const requestedQuery = String(parsed.searchParams.get('query') || identityValue(8,'query') || '').trim();
+    const conditionValue=String(identityValue(11,'condition')||'');
+    const requestedCondition = conditionValue === 'new' || conditionValue === 'used' ? conditionValue : '';
+    const sellerValue=String(identityValue(12,'seller')||'');
+    const requestedSeller = sellerValue === 'private' || sellerValue === 'company' ? sellerValue : '';
+    const minPriceValue=identityValue(9,'minPrice');
+    const requestedMinPrice = minPriceValue!=='' && minPriceValue!=null ? Number(minPriceValue) : undefined;
+    const maxPriceValue=identityValue(10,'maxPrice');
+    const requestedMaxPrice = maxPriceValue!=='' && maxPriceValue!=null ? Number(maxPriceValue) : undefined;
     const brandTerms = requestedBrandSlug ? (BRAND_TERMS[requestedBrandSlug] || [requestedBrandSlug]) : [];
     const normalizedBrandTerms = brandTerms.map(normalizeSearchText).filter(Boolean);
     const normalizedRequestedQuery = normalizeSearchText(requestedQuery);
@@ -467,7 +482,7 @@ export class FastKufarParser extends BaseParser {
     try {
       // Realtime mode fans out independent Kufar source paths instead of waiting
       // for one backend after another. Their indexing/cache freshness can differ.
-      const isSniper = monitorIdentity[13] === 'sniper';
+      const isSniper = String(identityValue(13,'mode')) === 'sniper';
       const sources = params.cat ? [...API_ENDPOINTS] : [];
       if (params.cat && reefApiKey()) sources.push('__reef__');
       if (isSniper && !reefApiKey()) { params.size = 30; sources.push('__html__'); }
