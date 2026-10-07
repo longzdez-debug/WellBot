@@ -61,20 +61,24 @@ export class BotHandler {
       const userId = query.from.id;
       const data = query.data;
       if (!this.rateLimiter.isAllowed(userId)) { await this.bot.answerCallbackQuery(query.id, { text: 'Слишком много запросов' }); return; }
-      await this.bot.answerCallbackQuery(query.id);
-      if (data === 'add_link') await this.handleAddLinkButton(chatId, userId);
-      else if (data === 'my_links') await this.handleMyLinks(chatId, userId);
-      else if (data === 'open_pro') await this.sendProInvoice(chatId, userId);
-      else if (data === 'open_stats') await this.handleStats(chatId, userId);
-      else if (data === 'open_deals') await this.handleDeals(chatId, userId);
-      else if (data?.startsWith('dismiss_ad_')) { const adId = parseInt(data.replace('dismiss_ad_', ''), 10); if (Number.isSafeInteger(adId) && adId > 0) await this.handleDismissAd(chatId, userId, adId, query.message.message_id); }
-      else if (data?.startsWith('delete_')) { const linkId = parseInt(data.replace('delete_', ''), 10); if (Number.isSafeInteger(linkId) && linkId > 0) await this.handleDeleteLink(chatId, userId, linkId); }
-      else if (data === 'delete_all') await this.handleDeleteAllLinks(chatId, userId);
-      else if (data === 'confirm_delete_all') await this.handleConfirmDeleteAll(chatId, userId);
-      else if (data === 'cancel_delete_all') await this.handleCancelDeleteAll(chatId);
-      else if (data === 'confirm_clear_ads') await this.handleConfirmClearAds(chatId, userId);
-      else if (data === 'cancel_clear_ads') await this.handleCancelClearAds(chatId);
-      else if (data?.startsWith('check_')) { const linkId = parseInt(data.replace('check_', ''), 10); if (Number.isSafeInteger(linkId) && linkId > 0) await this.handleCheckLink(chatId, userId, linkId); }
+      let callbackText: string | undefined;
+      try {
+        if (data === 'add_link') { callbackText = 'Открываю добавление поиска'; await this.handleAddLinkButton(chatId, userId); }
+        else if (data === 'my_links') { callbackText = 'Загружаю поиски'; await this.handleMyLinks(chatId, userId); }
+        else if (data === 'open_pro') { callbackText = 'Проверяю PRO'; await this.sendProInvoice(chatId, userId); }
+        else if (data === 'open_stats') { callbackText = 'Загружаю статистику'; await this.handleStats(chatId, userId); }
+        else if (data === 'open_deals') { callbackText = 'Ищу выгодные объявления'; await this.handleDeals(chatId, userId); }
+        else if (data?.startsWith('dismiss_ad_')) { const adId = parseInt(data.replace('dismiss_ad_', ''), 10); if (Number.isSafeInteger(adId) && adId > 0) { callbackText = 'Объявление скрыто'; await this.handleDismissAd(chatId, userId, adId, query.message.message_id); } }
+        else if (data?.startsWith('delete_')) { const linkId = parseInt(data.replace('delete_', ''), 10); if (Number.isSafeInteger(linkId) && linkId > 0) { callbackText = 'Поиск удалён'; await this.handleDeleteLink(chatId, userId, linkId); } }
+        else if (data === 'delete_all') { callbackText = 'Проверяю поиски'; await this.handleDeleteAllLinks(chatId, userId); }
+        else if (data === 'confirm_delete_all') { callbackText = 'Удаляю поиски'; await this.handleConfirmDeleteAll(chatId, userId); }
+        else if (data === 'cancel_delete_all') { callbackText = 'Удаление отменено'; await this.handleCancelDeleteAll(chatId); }
+        else if (data === 'confirm_clear_ads') { callbackText = 'Очищаю объявления'; await this.handleConfirmClearAds(chatId, userId); }
+        else if (data === 'cancel_clear_ads') { callbackText = 'Отмена'; await this.handleCancelClearAds(chatId); }
+        else if (data?.startsWith('check_')) { const linkId = parseInt(data.replace('check_', ''), 10); if (Number.isSafeInteger(linkId) && linkId > 0) { callbackText = 'Проверяю поиск'; await this.handleCheckLink(chatId, userId, linkId); } }
+      } finally {
+        try { await this.bot.answerCallbackQuery(query.id, callbackText ? { text: callbackText } : undefined); } catch {}
+      }
     });
 
     this.bot.on('pre_checkout_query', async (query: any) => {
