@@ -212,6 +212,7 @@ export class ParserScheduler {
       const processed = new Set<string>();
       const priceUpdates:Array<{id:number;price:string}>=[];
       const newCandidates: Ad[] = [];
+      const newlyEligibleExisting: Ad[] = [];
 
       for (const adData of ads) {
         const id = adData.external_id;
@@ -228,10 +229,26 @@ export class ParserScheduler {
             }
             if (adData.market_median != null) marketUpdates.push({id:last.adId,status:adData.market_status ?? null,percent:adData.market_percent??null,median:adData.market_median,low:adData.market_low??null,high:adData.market_high??null,sellFast:adData.sell_fast??null,sellNormal:adData.sell_normal??null,sellMax:adData.sell_max??null,sampleSize:adData.market_sample_size??null,confidence:adData.market_confidence??null,quality:adData.market_quality??null});
           }
+          if(configuredIds.has(id)) newlyEligibleExisting.push(adData);
           continue;
         }
 
         newCandidates.push(adData);
+      }
+
+      if (newlyEligibleExisting.length) {
+        const uniqueEligible=[...new Map(newlyEligibleExisting.map(ad=>[ad.external_id,ad])).values()];
+        const claimed=await this.db.claimNewAdsForUser(link.user_id,link.id,uniqueEligible);
+        for(const adData of uniqueEligible){
+          if(!claimed.has(adData.external_id)) continue;
+          const publishedAt=adData.published_at instanceof Date?adData.published_at:adData.published_at?new Date(adData.published_at):null;
+          const ageSeconds=publishedAt&&!Number.isNaN(publishedAt.getTime())?Math.max(0,(Date.now()-publishedAt.getTime())/1000):null;
+          if(ageSeconds!==null&&this.newAdMaxAgeSeconds>0&&ageSeconds>this.newAdMaxAgeSeconds){
+            logger.debug('Eligible existing ad is stale; notification suppressed',{linkId:link.id,external_id:adData.external_id,ageSeconds:Number(ageSeconds.toFixed(1)),maxAgeSeconds:this.newAdMaxAgeSeconds});
+            continue;
+          }
+          newAds.push(adData);
+        }
       }
 
       if (newCandidates.length) {
