@@ -48,10 +48,13 @@ export class DatabaseService {
     if(!active && row.status==='active') await this.pool.query('UPDATE pro_subscriptions SET status=$1,updated_at=CURRENT_TIMESTAMP WHERE user_id=(SELECT id FROM users WHERE telegram_id=$2) AND tier=$3',['expired',telegramId,'pro']);
     return {tier:row.tier,status:active?'active':row.status==='active'?'expired':row.status,expiresAt:new Date(row.expires_at),starsAmount:row.stars_amount};
   }
-  async hasProcessedTelegramPayment(telegramChargeId:string):Promise<boolean>{
-    if(!telegramChargeId.trim()) return false;
-    const r=await this.pool.query('SELECT 1 FROM pro_subscriptions WHERE telegram_payment_charge_id=$1 LIMIT 1',[telegramChargeId]);
-    return Boolean(r.rowCount);
+  async claimTelegramPayment(telegramChargeId:string,telegramId:number,payload:string,starsAmount:number):Promise<boolean>{
+    if(!telegramChargeId.trim()||!Number.isSafeInteger(telegramId)||telegramId<=0) return false;
+    const r=await this.pool.query(
+      'INSERT INTO wellbot_payment_events(telegram_payment_charge_id,telegram_id,payload,stars_amount) VALUES($1,$2,$3,$4) ON CONFLICT(telegram_payment_charge_id) DO NOTHING',
+      [telegramChargeId,telegramId,payload,starsAmount],
+    );
+    return (r.rowCount||0)>0;
   }
 
   async activateProSubscription(telegramId:number,expiresAt:Date,starsAmount:number,telegramChargeId:string,providerChargeId:string|null,payload:string):Promise<void>{
