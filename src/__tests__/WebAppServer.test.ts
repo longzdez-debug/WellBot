@@ -41,8 +41,8 @@ describe('parseTelegramInitData', () => {
     expect(parseTelegramInitData(raw, botToken, now)).toBeNull();
   });
 
-  it('rejects data older than 24 hours', () => {
-    const raw = makeInitData(botToken, now - 24 * 60 * 60 - 1);
+  it('rejects data older than the configured auth window', () => {
+    const raw = makeInitData(botToken, now - 8 * 24 * 60 * 60 - 1);
     expect(parseTelegramInitData(raw, botToken, now)).toBeNull();
   });
 
