@@ -184,7 +184,53 @@ export class DatabaseService {
   async incrementErrorCount(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET error_count=error_count+1 WHERE id=$1',[linkId]);}
   async updateLastParsed(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET last_parsed_at=CURRENT_TIMESTAMP WHERE id=$1',[linkId]);}
   async resetErrorCount(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET error_count=0 WHERE id=$1',[linkId]);}
-  async bulkCreateAdsReturning(linkId:number,ads:Ad[]):Promise<Ad[]>{const unique=new Map<string,Ad>();for(const ad of ads)if(ad?.external_id&&!unique.has(ad.external_id))unique.set(ad.external_id,ad);const rows=[...unique.values()];if(!rows.length)return[];const inserted:Ad[]=[];const chunkSize=400;for(let start=0;start<rows.length;start+=chunkSize){const chunk=rows.slice(start,start+chunkSize);const values:unknown[]=[];const placeholders=chunk.map((ad,i)=>{const b=i*15;const detectedAt=normalizeDatabaseDate(ad.detected_at)||new Date();const publishedAt=normalizeDatabaseDate(ad.published_at);const firstSeenAt=normalizeDatabaseDate(ad.first_seen_at)||detectedAt;const updatedAt=normalizeDatabaseDate(ad.updated_at);values.push(linkId,ad.external_id,ad.title,ad.description||null,ad.price||null,ad.image_url||null,ad.ad_url,ad.location||null,ad.address||null,publishedAt?publishedAt.toISOString():null,detectedAt.toISOString(),firstSeenAt.toISOString(),ad.first_seen_source||null,ad.first_seen_rank??null,updatedAt?updatedAt.toISOString():null);return`(${b+1},${b+2},${b+3},${b+4},${b+5},${b+6},${b+7},${b+8},${b+9},NULLIF(${b+10}::text,'')::timestamp,NULLIF(${b+11}::text,'')::timestamp,NULLIF(${b+12}::text,'')::timestamp,${b+13},${b+14},NULLIF(${b+15}::text,'')::timestamp)`;}).join(',');const result=await this.pool.query<Ad>(`INSERT INTO ads (link_id,external_id,title,description,price,image_url,ad_url,location,address,published_at,detected_at,first_seen_at,first_seen_source,first_seen_rank,updated_at) VALUES ${placeholders} ON CONFLICT (external_id,link_id) DO NOTHING RETURNING *`,values);inserted.push(...result.rows);}return inserted;}async getAdByIdForUser(adId:number,userId:number):Promise<Ad|null>{const r=await this.pool.query<Ad>('SELECT a.* FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$1 AND l.user_id=$2',[adId,userId]);return r.rows[0]||null;}
+  async bulkCreateAdsReturning(linkId:number,ads:Ad[]):Promise<Ad[]>{
+    const unique=new Map<string,Ad>();
+    for(const ad of ads){
+      if(ad?.external_id&&!unique.has(ad.external_id))unique.set(ad.external_id,ad);
+    }
+    const rows=[...unique.values()];
+    if(!rows.length)return[];
+    const inserted:Ad[]=[];
+    const chunkSize=400;
+    for(let start=0;start<rows.length;start+=chunkSize){
+      const chunk=rows.slice(start,start+chunkSize).map(ad=>{
+        const detectedAt=normalizeDatabaseDate(ad.detected_at)||new Date();
+        const publishedAt=normalizeDatabaseDate(ad.published_at);
+        const firstSeenAt=normalizeDatabaseDate(ad.first_seen_at)||detectedAt;
+        const updatedAt=normalizeDatabaseDate(ad.updated_at);
+        return {
+          link_id:linkId,external_id:ad.external_id,title:ad.title??'',
+          description:ad.description??null,price:ad.price??null,image_url:ad.image_url??null,
+          ad_url:ad.ad_url,location:ad.location??null,address:ad.address??null,
+          published_at:publishedAt?publishedAt.toISOString():null,
+          detected_at:detectedAt.toISOString(),first_seen_at:firstSeenAt.toISOString(),
+          first_seen_source:ad.first_seen_source??null,first_seen_rank:ad.first_seen_rank??null,
+          updated_at:updatedAt?updatedAt.toISOString():null,
+        };
+      });
+      const result=await this.pool.query<Ad>(
+        `INSERT INTO ads
+          (link_id,external_id,title,description,price,image_url,ad_url,location,address,
+           published_at,detected_at,first_seen_at,first_seen_source,first_seen_rank,updated_at)
+         SELECT x.link_id,x.external_id,x.title,x.description,x.price,x.image_url,x.ad_url,x.location,x.address,
+                NULLIF(x.published_at,'')::timestamp,NULLIF(x.detected_at,'')::timestamp,
+                NULLIF(x.first_seen_at,'')::timestamp,x.first_seen_source,x.first_seen_rank,
+                NULLIF(x.updated_at,'')::timestamp
+         FROM jsonb_to_recordset($1::jsonb) AS x(
+           link_id int,external_id text,title text,description text,price text,image_url text,
+           ad_url text,location text,address text,published_at text,detected_at text,
+           first_seen_at text,first_seen_source text,first_seen_rank int,updated_at text
+         )
+         ON CONFLICT (external_id,link_id) DO NOTHING
+         RETURNING *`,
+        [JSON.stringify(chunk)],
+      );
+      inserted.push(...result.rows);
+    }
+    return inserted;
+  }
+  async getAdByIdForUser(adId:number,userId:number):Promise<Ad|null>{const r=await this.pool.query<Ad>('SELECT a.* FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$1 AND l.user_id=$2',[adId,userId]);return r.rows[0]||null;}
   async getUserRecentAds(userId:number,limit=100):Promise<Ad[]>{
     const safeLimit=Math.min(Math.max(Math.floor(limit),1),300);
     const r=await this.pool.query<Ad>(
@@ -404,4 +450,3 @@ export class DatabaseService {
   }
 
 }
-
