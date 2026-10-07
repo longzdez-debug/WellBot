@@ -24,6 +24,7 @@ jobs:
           set -euo pipefail
           base="${PROD_URL%/}"
           curl --fail --silent --show-error --max-time 15 "$base/healthz" | tee /tmp/healthz.json
+          curl --fail --silent --show-error --max-time 15 "$base/health" | tee /tmp/health.json
           curl --fail --silent --show-error --max-time 15 "$base/terms" >/dev/null
           curl --fail --silent --show-error --max-time 15 "$base/metrics" >/tmp/metrics.txt
           grep -q '^wellbot_scheduler_running 1$' /tmp/metrics.txt
