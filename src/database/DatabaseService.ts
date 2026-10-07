@@ -133,7 +133,17 @@ export class DatabaseService {
 
   async getUser(telegramId:number):Promise<User|null>{const r=await this.pool.query<User>('SELECT * FROM users WHERE telegram_id=$1',[telegramId]);return r.rows[0]||null;}
   async getUsersByIds(userIds:number[]):Promise<User[]>{const ids=[...new Set(userIds.filter(id=>Number.isSafeInteger(id)&&id>0))];if(!ids.length)return[];const r=await this.pool.query<User>('SELECT * FROM users WHERE id=ANY($1::int[])',[ids]);return r.rows;}
-  private monitorSourceKey(config:MonitorConfig):string{const min=config.minPrice==null?'':String(config.minPrice);const max=config.maxPrice==null?'':String(config.maxPrice);return [config.source,config.categoryId,config.subcategoryId||'',config.region||'',config.city||'',config.query||'',min,max,config.condition||'',config.seller||'',config.minMarketDiscount==null?'':String(config.minMarketDiscount),config.mode||'normal'].join(':');}
+  private monitorSourceKey(config:MonitorConfig):string{
+    const min=config.minPrice==null?'':String(config.minPrice);
+    const max=config.maxPrice==null?'':String(config.maxPrice);
+    return [
+      config.source,config.categoryId,config.subcategoryId||'',config.brand||'',config.model||'',
+      JSON.stringify(config.phoneFilters||{}),config.region||'',config.city||'',config.query||'',
+      min,max,config.condition||'',config.seller||'',
+      config.minMarketDiscount==null?'':String(config.minMarketDiscount),
+      config.skipSlots==null?'':String(config.skipSlots),config.mode||'normal',
+    ].join(':');
+  }
   async createLink(userId:number,url:string,platform:Platform,config?:MonitorConfig):Promise<Link>{const sourceKey=config ? this.monitorSourceKey(config) : null;const configJson=config ? JSON.stringify(config) : null;const r=await this.pool.query<Link>('INSERT INTO links (user_id,url,platform,config,source_key,next_check_at,priority) VALUES ($1,$2,$3,$4::jsonb,$5,CURRENT_TIMESTAMP,CASE WHEN ($4::jsonb->>\'mode\')=\'sniper\' THEN 100 ELSE 0 END) ON CONFLICT (user_id,url) DO UPDATE SET is_active=true, platform=EXCLUDED.platform, config=COALESCE(EXCLUDED.config,links.config), source_key=COALESCE(EXCLUDED.source_key,links.source_key), error_count=0, next_check_at=CURRENT_TIMESTAMP, priority=EXCLUDED.priority RETURNING *',[userId,url,platform,configJson,sourceKey]);return r.rows[0];}
   async getUserLinks(userId:number):Promise<Link[]>{const r=await this.pool.query<Link>('SELECT * FROM links WHERE user_id=$1 ORDER BY created_at DESC',[userId]);return r.rows;}
   async getUserLinksCount(userId:number):Promise<number>{const r=await this.pool.query<{count:string}>('SELECT COUNT(*) as count FROM links WHERE user_id=$1 AND is_active=true',[userId]);return parseInt(r.rows[0].count,10);}
