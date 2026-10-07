@@ -238,7 +238,7 @@ describe('ParserScheduler', () => {
     expect(db.bulkCreateAdsReturning).toHaveBeenCalledTimes(2);
     expect(db.enqueueNotifications).toHaveBeenCalledTimes(1);
     expect(db.enqueueNotifications.mock.calls[0][0][0]).toEqual(expect.objectContaining({
-      dedupeKey: `new_ad:user:${user.telegram_id}:shared-1`,
+      dedupeKey: `new_ad:user:${user.telegram_id}:kufar:shared-1`,
     }));
   });
 });
