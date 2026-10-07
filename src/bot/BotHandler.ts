@@ -69,8 +69,8 @@ export class BotHandler {
         else if (data === 'open_stats') { callbackText = 'Загружаю статистику'; await this.handleStats(chatId, userId); }
         else if (data === 'open_deals') { callbackText = 'Ищу выгодные объявления'; await this.handleDeals(chatId, userId); }
         else if (data?.startsWith('dismiss_ad_')) { const adId = parseInt(data.replace('dismiss_ad_', ''), 10); if (Number.isSafeInteger(adId) && adId > 0) { callbackText = 'Объявление скрыто'; await this.handleDismissAd(chatId, userId, adId, query.message.message_id); } }
-        else if (data?.startsWith('delete_')) { const linkId = parseInt(data.replace('delete_', ''), 10); if (Number.isSafeInteger(linkId) && linkId > 0) { callbackText = 'Поиск удалён'; await this.handleDeleteLink(chatId, userId, linkId); } }
         else if (data === 'delete_all') { callbackText = 'Проверяю поиски'; await this.handleDeleteAllLinks(chatId, userId); }
+        else if (data?.startsWith('delete_')) { const linkId = parseInt(data.replace('delete_', ''), 10); if (Number.isSafeInteger(linkId) && linkId > 0) { callbackText = 'Поиск удалён'; await this.handleDeleteLink(chatId, userId, linkId); } }
         else if (data === 'confirm_delete_all') { callbackText = 'Удаляю поиски'; await this.handleConfirmDeleteAll(chatId, userId); }
         else if (data === 'cancel_delete_all') { callbackText = 'Удаление отменено'; await this.handleCancelDeleteAll(chatId); }
         else if (data === 'confirm_clear_ads') { callbackText = 'Очищаю объявления'; await this.handleConfirmClearAds(chatId, userId); }
