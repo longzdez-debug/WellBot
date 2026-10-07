@@ -118,7 +118,7 @@ describe('ParserScheduler', () => {
       }]]),
     });
     await new ParserScheduler(db as never, bot as never).runParsing();
-    expect(db.claimNewAdsForUser).toHaveBeenCalledWith(1, 1, [expect.objectContaining(ad)]);
+    expect(db.claimNewAdsForUser).not.toHaveBeenCalled();
     expect(db.enqueueNotifications).toHaveBeenCalledTimes(1);
     expect(db.enqueueNotifications.mock.calls[0][0][0]).toEqual(expect.objectContaining({
       kind: 'new_ad',
