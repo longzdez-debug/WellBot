@@ -248,6 +248,17 @@ export class DatabaseService {
   async getPendingNotificationStats():Promise<{count:number;oldestAgeMs:number}>{const r=await this.pool.query<{count:string;oldest_at:Date|null}>('SELECT COUNT(*) AS count, MIN(created_at) AS oldest_at FROM notification_outbox WHERE sent_at IS NULL',[]);const row=r.rows[0];const oldest=row?.oldest_at instanceof Date?row.oldest_at:null;return {count:Number(row?.count||0),oldestAgeMs:oldest?Math.max(0,Date.now()-oldest.getTime()):0};}
   async getActiveLinkFreshnessStats():Promise<{activeLinks:number;oldestAgeMs:number;avgAgeMs:number}>{const r=await this.pool.query<{active_links:string;oldest_at:Date|null;avg_age_ms:string|null}>(`SELECT COUNT(*) FILTER (WHERE is_active) AS active_links,MIN(last_parsed_at) FILTER (WHERE is_active) AS oldest_at,COALESCE(AVG(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP-COALESCE(last_parsed_at,created_at)))*1000) FILTER (WHERE is_active),0) AS avg_age_ms FROM links`,[]);const row=r.rows[0];const oldest=row?.oldest_at instanceof Date?row.oldest_at:null;return{activeLinks:Number(row?.active_links||0),oldestAgeMs:oldest?Math.max(0,Date.now()-oldest.getTime()):0,avgAgeMs:Number(row?.avg_age_ms||0)};}
   async purgeNotificationOutbox(retentionDays=14):Promise<number>{const safeDays=Math.min(Math.max(Math.floor(retentionDays),1),365);const r=await this.pool.query('DELETE FROM notification_outbox WHERE sent_at IS NOT NULL AND sent_at < CURRENT_TIMESTAMP - ($1::int * INTERVAL \'1 day\')',[safeDays]);return r.rowCount||0;}
+  async claimDailyDigest(userId:number,day:string,hour:number):Promise<boolean>{
+    if(!Number.isSafeInteger(userId)||userId<=0||!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isInteger(hour)||hour<0||hour>23)return false;
+    const r=await this.pool.query('INSERT INTO digest_deliveries(user_id,digest_day,digest_hour,claimed_at,sent_at) VALUES($1,$2::date,$3,CURRENT_TIMESTAMP,NULL) ON CONFLICT(user_id,digest_day,digest_hour) DO UPDATE SET claimed_at=CURRENT_TIMESTAMP WHERE digest_deliveries.sent_at IS NULL AND digest_deliveries.claimed_at < CURRENT_TIMESTAMP - INTERVAL \'15 minutes\' RETURNING user_id',[userId,day,hour]);
+    return (r.rowCount||0)>0;
+  }
+  async markDailyDigestSent(userId:number,day:string,hour:number):Promise<void>{
+    await this.pool.query('UPDATE digest_deliveries SET sent_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND digest_day=$2::date AND digest_hour=$3 AND sent_at IS NULL',[userId,day,hour]);
+  }
+  async releaseDailyDigest(userId:number,day:string,hour:number):Promise<void>{
+    await this.pool.query('DELETE FROM digest_deliveries WHERE user_id=$1 AND digest_day=$2::date AND digest_hour=$3 AND sent_at IS NULL',[userId,day,hour]);
+  }
   async getDigestUsers():Promise<Array<{userId:number;telegramId:number;notificationsEnabled:boolean;minDealScore:number;digestEnabled:boolean;digestHour:number}>>{
     const r=await this.pool.query(
       `SELECT u.id AS user_id,u.telegram_id,
