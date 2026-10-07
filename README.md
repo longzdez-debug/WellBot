@@ -1,12 +1,13 @@
 # WellBOT
 
-**WellBOT** — Telegram listing search for resellers. Create a marketplace search from the WellBOT catalog with category, city, price, condition, seller and mode filters. WellBOT watches it continuously and sends new listings to Telegram.
+**WellBOT** — Telegram listing search for resellers. Create a marketplace search from the WellBOT catalog with category, city, price and mode filters; Kufar additionally supports condition, seller and phone-specific filters. WellBOT watches it continuously and sends new listings to Telegram.
 
 ## Production MVP
 
-- 🟢 Kufar catalog search monitoring
+- 🟢 Kufar catalog search monitoring with condition/seller/phone filters
 - 🔵 Onliner search monitoring
 - 🚗 Av.by search monitoring
+- 🎯 Cross-market Deal Score filtering where comparable market data is available
 - ⚡ Default polling interval: **1 second**
 - 🚀 Concurrent parsing of up to 16 searches by default
 - 🧠 First-run baseline — existing listings are not spammed as "new"
