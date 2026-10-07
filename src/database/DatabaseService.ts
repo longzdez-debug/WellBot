@@ -406,7 +406,6 @@ export class DatabaseService {
 
 }
 
- THEN to_timestamp(${b+10}::double precision) ELSE NULLIF(${b+10}::text,'')::timestamp END,CASE WHEN ${b+11}::text ~ '^[-+]?[0-9]+(\\.[0-9]+)?}).join(',');const result=await this.pool.query<Ad>(`INSERT INTO ads (link_id,external_id,title,description,price,image_url,ad_url,location,address,published_at,detected_at,first_seen_at,first_seen_source,first_seen_rank,updated_at) VALUES ${placeholders} ON CONFLICT (external_id,link_id) DO NOTHING RETURNING *`,values);inserted.push(...result.rows);}return inserted;}
   async getAdByIdForUser(adId:number,userId:number):Promise<Ad|null>{const r=await this.pool.query<Ad>('SELECT a.* FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$1 AND l.user_id=$2',[adId,userId]);return r.rows[0]||null;}
   async getUserRecentAds(userId:number,limit=100):Promise<Ad[]>{
     const safeLimit=Math.min(Math.max(Math.floor(limit),1),300);
