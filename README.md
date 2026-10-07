@@ -93,7 +93,7 @@ Kufar searches are generated server-side from the verified WellBOT catalog, so u
 
 | Variable | Default | Meaning |
 |---|---:|---|
-| `PARSE_INTERVAL_SECONDS` | `0.25` | Polling interval; values are clamped to 100 ms minimum |
+| `PARSE_INTERVAL_SECONDS` | `1` | Polling interval; values are clamped to 100 ms minimum |
 | `PARSE_CONCURRENCY` | `16` | Maximum search URLs parsed in parallel, clamped to 1–20 |
 | `PORT` | `3000` | Built-in Mini App server port |
 | `WELLBOT_WEBAPP_URL` | empty | Public HTTPS Mini App URL |
