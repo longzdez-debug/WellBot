@@ -40,7 +40,7 @@ describe('FastKufarParser catalog/search behavior', () => {
 
     const parser = new FastKufarParser(axiosMock);
     await parser.parseUrl(
-      'https://www.kufar.by/l/telefony-i-planshety/wb?wb=kufar%7C17010%7C17050%7C%7Cminsk%7C%7C0%7C2000%7Cnew%7Cprivate%7Cnormal',
+      'https://www.kufar.by/l/telefony-i-planshety/wb?wb=kufar%7C17010%7C17050%7C%7C%7C%7C%7Cminsk%7C%7C0%7C2000%7Cnew%7Cprivate%7Cnormal',
     );
 
     expect(calls[0].params.cat).toBe('17050');
@@ -120,7 +120,7 @@ describe('FastKufarParser catalog/search behavior', () => {
       } as any;
       const parser = new FastKufarParser(axiosMock);
       const ads = await parser.parseUrl(
-        'https://www.kufar.by/l/telefony-i-planshety/wb?wb=kufar%7C17010%7C17050%7C%7Cminsk%7C%7C0%7C2000%7Cnew%7Cprivate%7Cnormal',
+        'https://www.kufar.by/l/telefony-i-planshety/wb?wb=kufar%7C17010%7C17050%7C%7C%7C%7C%7Cminsk%7C%7C0%7C2000%7Cnew%7Cprivate%7Cnormal',
       );
       expect(axiosMock.post).toHaveBeenCalledTimes(1);
       expect(calls.some(call => call.url.includes('reefapi.com/kufar/v1/search'))).toBe(true);
