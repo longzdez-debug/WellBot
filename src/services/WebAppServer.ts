@@ -20,6 +20,7 @@ const MAX_BODY = 16 * 1024;
 const MAX_INIT_DATA = 16 * 1024;
 const MAX_LINKS = 50;
 const AUTH_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+const WELLBOT_SERVER_BUILD = '20261007-authdiag-01';
 const PHONE_MODEL_CACHE=new Map<string,{expires:number;models:{id:string;title:string;slug:string}[]}>();
 const PHONE_MODEL_TTL=30*60*1000;
 const API_RATE_WINDOW_MS=60_000;
@@ -129,6 +130,7 @@ function json(res: ServerResponse, status: number, payload: unknown): void {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-WellBot-Server-Build', WELLBOT_SERVER_BUILD);
   res.end(JSON.stringify(payload));
 }
 
@@ -277,7 +279,7 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
             else if (Math.floor(Date.now() / 1000) - authDate > AUTH_MAX_AGE_SECONDS) authReason = 'expired_init_data';
           } catch {}
           logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method, authReason, authTransport, initDataLength: rawInitData.length, hasAuthorization: Boolean(authorization), hasLegacyInitData: typeof legacyInitData === 'string' && legacyInitData.length > 0 });
-          json(res, 401, { error: 'unauthorized', message: 'Сессия Telegram недействительна. Закрой Mini App и открой WellBOT заново.' });
+          json(res, 401, { error: 'unauthorized', reason: authReason, build: WELLBOT_SERVER_BUILD, message: 'Сессия Telegram недействительна. Закрой Mini App и открой WellBOT заново.' });
           return;
         }
         if (!allowApiRequest(auth.user.id)) {
