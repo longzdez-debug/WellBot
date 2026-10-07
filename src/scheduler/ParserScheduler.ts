@@ -96,7 +96,7 @@ export class ParserScheduler {
     }
   }
 
-  private async maintainNotificationOutbox():Promise<void>{try{const purged=await this.db.purgeNotificationOutbox(this.notificationRetentionDays);if(purged>0)logger.info('Notification outbox retention cleanup completed',{purged,retentionDays:this.notificationRetentionDays});}catch(error:unknown){const message=error instanceof Error?error.message:String(error);logger.warn('Notification outbox maintenance failed',{error:message});}}
+  private async maintainNotificationOutbox():Promise<void>{try{const purged=await this.db.purgeNotificationOutbox(this.notificationRetentionDays);if(purged>0)logger.info('Notification outbox retention cleanup completed',{purged,retentionDays:this.notificationRetentionDays});const digestPurged=await this.db.purgeDigestDeliveries(35);if(digestPurged>0)logger.info('Daily digest retention cleanup completed',{purged:digestPurged,retentionDays:35});}catch(error:unknown){const message=error instanceof Error?error.message:String(error);logger.warn('Notification/digest retention maintenance failed',{error:message});}}
 
   private applyMonitorFilters(link: ParseLink, ads: Ad[]): Ad[] {
     const config = link.config;
