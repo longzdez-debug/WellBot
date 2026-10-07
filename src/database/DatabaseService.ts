@@ -248,6 +248,27 @@ export class DatabaseService {
   async getPendingNotificationStats():Promise<{count:number;oldestAgeMs:number}>{const r=await this.pool.query<{count:string;oldest_at:Date|null}>('SELECT COUNT(*) AS count, MIN(created_at) AS oldest_at FROM notification_outbox WHERE sent_at IS NULL',[]);const row=r.rows[0];const oldest=row?.oldest_at instanceof Date?row.oldest_at:null;return {count:Number(row?.count||0),oldestAgeMs:oldest?Math.max(0,Date.now()-oldest.getTime()):0};}
   async getActiveLinkFreshnessStats():Promise<{activeLinks:number;oldestAgeMs:number;avgAgeMs:number}>{const r=await this.pool.query<{active_links:string;oldest_at:Date|null;avg_age_ms:string|null}>(`SELECT COUNT(*) FILTER (WHERE is_active) AS active_links,MIN(last_parsed_at) FILTER (WHERE is_active) AS oldest_at,COALESCE(AVG(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP-COALESCE(last_parsed_at,created_at)))*1000) FILTER (WHERE is_active),0) AS avg_age_ms FROM links`,[]);const row=r.rows[0];const oldest=row?.oldest_at instanceof Date?row.oldest_at:null;return{activeLinks:Number(row?.active_links||0),oldestAgeMs:oldest?Math.max(0,Date.now()-oldest.getTime()):0,avgAgeMs:Number(row?.avg_age_ms||0)};}
   async purgeNotificationOutbox(retentionDays=14):Promise<number>{const safeDays=Math.min(Math.max(Math.floor(retentionDays),1),365);const r=await this.pool.query('DELETE FROM notification_outbox WHERE sent_at IS NOT NULL AND sent_at < CURRENT_TIMESTAMP - ($1::int * INTERVAL \'1 day\')',[safeDays]);return r.rowCount||0;}
+  async getDigestUsers():Promise<Array<{userId:number;telegramId:number;notificationsEnabled:boolean;minDealScore:number;digestEnabled:boolean;digestHour:number}>>{
+    const r=await this.pool.query(
+      `SELECT u.id AS user_id,u.telegram_id,
+              COALESCE(p.notifications_enabled,true) AS notifications_enabled,
+              COALESCE(p.min_deal_score,65) AS min_deal_score,
+              COALESCE(p.digest_enabled,false) AS digest_enabled,
+              COALESCE(p.digest_hour,19) AS digest_hour
+       FROM users u
+       LEFT JOIN user_preferences p ON p.user_id=u.id
+       WHERE COALESCE(p.digest_enabled,false)=true`,
+    );
+    return r.rows.map(row=>({
+      userId:Number(row.user_id),
+      telegramId:Number(row.telegram_id),
+      notificationsEnabled:Boolean(row.notifications_enabled),
+      minDealScore:Number(row.min_deal_score),
+      digestEnabled:Boolean(row.digest_enabled),
+      digestHour:Number(row.digest_hour),
+    }));
+  }
+
   async getUserPreferences(userId:number):Promise<{notificationsEnabled:boolean;minDealScore:number;digestEnabled:boolean;digestHour:number}>{
     const r=await this.pool.query('SELECT notifications_enabled,min_deal_score,digest_enabled,digest_hour FROM user_preferences WHERE user_id=$1',[userId]);
     const row=r.rows[0];
