@@ -20,6 +20,8 @@ const dynamicContracts=[
   ['data-profile-close',"Profile modal close controls must have a close contract."],
   ['id="wellbot-monitor-submit"',"Monitor submit control missing."],
   ['id="wellbot-monitor-cancel"',"Monitor cancel control missing."],
+  ['catalog-condition-label',"Condition filter visibility contract missing."],
+  ['catalog-seller-label',"Seller filter visibility contract missing."],
   ['id="wellbot-monitor-x"',"Monitor modal close control missing."],
   ['data-toggle=',"Monitor toggle controls missing."],
   ['data-delete=',"Monitor delete controls missing."],
@@ -33,7 +35,7 @@ for(const [needle,message] of dynamicContracts)if(!app.includes(needle))throw ne
 if(!app.includes('document.addEventListener("click"'))throw new Error("Global click delegation for dynamic actions is missing.");
 if(!app.includes('querySelectorAll("[data-toggle]")')||!app.includes('querySelectorAll("[data-delete]")'))throw new Error("Monitor action handlers are missing.");
 if(!app.includes('querySelectorAll("[data-recent-id]")'))throw new Error("Recent-find action handlers are missing.");
-if(!app.includes('catalogs[source]'))throw new Error("Marketplace-specific catalog selection is missing.");
+if(!app.includes('catalogs[source]'))throw new Error("Marketplace-specific catalog selection is missing.");\nif(!app.includes('updateMarketplaceFacets'))throw new Error("Marketplace-specific filter visibility is missing.");
 
 const scriptRef=index.match(/src="\.\/app\.js\?v=([^"]+)"/)?.[1];
 const build=app.match(/const WELLBOT_BUILD="([^"]+)"/)?.[1];
