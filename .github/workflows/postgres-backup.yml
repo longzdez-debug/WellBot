@@ -61,6 +61,29 @@ jobs:
           aws s3 cp "$BACKUP_FILE" "s3://$S3_BUCKET/wellbot/postgres/$(basename "$BACKUP_FILE")" --endpoint-url "$S3_ENDPOINT" --only-show-errors
           aws s3 cp "$BACKUP_FILE.sha256" "s3://$S3_BUCKET/wellbot/postgres/$(basename "$BACKUP_FILE").sha256" --endpoint-url "$S3_ENDPOINT" --only-show-errors
 
+      - name: Verify uploaded backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          object="wellbot/postgres/$(basename "$BACKUP_FILE")"
+          checksum="wellbot/postgres/$(basename "$BACKUP_FILE").sha256"
+          aws s3api head-object --bucket "$S3_BUCKET" --key "$object" --endpoint-url "$S3_ENDPOINT" >/dev/null
+          aws s3api head-object --bucket "$S3_BUCKET" --key "$checksum" --endpoint-url "$S3_ENDPOINT" >/dev/null
+
+      - name: Retain recent backups only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cutoff="$(date -u -d '35 days ago' +%s)"
+          aws s3api list-objects-v2             --bucket "$S3_BUCKET"             --prefix "wellbot/postgres/"             --query 'Contents[].[Key,LastModified]'             --output text             --endpoint-url "$S3_ENDPOINT" |
+          while IFS=\t' read -r key modified; do
+            [ -n "$key" ] || continue
+            modified_ts="$(date -u -d "$modified" +%s)"
+            if [ "$modified_ts" -lt "$cutoff" ]; then
+              aws s3 rm "s3://$S3_BUCKET/$key" --endpoint-url "$S3_ENDPOINT" --only-show-errors
+            fi
+          done
+
       - name: Remove local dump
         if: always()
         run: rm -rf backup
