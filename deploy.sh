@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# One-shot production deployment for a Linux VM with Docker Compose.
+# Production deployment with Docker Compose and external managed PostgreSQL. No local DB is created.
 # Usage: bash deploy.sh
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,8 +37,8 @@ if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || "$TELEGRAM_BOT_TOKEN" == "your_bot_token_h
   exit 1
 fi
 
-if [[ -z "${DB_PASSWORD:-}" || "$DB_PASSWORD" == "secure_password" ]]; then
-  echo "ERROR: Set a strong DB_PASSWORD in .env before deployment." >&2
+if [[ -z "${DATABASE_URL:-}" || "$DATABASE_URL" == *"USER:PASSWORD@HOST"* ]]; then
+  echo "ERROR: Set the managed PostgreSQL DATABASE_URL in .env before deployment." >&2
   exit 1
 fi
 
@@ -48,39 +48,22 @@ fi
 
 # Ensure the database schema is initialized by the application after PostgreSQL becomes healthy.
 echo "Building and starting WellBOT..."
-docker compose pull postgres
-docker compose build --pull bot
-docker compose up -d postgres
-
-echo "Waiting for PostgreSQL..."
-for _ in {1..30}; do
-  if docker compose exec -T postgres pg_isready -U bot_user -d wellbot >/dev/null 2>&1; then
-    break
-  fi
-  sleep 2
-done
-
-if ! docker compose exec -T postgres pg_isready -U bot_user -d wellbot >/dev/null 2>&1; then
-  echo "ERROR: PostgreSQL did not become ready." >&2
-  docker compose logs --tail=100 postgres >&2 || true
-  exit 1
-fi
-
-docker compose up -d bot
+docker compose -f docker-compose.prod.yml build --pull bot
+docker compose -f docker-compose.prod.yml up -d bot
 
 echo "Waiting for WellBOT health endpoint..."
 for _ in {1..30}; do
-  if curl -fsS http://127.0.0.1:3000/health >/dev/null 2>&1; then
+  if curl -fsS http://127.0.0.1:3000/healthz >/dev/null 2>&1; then
     echo "WellBOT is healthy."
-    docker compose ps
+    docker compose -f docker-compose.prod.yml ps
     echo
-echo "Logs: docker compose logs -f bot"
+echo "Logs: docker compose -f docker-compose.prod.yml logs -f bot"
     exit 0
   fi
   sleep 2
 done
 
 echo "ERROR: WellBOT did not become healthy." >&2
-docker compose ps >&2 || true
-docker compose logs --tail=150 bot >&2 || true
+docker compose -f docker-compose.prod.yml ps >&2 || true
+docker compose -f docker-compose.prod.yml logs --tail=150 bot >&2 || true
 exit 1
