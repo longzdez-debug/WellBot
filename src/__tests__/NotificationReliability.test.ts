@@ -189,4 +189,26 @@ describe('ParserScheduler notification reliability', () => {
   });
 
 
+  test('Deal Score rejects weak market evidence and non-positive margin', async () => {
+    const { analyzeDeal } = await import('../services/DealScoreEngine');
+    const base:any = {
+      external_id: 'deal-safety',
+      title: 'Deal safety',
+      ad_url: 'https://example.com/deal-safety',
+      price: '100 BYN',
+      market_median: 200,
+      market_percent: -50,
+      market_confidence: 'high',
+      market_quality: 100,
+      market_sample_size: 20,
+      sell_normal: 190,
+    };
+    expect(analyzeDeal({...base, market_confidence:'low'}).score).toBeNull();
+    expect(analyzeDeal({...base, market_quality:44}).score).toBeNull();
+    const loss = analyzeDeal({...base, sell_normal:99});
+    expect(loss.score).toBeNull();
+    expect(loss.profit).toBe(-1);
+    expect(loss.roi).toBe(-1);
+  });
+
 });
