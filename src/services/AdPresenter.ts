@@ -8,6 +8,8 @@ export interface FormattedAd {
   externalId?: string;
   publishedAt?: string;
   createdAt?: string;
+  adId?: number;
+  dealScore?: number;
 }
 
 export class AdPresenter {
@@ -119,6 +121,6 @@ export class AdPresenter {
     const publishedAt = ad.published_at instanceof Date ? ad.published_at.toISOString() : ad.published_at ? new Date(ad.published_at).toISOString() : undefined;
     const createdAt = ad.created_at instanceof Date ? ad.created_at.toISOString() : ad.created_at ? new Date(ad.created_at).toISOString() : undefined;
 
-    return { text: lines.join('\n'), media, url: ad.ad_url, externalId: ad.external_id, publishedAt, createdAt };
+    return { text: lines.join('\n'), media, url: ad.ad_url, externalId: ad.external_id, adId: ad.id, dealScore: deal.score ?? undefined, publishedAt, createdAt };
   }
 }
