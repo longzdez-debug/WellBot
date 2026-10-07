@@ -233,8 +233,11 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
           json(res, 405, { error: 'method_not_allowed' });
           return;
         }
-        const initData = req.headers['x-telegram-init-data'];
-        const rawInitData = typeof initData === 'string' ? initData : '';
+        const legacyInitData = req.headers['x-telegram-init-data'];
+        const authorization = req.headers.authorization;
+        const authHeaderData = typeof authorization === 'string' && authorization.startsWith('tma ') ? authorization.slice(4).trim() : '';
+        const rawInitData = typeof authHeaderData === 'string' && authHeaderData ? authHeaderData : (typeof legacyInitData === 'string' ? legacyInitData : '');
+        const authTransport = authHeaderData ? 'authorization' : (typeof legacyInitData === 'string' && legacyInitData ? 'x-telegram-init-data' : 'missing');
         const auth = parseTelegramInitData(rawInitData, botToken);
         if (!auth) {
           let authReason = 'invalid_init_data';
@@ -247,7 +250,7 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
             else if (!Number.isSafeInteger(authDate) || authDate <= 0) authReason = 'invalid_auth_date';
             else if (Math.floor(Date.now() / 1000) - authDate > AUTH_MAX_AGE_SECONDS) authReason = 'expired_init_data';
           } catch {}
-          logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method, authReason, initDataLength: rawInitData.length });
+          logger.warn('WellBOT API unauthorized request', { requestPath, method: req.method, authReason, authTransport, initDataLength: rawInitData.length, hasAuthorization: Boolean(authorization), hasLegacyInitData: typeof legacyInitData === 'string' && legacyInitData.length > 0 });
           json(res, 401, { error: 'unauthorized', message: 'Сессия Telegram недействительна. Закрой Mini App и открой WellBOT заново.' });
           return;
         }
