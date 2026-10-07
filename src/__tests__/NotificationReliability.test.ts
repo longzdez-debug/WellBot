@@ -123,4 +123,70 @@ describe('ParserScheduler notification reliability', () => {
     expect(bot.sendPriceDropNotification).not.toHaveBeenCalled();
   });
 
+  test('prioritizes higher Deal Score when enqueueing new-ad notifications', async () => {
+    const db = {
+      enqueueNotifications: jest.fn().mockResolvedValue(2),
+    };
+    const scheduler = new ParserScheduler(db as never, bot as never) as any;
+
+    const weak = {
+      external_id: 'weak',
+      title: 'Weak',
+      ad_url: 'https://example.com/weak',
+      price: '190 BYN',
+      market_median: 200,
+      market_percent: -5,
+      market_confidence: 'high',
+      market_quality: 100,
+      market_sample_size: 20,
+      sell_normal: 195,
+    };
+    const strong = {
+      external_id: 'strong',
+      title: 'Strong',
+      ad_url: 'https://example.com/strong',
+      price: '100 BYN',
+      market_median: 200,
+      market_percent: -50,
+      market_confidence: 'high',
+      market_quality: 100,
+      market_sample_size: 20,
+      sell_normal: 190,
+      published_at: new Date(),
+      is_company: false,
+      condition: 'new',
+    };
+
+    await scheduler.notifyNewAds([
+      { ad: weak, telegramId: 123, userId: 1 },
+      { ad: strong, telegramId: 123, userId: 1 },
+    ]);
+
+    const jobs = db.enqueueNotifications.mock.calls[0][0];
+    expect(jobs).toHaveLength(2);
+    expect(jobs[1].priority).toBeGreaterThan(jobs[0].priority);
+    expect(jobs[1].priority).toBeGreaterThan(100);
+  });
+
+  test('does not mark a listing as a deal when resale margin is negative', async () => {
+    const { analyzeDeal } = await import('../services/DealScoreEngine');
+    const result = analyzeDeal({
+      external_id: 'loss',
+      title: 'Loss',
+      ad_url: 'https://example.com/loss',
+      price: '100 BYN',
+      market_median: 200,
+      market_percent: -50,
+      market_confidence: 'high',
+      market_quality: 100,
+      market_sample_size: 20,
+      sell_normal: 90,
+    } as any);
+
+    expect(result.score).toBeNull();
+    expect(result.profit).toBe(-10);
+    expect(result.reasons).toContain('Нет положительной маржи для перепродажи');
+  });
+
+
 });
