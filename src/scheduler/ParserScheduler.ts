@@ -265,6 +265,21 @@ export class ParserScheduler {
         const inserted = insertedRaw.map(ad => ({ ...ad, ...marketById.get(ad.external_id) }));
         for(const row of inserted) marketUpdates.push({id:Number(row.id),status:row.market_status??null,percent:row.market_percent??null,median:row.market_median??null,low:row.market_low??null,high:row.market_high??null,sellFast:row.sell_fast??null,sellNormal:row.sell_normal??null,sellMax:row.sell_max??null,sampleSize:row.market_sample_size??null,confidence:row.market_confidence??null,quality:row.market_quality??null});
         const notifyCandidates = inserted.filter(ad => configuredIds.has(ad.external_id));
+        const filteredOut = inserted.filter(ad => !configuredIds.has(ad.external_id));
+        if (filteredOut.length) {
+          logger.info('New ads stored but notification-filtered', {
+            linkId: link.id,
+            count: filteredOut.length,
+            externalIds: filteredOut.slice(0, 20).map(ad => ad.external_id),
+            filters: link.config ? {
+              minPrice: link.config.minPrice ?? null,
+              maxPrice: link.config.maxPrice ?? null,
+              condition: link.config.condition ?? null,
+              seller: link.config.seller ?? null,
+              minMarketDiscount: link.config.minMarketDiscount ?? null,
+            } : null,
+          });
+        }
         const claimed = await this.db.claimNewAdsForUser(link.user_id, link.id, notifyCandidates);
 
         for (const adData of inserted) {
