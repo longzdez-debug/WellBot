@@ -58,11 +58,27 @@ export class TelegramSender {
       const inputMedia: TelegramBot.InputMediaPhoto[] = mediaToSend.map((url, index) => ({ type: 'photo', media: url, caption: index === 0 ? caption : undefined, parse_mode: index === 0 ? 'HTML' : undefined }));
       try {
         await this.bot.sendMediaGroup(chatId, inputMedia);
-        if (replyMarkup) { await this.waitForRateLimit(chatId); await this.bot.sendMessage(chatId, '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', { reply_markup: replyMarkup }); }
       } catch (error: any) {
         const statusCode = this.getStatusCode(error);
         if (statusCode === 400) { logger.warn('Media group rejected, falling back to text notification', { chatId, error: error?.response?.body?.description || error.message }); await this.waitForRateLimit(chatId); await this.bot.sendMessage(chatId, formatted.text, { parse_mode: 'HTML', reply_markup: replyMarkup }); return; }
         throw error;
+      }
+      if (replyMarkup) {
+        try {
+          await this.waitForRateLimit(chatId);
+          await this.bot.sendMessage(chatId, '🔥 ОТКРЫТЬ ОБЪЯВЛЕНИЕ', { reply_markup: replyMarkup });
+        } catch (error: any) {
+          logger.error('Media notification delivered but open-link control failed', { chatId, externalId: formatted.externalId, error: error?.message || String(error) });
+          const url=this.getButtonUrl(formatted);
+          if(url){
+            try{
+              await this.waitForRateLimit(chatId);
+              await this.bot.sendMessage(chatId, '🔗 ' + url);
+            }catch(fallbackError:any){
+              logger.warn('Open-link fallback message failed after media delivery',{chatId,externalId:formatted.externalId,error:fallbackError?.message||String(fallbackError)});
+            }
+          }
+        }
       }
       return;
     }
