@@ -67,7 +67,10 @@ export class DatabaseService {
     const user=await this.getUser(telegramId); if(!user)throw new Error('user_not_registered');
     const days=Math.min(3650,Math.max(1,Math.floor(durationDays))); const current=await this.getProSubscription(telegramId);
     const base=current?.status==='active'&&current.expiresAt.getTime()>Date.now()?current.expiresAt:new Date(); const expires=new Date(base.getTime()+days*86400000);
-    await this.activateProSubscription(telegramId,expires,0,'',null,'admin_grant:'+adminTelegramId+':'+Date.now());
+    await this.pool.query(
+      "INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,0,$3,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",
+      [user.id,expires,'admin_grant:'+adminTelegramId+':'+Date.now()],
+    );
     await this.pool.query('INSERT INTO wellbot_admin_audit(admin_telegram_id,target_telegram_id,action,details) VALUES($1,$2,$3,$4::jsonb)',[adminTelegramId,telegramId,'GRANT_PRO',JSON.stringify({durationDays:days,reason,expiresAt:expires.toISOString()})]);
   }
   async revokePro(telegramId:number,adminTelegramId:number,reason:string):Promise<void>{
