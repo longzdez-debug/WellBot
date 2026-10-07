@@ -27,16 +27,10 @@ export class BotHandler {
 
   private getMainKeyboard() {
     const webAppUrl = process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || '';
-    const keyboard: any[][] = [];
-    if (/^https:\/\//i.test(webAppUrl)) {
-      keyboard.push([{ text: '🚀 Открыть WellBOT', web_app: { url: webAppUrl } }]);
-    }
-    keyboard.push(
-      [{ text: '📋 Мои поиски', callback_data: 'my_links' }, { text: '➕ Добавить поиск', callback_data: 'add_link' }],
-      [{ text: '🔥 Выгодные находки', callback_data: 'open_deals' }],
-      [{ text: '👑 WellBOT PRO', callback_data: 'open_pro' }, { text: '📊 Статистика', callback_data: 'open_stats' }],
-    );
-    return { inline_keyboard: keyboard } as TelegramBot.SendMessageOptions['reply_markup'];
+    if (!/^https:\/\//i.test(webAppUrl)) return undefined;
+    return {
+      inline_keyboard: [[{ text: '🚀 Открыть WellBOT', web_app: { url: webAppUrl } }]],
+    } as TelegramBot.SendMessageOptions['reply_markup'];
   }
 
   private setupHandlers(): void {
