@@ -83,7 +83,7 @@ describe('FastKufarParser catalog/search behavior', () => {
 
     const parser = new FastKufarParser(axiosMock);
     const ads = await parser.parseUrl(
-      'https://www.kufar.by/l/r~minsk/elektronika?query=iPhone&wb=kufar%7Celectronics%7C%7Cminsk%7C%7CiPhone%7C1000%7C2000%7Cnew%7Ccompany%7Cnormal',
+      'https://www.kufar.by/l/r~minsk/elektronika?query=iPhone&wb=kufar%7Celectronics%7C%7C%7C%7C%7C%7Cminsk%7CiPhone%7C1000%7C2000%7Cnew%7Ccompany%7Cnormal',
     );
 
     expect(ads.map(ad => ad.external_id)).toEqual(['ok']);
