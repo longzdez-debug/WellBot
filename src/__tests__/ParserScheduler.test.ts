@@ -117,16 +117,22 @@ describe('ParserScheduler', () => {
         quality: 90,
       }]]),
     });
-    db.getGlobalRecentMarketAds.mockResolvedValue(
-      Array.from({ length: 12 }, (_, i) => ({
-        external_id: 'market-' + i,
-        title: 'iPhone 15',
-        price: '950 BYN',
-        ad_url: 'https://kufar.by/ad/market-' + i,
-        market_group: 'kufar:phones:17010',
-      })),
-    );
-    await new ParserScheduler(db as never, bot as never).runParsing();
+    const scheduler = new ParserScheduler(db as never, bot as never);
+    jest.spyOn(scheduler as any, 'attachComparableMarket').mockImplementation((item: Ad) => ({
+      ...item,
+      market_status: 'below_market',
+      market_percent: -25,
+      market_median: 950,
+      market_low: 800,
+      market_high: 1100,
+      sell_fast: 850,
+      sell_normal: 900,
+      sell_max: 1000,
+      market_sample_size: 20,
+      market_confidence: 'high',
+      market_quality: 90,
+    }));
+    await scheduler.runParsing();
     expect(db.claimNewAdsForUser).not.toHaveBeenCalled();
     expect(db.enqueueNotifications).toHaveBeenCalledTimes(1);
     expect(db.enqueueNotifications.mock.calls[0][0][0]).toEqual(expect.objectContaining({
