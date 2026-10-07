@@ -9,6 +9,27 @@ const appScriptIsValid=index.includes('<script src="./app.js?v=')&&index.include
 if(index.includes('<script src="./app.js?v=20261004-15" defer></script>>'))throw new Error("Malformed app.js script tag detected.");
 if(!appScriptIsValid)throw new Error("app.js must load unconditionally with defer.");
 if(index.includes("Telegram.WebApp.initData"))throw new Error("index.html must not gate app.js loading on Telegram initData.");
+const requiredDynamicControls=[
+  ['deal-close','Deal detail close control missing.'],
+  ['deal-dismiss','Deal detail dismiss/close control missing.'],
+  ['deal-save','Deal save control missing.'],
+  ['deal-open','Deal open control missing.'],
+  ['settings-cancel','Settings cancel control missing.'],
+  ['settings-save','Settings save control missing.'],
+  ['analytics-open','Analytics control missing.'],
+  ['saved-open','Saved listings control missing.'],
+  ['settings-open','Settings control missing.'],
+  ['promo-open','Promo code control missing.'],
+  ['pro-open','PRO control missing.'],
+  ['pro-buy','PRO purchase control missing.'],
+  ['admin-grant','Admin grant control missing.'],
+  ['admin-promo','Admin promo control missing.'],
+  ['admin-refresh','Admin refresh control missing.'],
+  ['hot-open','Hot listing open control missing.'],
+  ['hot-skip','Hot listing skip control missing.'],
+];
+for(const [needle,message] of requiredDynamicControls)if(!app.includes(needle))throw new Error(message);
+
 const dynamicContracts=[
   ['data-action="add"',"Dynamic create-search buttons must use data-action=add."],
   ['marketplace-grid',"Marketplace selector must exist."],
