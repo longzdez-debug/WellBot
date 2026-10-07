@@ -65,6 +65,42 @@ describe('FastKufarParser catalog/search behavior', () => {
     expect(ads.map(ad => ad.external_id)).toEqual(['ok']);
   });
 
+  test('parses JSON monitor identity without breaking pipe-containing filters', async () => {
+    const axiosMock = {
+      get: jest.fn(async (_url: string, config: any) => {
+        expect(config.params.cat).toBe('17010');
+        return {
+          data: { ads: [
+            { ad_id: 'ok', subject: 'Apple iPhone 17 | Pro', description: '256 GB', company_ad: false, price_byn: 150000, ad_link: 'https://www.kufar.by/ad/ok' },
+            { ad_id: 'wrong', subject: 'Apple iPhone 16 Pro', description: '256 GB', company_ad: false, price_byn: 150000, ad_link: 'https://www.kufar.by/ad/wrong' },
+          ] },
+        };
+      }),
+    } as any;
+    const identity = JSON.stringify({
+      v: 2,
+      source: 'kufar',
+      categoryId: 'phones',
+      subcategoryId: '17010',
+      brand: 'apple',
+      model: 'iPhone 17 | Pro',
+      phoneFilters: {},
+      region: '',
+      city: 'minsk',
+      query: '',
+      minPrice: 1000,
+      maxPrice: 2000,
+      condition: 'new',
+      seller: 'private',
+      mode: 'sniper',
+    });
+    const parser = new FastKufarParser(axiosMock);
+    const ads = await parser.parseUrl(
+      'https://www.kufar.by/l/mobilnye-telefony/mt~apple-iphone-17-pro?wb=' + encodeURIComponent(identity),
+    );
+    expect(ads.map(ad => ad.external_id)).toEqual(['ok']);
+  });
+
   test('applies city, price, condition and seller filters together', async () => {
     const axiosMock = {
       get: jest.fn(async () => ({
