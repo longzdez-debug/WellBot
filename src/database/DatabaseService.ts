@@ -219,8 +219,8 @@ export class DatabaseService {
     return r.rowCount===1;
   }
   async getDismissedExternalIds(userId:number):Promise<Set<string>>{
-    const r=await this.pool.query<{external_id:string}>('SELECT platform,external_id FROM dismissed_ads WHERE user_id=$1',[userId]);
-    return new Set(r.rows.map(x=>x.platform+":"+x.external_id));
+    const r=await this.pool.query<{external_id:string}>('SELECT external_id FROM dismissed_ads WHERE user_id=$1',[userId]);
+    return new Set(r.rows.map(x=>x.external_id));
   }
   async getDashboardAds(userId:number,limit=50):Promise<DashboardAd[]>{const safeLimit=Math.min(Math.max(Math.floor(limit),1),100);const r=await this.pool.query<DashboardAd>('SELECT a.*,l.platform AS link_platform,l.url AS link_url FROM ads a JOIN links l ON l.id=a.link_id WHERE l.user_id=$1 AND NOT EXISTS (SELECT 1 FROM dismissed_ads d WHERE d.user_id=$1 AND d.platform=l.platform AND d.external_id=a.external_id) ORDER BY COALESCE(a.published_at,a.created_at) DESC,a.id DESC LIMIT $2',[userId,safeLimit]);return r.rows;}
   async getDashboardPriceDrops(userId:number,limit=30):Promise<DashboardPriceDrop[]>{const safeLimit=Math.min(Math.max(Math.floor(limit),1),50);const r=await this.pool.query<DashboardPriceDrop>('SELECT ph.id,ph.external_id,ph.old_price,ph.new_price,ph.price_change_percent,ph.created_at,a.title,a.image_url,a.ad_url,l.platform AS link_platform FROM price_history ph JOIN ads a ON a.id=ph.ad_id JOIN links l ON l.id=a.link_id WHERE ph.user_id=$1 ORDER BY ph.created_at DESC,ph.id DESC LIMIT $2',[userId,safeLimit]);return r.rows;}
