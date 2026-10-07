@@ -318,12 +318,12 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
         if (requestPath === '/api/metrics' && req.method === 'GET') { json(res, 200, metricsProvider ? await metricsProvider() : { scheduler: { running: false }, notifications: {}, generatedAt: new Date().toISOString() }); return; }
 
         if (requestPath === '/api/bootstrap' && req.method === 'GET') {
-          const [links, ads, priceDrops, stats, statsByLink] = await Promise.all([
+          const [links, ads, priceDrops, stats, statsByLink, preferences, savedAds] = await Promise.all([
             db.getUserLinks(user.id), db.getDashboardAds(user.id, 50), db.getDashboardPriceDrops(user.id, 30),
-            db.getDashboardStats(user.id), db.getUserAdsCount(user.id),
+            db.getDashboardStats(user.id), db.getUserAdsCount(user.id), db.getUserPreferences(user.id), db.getSavedAds(user.id, 100),
           ]);
           logger.info('WellBOT bootstrap', { telegramId: auth.user.id, dbUserId: user.id, links: links.length, activeLinksFromLinks: links.filter(link => link.is_active).length, inactiveLinksFromLinks: links.filter(link => !link.is_active).length, ads: ads.length, priceDrops: priceDrops.length, totalLinks: stats.totalLinks, activeLinks: stats.activeLinks });
-          json(res, 200, { user: { id: user.id, telegramId: user.telegram_id, username: user.username }, isAdmin: isAdminTelegramId(auth.user.id), links, ads, priceDrops, stats, statsByLink, serverTime: new Date().toISOString() });
+          json(res, 200, { user: { id: user.id, telegramId: user.telegram_id, username: user.username }, isAdmin: isAdminTelegramId(auth.user.id), links, ads, priceDrops, stats, statsByLink, preferences, savedAds, serverTime: new Date().toISOString() });
           return;
         }
 
