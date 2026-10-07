@@ -209,6 +209,7 @@ export class ParserScheduler {
 
       const existing = state.existingIds;
       const prices = state.prices;
+      const previousMarket = state.market;
       const processed = new Set<string>();
       const priceUpdates:Array<{id:number;price:string}>=[];
       const newCandidates: Ad[] = [];
@@ -229,7 +230,15 @@ export class ParserScheduler {
             }
             if (adData.market_median != null) marketUpdates.push({id:last.adId,status:adData.market_status ?? null,percent:adData.market_percent??null,median:adData.market_median,low:adData.market_low??null,high:adData.market_high??null,sellFast:adData.sell_fast??null,sellNormal:adData.sell_normal??null,sellMax:adData.sell_max??null,sampleSize:adData.market_sample_size??null,confidence:adData.market_confidence??null,quality:adData.market_quality??null});
           }
-          if(configuredIds.has(id)) newlyEligibleExisting.push(adData);
+          if(configuredIds.has(id) && config.minMarketDiscount != null) {
+            const threshold=Number(config.minMarketDiscount);
+            const currentPercent=typeof adData.market_percent==='number' ? adData.market_percent : null;
+            const previous=previousMarket.get(id);
+            const previousPercent=previous?.percent ?? null;
+            const currentEligible=currentPercent!=null && currentPercent<=-threshold;
+            const previousEligible=previousPercent!=null && previousPercent<=-threshold;
+            if(currentEligible && !previousEligible) newlyEligibleExisting.push(adData);
+          }
           continue;
         }
 
@@ -238,9 +247,7 @@ export class ParserScheduler {
 
       if (newlyEligibleExisting.length) {
         const uniqueEligible=[...new Map(newlyEligibleExisting.map(ad=>[ad.external_id,ad])).values()];
-        const claimed=await this.db.claimNewAdsForUser(link.user_id,link.id,uniqueEligible);
         for(const adData of uniqueEligible){
-          if(!claimed.has(adData.external_id)) continue;
           const publishedAt=adData.published_at instanceof Date?adData.published_at:adData.published_at?new Date(adData.published_at):null;
           const ageSeconds=publishedAt&&!Number.isNaN(publishedAt.getTime())?Math.max(0,(Date.now()-publishedAt.getTime())/1000):null;
           if(ageSeconds!==null&&this.newAdMaxAgeSeconds>0&&ageSeconds>this.newAdMaxAgeSeconds){
