@@ -137,7 +137,7 @@ export class BotHandler {
     try{
       const priceStars=Math.min(10000,Math.max(1,Math.floor(Number(process.env.WELLBOT_PRO_PRICE_STARS||'199'))));
       const current=await this.db.getProSubscription(userId);
-      if(hasProAccess(current)){await this.bot.sendMessage(chatId,'👑 WellBOT PRO уже активен до '+current.expiresAt.toLocaleDateString('ru-RU')+'.');return;}
+      if(hasProAccess(current)){await this.bot.sendMessage(chatId,'👑 WellBOT PRO уже активен до '+current!.expiresAt.toLocaleDateString('ru-RU')+'.');return;}
       const payload='wellbot_pro_monthly_v1:'+userId+':'+Date.now();
       await (this.bot as any).sendInvoice(chatId,'WellBOT PRO','Умный Deal Score, расширенная аналитика рынка, быстрые находки и PRO-возможности.',payload,'','XTR',[{label:'WellBOT PRO — 30 дней',amount:priceStars}],{subscription_period:2592000,terms_url:process.env.WELLBOT_TERMS_URL||undefined});
       logger.info('WellBOT PRO invoice sent',{telegramId:userId,priceStars});
