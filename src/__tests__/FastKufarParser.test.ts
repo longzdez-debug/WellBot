@@ -46,6 +46,25 @@ describe('FastKufarParser catalog/search behavior', () => {
     expect(calls[0].params.cat).toBe('17050');
   });
 
+  test('enforces brand and model from monitor identity even without query text', async () => {
+    const axiosMock = {
+      get: jest.fn(async () => ({
+        data: nextData([
+          { ad_id: 'ok', subject: 'Apple iPhone 17 Pro', description: '256 GB', ad_parameters: [{ p: 'condition', vl: 'Новое' }], company_ad: false, price_byn: 150000, ad_link: 'https://www.kufar.by/ad/ok' },
+          { ad_id: 'wrong-brand', subject: 'Samsung Galaxy S26', description: '256 GB', ad_parameters: [{ p: 'condition', vl: 'Новое' }], company_ad: false, price_byn: 150000, ad_link: 'https://www.kufar.by/ad/wrong-brand' },
+          { ad_id: 'wrong-model', subject: 'Apple iPhone 16 Pro', description: '256 GB', ad_parameters: [{ p: 'condition', vl: 'Новое' }], company_ad: false, price_byn: 150000, ad_link: 'https://www.kufar.by/ad/wrong-model' },
+        ]),
+      })),
+    } as any;
+
+    const parser = new FastKufarParser(axiosMock);
+    const ads = await parser.parseUrl(
+      'https://www.kufar.by/l/mobilnye-telefony/mt~apple-iphone-17-pro?wb=kufar%7Cphones%7C17010%7Capple%7CiPhone%2017%20Pro%7C%7C%7C%7C%7C1500%7C2000%7Cnew%7Cprivate%7Cnormal',
+    );
+
+    expect(ads.map(ad => ad.external_id)).toEqual(['ok']);
+  });
+
   test('applies city, price, condition and seller filters together', async () => {
     const axiosMock = {
       get: jest.fn(async () => ({
