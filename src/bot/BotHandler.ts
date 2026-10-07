@@ -9,6 +9,7 @@ import { Ad, Link, Platform } from '../types';
 import { logger } from '../utils/logger';
 import { mapError } from '../utils/errorMapper';
 import { analyzeDeal } from '../services/DealScoreEngine';
+import { hasProAccess } from '../services/ProAccess';
 
 export class BotHandler {
   private bot: TelegramBot;
@@ -115,6 +116,19 @@ export class BotHandler {
         logger.info('WellBOT PRO payment confirmed',{telegramId:msg.from?.id||msg.chat.id,chargeId:payment.telegram_payment_charge_id,expiresAt:expiresAt.toISOString(),recurring:Boolean(payment.is_recurring)});
       }catch(error){logger.error('Failed to activate PRO after payment',{telegramId:msg.from?.id||msg.chat.id,error:error instanceof Error?error.message:String(error)});}
     });
+    this.bot.on('message', async (msg: Message) => {
+      const refunded=(msg as Message & {refunded_payment?:any}).refunded_payment;
+      if(!refunded)return;
+      const chargeId=String(refunded.telegram_payment_charge_id||'');
+      if(!chargeId||String(refunded.currency||'')!=='XTR')return;
+      try{
+        await this.db.revokeProByCharge(chargeId);
+        logger.warn('WellBOT PRO payment refunded; access revoked',{telegramId:msg.from?.id||msg.chat.id,chargeId});
+      }catch(error){
+        logger.error('Failed to revoke PRO after refund',{telegramId:msg.from?.id||msg.chat.id,chargeId,error:error instanceof Error?error.message:String(error)});
+      }
+    });
+
     this.bot.on('polling_error', (error: Error) => logger.error('Telegram polling error', { error: error.message }));
     logger.info('Bot handlers initialized');
   }
@@ -123,7 +137,7 @@ export class BotHandler {
     try{
       const priceStars=Math.min(10000,Math.max(1,Math.floor(Number(process.env.WELLBOT_PRO_PRICE_STARS||'199'))));
       const current=await this.db.getProSubscription(userId);
-      if(current?.status==='active'){await this.bot.sendMessage(chatId,'👑 WellBOT PRO уже активен до '+current.expiresAt.toLocaleDateString('ru-RU')+'.');return;}
+      if(hasProAccess(current)){await this.bot.sendMessage(chatId,'👑 WellBOT PRO уже активен до '+current.expiresAt.toLocaleDateString('ru-RU')+'.');return;}
       const payload='wellbot_pro_monthly_v1:'+userId+':'+Date.now();
       await (this.bot as any).sendInvoice(chatId,'WellBOT PRO','Умный Deal Score, расширенная аналитика рынка, быстрые находки и PRO-возможности.',payload,'','XTR',[{label:'WellBOT PRO — 30 дней',amount:priceStars}],{subscription_period:2592000,terms_url:process.env.WELLBOT_TERMS_URL||undefined});
       logger.info('WellBOT PRO invoice sent',{telegramId:userId,priceStars});
