@@ -88,7 +88,12 @@ export class BotHandler {
       try {
         const expectedPrice=Math.min(10000,Math.max(1,Math.floor(Number(process.env.WELLBOT_PRO_PRICE_STARS||'199'))));
         const payload=String(query.invoice_payload||'');
-        if(!payload.startsWith('wellbot_pro_monthly_v1:')||query.currency!=='XTR'||Number(query.total_amount)!==expectedPrice){await (this.bot as any).answerPreCheckoutQuery(query.id,false,{error_message:'Счёт WellBOT PRO недействителен или устарел.'});return;}
+        const parts=payload.split(':');
+        const payloadUserId=Number(parts[1]);
+        const issuedAt=Number(parts[2]);
+        const payloadFresh=Number.isSafeInteger(issuedAt)&&issuedAt>0&&Math.abs(Date.now()-issuedAt)<24*60*60*1000;
+        const payloadOwned=Number.isSafeInteger(payloadUserId)&&payloadUserId>0&&(!query.from?.id||Number(query.from.id)===payloadUserId);
+        if(parts.length!==3||parts[0]!=='wellbot_pro_monthly_v1'||!payloadOwned||!payloadFresh||query.currency!=='XTR'||Number(query.total_amount)!==expectedPrice){await (this.bot as any).answerPreCheckoutQuery(query.id,false,{error_message:'Счёт WellBOT PRO недействителен или устарел.'});return;}
         await (this.bot as any).answerPreCheckoutQuery(query.id,true);
       }catch(error){logger.error('PRO pre-checkout failed',{error:error instanceof Error?error.message:String(error)});try{await (this.bot as any).answerPreCheckoutQuery(query.id,false,{error_message:'Не удалось проверить оплату. Попробуйте ещё раз.'});}catch{}}
     });
