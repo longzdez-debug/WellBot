@@ -143,10 +143,15 @@ export class FastKufarParser extends BaseParser {
     }
 
     let requestedBrandSlug = '';
+    let requestedModel = '';
     let requestedCitySlug = '';
     const monitorIdentity = String(parsed.searchParams.get('wb') || '').split('|');
     const requestedCategoryId = monitorIdentity[1] || '';
     const requestedSubcategoryId = monitorIdentity[2] || '';
+    const identityBrand = String(monitorIdentity[3] || '').trim().toLocaleLowerCase('ru-RU');
+    const identityModel = normalizeSearchText(monitorIdentity[4] || '');
+    if (identityBrand && BRAND_TERMS[identityBrand]) requestedBrandSlug = identityBrand;
+    if (identityModel) requestedModel = identityModel;
     const explicitCategoryId = /^\d+$/.test(requestedSubcategoryId)
       ? requestedSubcategoryId
       : /^\d+$/.test(requestedCategoryId)
@@ -244,6 +249,7 @@ export class FastKufarParser extends BaseParser {
         const text = adSearchText(ad);
         if (!queryMatchesAd(text)) return false;
         if (normalizedBrandTerms.length > 0 && !normalizedBrandTerms.some(term => text.includes(term))) return false;
+        if (requestedModel && !text.includes(requestedModel)) return false;
         const condition = normalizeSearchText(adCondition(ad));
         if (requestedCondition === 'new' && !/(new|нов|новое|новая|новый)/.test(condition)) return false;
         if (requestedCondition === 'used' && /(new|нов|новое|новая|новый)/.test(condition)) return false;
