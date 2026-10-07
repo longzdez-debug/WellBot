@@ -61,7 +61,8 @@ export class BotHandler {
       await this.bot.answerCallbackQuery(query.id);
       if (data === 'add_link') await this.handleAddLinkButton(chatId, userId);
       else if (data === 'my_links') await this.handleMyLinks(chatId, userId);
-      else if (data === 'open_pro') await this.sendProInvoice(chatId, userId);\n      else if (data === 'open_stats') await this.handleStats(chatId, userId);
+      else if (data === 'open_pro') await this.sendProInvoice(chatId, userId);
+      else if (data === 'open_stats') await this.handleStats(chatId, userId);
       else if (data?.startsWith('dismiss_ad_')) { const adId = parseInt(data.replace('dismiss_ad_', ''), 10); if (Number.isSafeInteger(adId) && adId > 0) await this.handleDismissAd(chatId, userId, adId, query.message.message_id); }
       else if (data?.startsWith('delete_')) { const linkId = parseInt(data.replace('delete_', ''), 10); if (Number.isSafeInteger(linkId) && linkId > 0) await this.handleDeleteLink(chatId, userId, linkId); }
       else if (data === 'delete_all') await this.handleDeleteAllLinks(chatId, userId);
