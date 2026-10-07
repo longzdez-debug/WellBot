@@ -8,6 +8,7 @@ import { TelegramSender } from '../services/TelegramSender';
 import { Ad, Link, Platform } from '../types';
 import { logger } from '../utils/logger';
 import { mapError } from '../utils/errorMapper';
+import { analyzeDeal } from '../services/DealScoreEngine';
 
 export class BotHandler {
   private bot: TelegramBot;
@@ -32,6 +33,7 @@ export class BotHandler {
     }
     keyboard.push(
       [{ text: '📋 Мои поиски', callback_data: 'my_links' }, { text: '➕ Добавить поиск', callback_data: 'add_link' }],
+      [{ text: '🔥 Выгодные находки', callback_data: 'open_deals' }],
       [{ text: '👑 WellBOT PRO', callback_data: 'open_pro' }, { text: '📊 Статистика', callback_data: 'open_stats' }],
     );
     return { inline_keyboard: keyboard } as TelegramBot.SendMessageOptions['reply_markup'];
@@ -48,6 +50,7 @@ export class BotHandler {
       else if (msg.text === '/stats' || msg.text === '📊 Статистика') await this.handleStats(chatId, userId);
       else if (msg.text === '➕ Добавить поиск') await this.handleAddLinkButton(chatId, userId);
       else if (msg.text === '📋 Мои поиски') await this.handleMyLinks(chatId, userId);
+      else if (msg.text === '🔥 Выгодные находки') await this.handleDeals(chatId, userId);
       else if (msg.text === '🗑 Удалить все поиски') await this.handleDeleteAllLinks(chatId, userId);
       
     });
@@ -63,6 +66,7 @@ export class BotHandler {
       else if (data === 'my_links') await this.handleMyLinks(chatId, userId);
       else if (data === 'open_pro') await this.sendProInvoice(chatId, userId);
       else if (data === 'open_stats') await this.handleStats(chatId, userId);
+      else if (data === 'open_deals') await this.handleDeals(chatId, userId);
       else if (data?.startsWith('dismiss_ad_')) { const adId = parseInt(data.replace('dismiss_ad_', ''), 10); if (Number.isSafeInteger(adId) && adId > 0) await this.handleDismissAd(chatId, userId, adId, query.message.message_id); }
       else if (data?.startsWith('delete_')) { const linkId = parseInt(data.replace('delete_', ''), 10); if (Number.isSafeInteger(linkId) && linkId > 0) await this.handleDeleteLink(chatId, userId, linkId); }
       else if (data === 'delete_all') await this.handleDeleteAllLinks(chatId, userId);
@@ -124,6 +128,32 @@ export class BotHandler {
   async handleAddLinkButton(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } if (await this.db.getUserLinksCount(user.id) >= 50) { await this.bot.sendMessage(chatId, '⚠️ Достигнут лимит в 50 поисков.'); return; }  await this.bot.sendMessage(chatId, '📂 Откройте WellBOT и выберите категорию, город и фильтры.\n\nWellBOT сам создаст и запустит поиск — ссылки больше не нужны.', { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to handle add link button', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); } }
 
   async handleMyLinks(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } const links = await this.db.getUserLinks(user.id); if (!links.length) { await this.bot.sendMessage(chatId, '📋 У вас пока нет поисков.', { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить поиск', callback_data: 'add_link' }]] } }); return; } const platformEmoji: Record<Platform, string> = { kufar: '🟢', onliner: '🔵', av: '🚗' }; for (const link of links) { if (!platformEmoji[link.platform as Platform]) continue; const status = link.is_active ? '✅ Активна' : '❌ Неактивна'; const config = (link as Link & { config?: any }).config || {}; const category = typeof config.subcategoryId === 'string' ? config.subcategoryId : typeof config.categoryId === 'string' ? config.categoryId : 'Каталог'; const scope = [config.city, config.region].filter(Boolean).join(' · ') || 'Вся Беларусь'; const filters = [config.query, config.minPrice != null ? `от ${config.minPrice}` : '', config.maxPrice != null ? `до ${config.maxPrice}` : '', config.condition === 'new' ? 'Новое' : config.condition === 'used' ? 'Б/у' : '', config.seller === 'company' ? 'Компания' : config.seller === 'private' ? 'Частное лицо' : ''].filter(Boolean).join(' · '); await this.bot.sendMessage(chatId, `${platformEmoji[link.platform as Platform]} ${link.platform.toUpperCase()}\n\n📂 ${category}\n📍 ${scope}${filters ? `\n🔎 ${filters}` : ''}\n\nСтатус: ${status}`, { reply_markup: { inline_keyboard: [[{ text: '🔍 Проверить', callback_data: `check_${link.id}` }, { text: '🗑 Удалить', callback_data: `delete_${link.id}` }]] } }); } } catch (error: any) { logger.error('Failed to show searches', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Не удалось загрузить поиски.'); } }
+
+  async handleDeals(chatId:number,userId:number):Promise<void>{
+    try{
+      const user=await this.db.getUser(userId);
+      if(!user?.id){await this.bot.sendMessage(chatId,'❌ Пользователь не найден.');return;}
+      const ads=await this.db.getUserRecentAds(user.id,120);
+      const scored=ads
+        .map(ad=>({ad,deal:analyzeDeal(ad)}))
+        .filter(item=>item.deal.score!==null&&item.deal.score>=65)
+        .sort((a,b)=>(b.deal.score||0)-(a.deal.score||0))
+        .slice(0,10);
+      if(!scored.length){
+        await this.bot.sendMessage(chatId,'🔥 Пока нет выгодных находок с надёжной оценкой рынка.\n\nСоздайте монитор и дайте WellBOT немного данных для сравнения.',{reply_markup:this.getMainKeyboard()});
+        return;
+      }
+      await this.bot.sendMessage(chatId,`🔥 <b>ВЫГОДНЫЕ НАХОДКИ</b>\n\nНайдено: ${scored.length}. Сортировка по Deal Score.`,{parse_mode:'HTML'});
+      for(const item of scored){
+        const formatted=await this.adPresenter.format(item.ad);
+        await this.telegramSender.send(chatId,formatted);
+      }
+      logger.info('Deal discovery opened',{userId,count:scored.length});
+    }catch(error:any){
+      logger.error('Failed to show deals',{userId,error:error?.message||String(error)});
+      await this.bot.sendMessage(chatId,'❌ Не удалось загрузить выгодные находки.');
+    }
+  }
 
   async handleDismissAd(chatId: number, userId: number, adId: number, messageId?: number): Promise<void> {
     try {
