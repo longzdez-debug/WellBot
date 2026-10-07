@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, createPublicKey, timingSafeEqual, verify as verifySignature } from 'node:crypto';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -73,18 +73,44 @@ export function parseTelegramInitData(raw: string, botToken: string, nowSeconds 
   try {
     const params = new URLSearchParams(raw);
     const hash = params.get('hash');
+    const signature = params.get('signature');
     const authDate = Number(params.get('auth_date'));
     const userRaw = params.get('user');
-    if (!hash || !/^[a-f0-9]{64}$/i.test(hash)) return null;
     if (!Number.isSafeInteger(authDate) || authDate <= 0 || !userRaw) return null;
     const age = nowSeconds - authDate;
     if (age < -300 || age > AUTH_MAX_AGE_SECONDS) return null;
-    const dataCheckString = [...params.entries()].filter(([key]) => key !== 'hash').sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${key}=${value}`).join('\n');
-    const secret = createHmac('sha256', botToken).update('WebAppData').digest();
-    const expected = createHmac('sha256', secret).update(dataCheckString).digest('hex');
-    const actual = Buffer.from(hash, 'hex');
-    const expectedBuffer = Buffer.from(expected, 'hex');
-    if (actual.length !== expectedBuffer.length || !timingSafeEqual(actual, expectedBuffer)) return null;
+
+    let valid = false;
+    if (hash && /^[a-f0-9]{64}$/i.test(hash)) {
+      const dataCheckString = [...params.entries()]
+        .filter(([key]) => key !== 'hash')
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, value]) => key + '=' + value)
+        .join('\n');
+      const secret = createHmac('sha256', botToken).update('WebAppData').digest();
+      const expected = createHmac('sha256', secret).update(dataCheckString).digest();
+      const actual = Buffer.from(hash, 'hex');
+      valid = actual.length === expected.length && timingSafeEqual(actual, expected);
+    }
+
+    if (!valid && signature) {
+      const botId = botToken.split(':', 1)[0];
+      if (/^\d+$/.test(botId)) {
+        const dataCheckString = [...params.entries()]
+          .filter(([key]) => key !== 'hash' && key !== 'signature')
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, value]) => key + '=' + value)
+          .join('\n');
+        const signedData = botId + ':WebAppData\n' + dataCheckString;
+        const publicKeyBytes = Buffer.from('e7bf03d88dda5bb59f32ed8b02a56c187fe7d34caed242', 'hex');
+        const derPrefix = Buffer.from('302a300506032b6570032100', 'hex');
+        const publicKey = createPublicKey({ key: Buffer.concat([derPrefix, publicKeyBytes]), format: 'der', type: 'spki' });
+        const signatureBytes = Buffer.from(signature, 'base64url');
+        valid = signatureBytes.length === 64 && verifySignature(null, Buffer.from(signedData), publicKey, signatureBytes);
+      }
+    }
+
+    if (!valid) return null;
     const user = JSON.parse(userRaw) as AuthUser;
     if (!Number.isSafeInteger(user.id) || user.id <= 0) return null;
     return { user, authDate };
