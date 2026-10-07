@@ -248,4 +248,36 @@ export class DatabaseService {
   async getPendingNotificationStats():Promise<{count:number;oldestAgeMs:number}>{const r=await this.pool.query<{count:string;oldest_at:Date|null}>('SELECT COUNT(*) AS count, MIN(created_at) AS oldest_at FROM notification_outbox WHERE sent_at IS NULL',[]);const row=r.rows[0];const oldest=row?.oldest_at instanceof Date?row.oldest_at:null;return {count:Number(row?.count||0),oldestAgeMs:oldest?Math.max(0,Date.now()-oldest.getTime()):0};}
   async getActiveLinkFreshnessStats():Promise<{activeLinks:number;oldestAgeMs:number;avgAgeMs:number}>{const r=await this.pool.query<{active_links:string;oldest_at:Date|null;avg_age_ms:string|null}>(`SELECT COUNT(*) FILTER (WHERE is_active) AS active_links,MIN(last_parsed_at) FILTER (WHERE is_active) AS oldest_at,COALESCE(AVG(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP-COALESCE(last_parsed_at,created_at)))*1000) FILTER (WHERE is_active),0) AS avg_age_ms FROM links`,[]);const row=r.rows[0];const oldest=row?.oldest_at instanceof Date?row.oldest_at:null;return{activeLinks:Number(row?.active_links||0),oldestAgeMs:oldest?Math.max(0,Date.now()-oldest.getTime()):0,avgAgeMs:Number(row?.avg_age_ms||0)};}
   async purgeNotificationOutbox(retentionDays=14):Promise<number>{const safeDays=Math.min(Math.max(Math.floor(retentionDays),1),365);const r=await this.pool.query('DELETE FROM notification_outbox WHERE sent_at IS NOT NULL AND sent_at < CURRENT_TIMESTAMP - ($1::int * INTERVAL \'1 day\')',[safeDays]);return r.rowCount||0;}
+  async getUserPreferences(userId:number):Promise<{notificationsEnabled:boolean;minDealScore:number;digestEnabled:boolean;digestHour:number}>{
+    const r=await this.pool.query('SELECT notifications_enabled,min_deal_score,digest_enabled,digest_hour FROM user_preferences WHERE user_id=$1',[userId]);
+    const row=r.rows[0];
+    if(row)return {notificationsEnabled:Boolean(row.notifications_enabled),minDealScore:Number(row.min_deal_score),digestEnabled:Boolean(row.digest_enabled),digestHour:Number(row.digest_hour)};
+    await this.pool.query('INSERT INTO user_preferences(user_id) VALUES($1) ON CONFLICT DO NOTHING',[userId]);
+    return {notificationsEnabled:true,minDealScore:65,digestEnabled:false,digestHour:19};
+  }
+  async updateUserPreferences(userId:number,input:Partial<{notificationsEnabled:boolean;minDealScore:number;digestEnabled:boolean;digestHour:number}>):Promise<{notificationsEnabled:boolean;minDealScore:number;digestEnabled:boolean;digestHour:number}>{
+    const current=await this.getUserPreferences(userId);
+    const notificationsEnabled=input.notificationsEnabled==null?current.notificationsEnabled:Boolean(input.notificationsEnabled);
+    const minDealScore=input.minDealScore==null?current.minDealScore:Math.min(100,Math.max(0,Math.floor(Number(input.minDealScore))));
+    const digestEnabled=input.digestEnabled==null?current.digestEnabled:Boolean(input.digestEnabled);
+    const digestHour=input.digestHour==null?current.digestHour:Math.min(23,Math.max(0,Math.floor(Number(input.digestHour))));
+    const r=await this.pool.query('INSERT INTO user_preferences(user_id,notifications_enabled,min_deal_score,digest_enabled,digest_hour,updated_at) VALUES($1,$2,$3,$4,$5,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET notifications_enabled=EXCLUDED.notifications_enabled,min_deal_score=EXCLUDED.min_deal_score,digest_enabled=EXCLUDED.digest_enabled,digest_hour=EXCLUDED.digest_hour,updated_at=CURRENT_TIMESTAMP RETURNING notifications_enabled,min_deal_score,digest_enabled,digest_hour',[userId,notificationsEnabled,minDealScore,digestEnabled,digestHour]);
+    const row=r.rows[0]; return {notificationsEnabled:Boolean(row.notifications_enabled),minDealScore:Number(row.min_deal_score),digestEnabled:Boolean(row.digest_enabled),digestHour:Number(row.digest_hour)};
+  }
+  async saveAdForUser(adId:number,userId:number):Promise<boolean>{
+    const r=await this.pool.query('INSERT INTO saved_ads(user_id,ad_id,platform,external_id) SELECT $1,a.id,l.platform,a.external_id FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$2 AND l.user_id=$1 ON CONFLICT(user_id,ad_id) DO NOTHING',[userId,adId]);
+    return (r.rowCount||0)>0;
+  }
+  async unsaveAdForUser(adId:number,userId:number):Promise<boolean>{const r=await this.pool.query('DELETE FROM saved_ads WHERE user_id=$1 AND ad_id=$2',[userId,adId]);return (r.rowCount||0)>0;}
+  async getSavedAds(userId:number,limit=100):Promise<DashboardAd[]>{const safe=Math.min(300,Math.max(1,Math.floor(limit)));const r=await this.pool.query<DashboardAd>('SELECT a.*,l.platform AS link_platform,l.url AS link_url FROM saved_ads s JOIN ads a ON a.id=s.ad_id JOIN links l ON l.id=a.link_id WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT $2',[userId,safe]);return r.rows;}
+  async getUserAnalytics(userId:number):Promise<any>{
+    const [summary,platforms,drops,saved]=await Promise.all([
+      this.pool.query('SELECT COUNT(*) FILTER(WHERE l.is_active) active_searches,COUNT(DISTINCT a.id) total_ads,COUNT(DISTINCT a.id) FILTER(WHERE a.created_at>=CURRENT_TIMESTAMP-INTERVAL \'24 hours\') ads_24h,COUNT(DISTINCT a.id) FILTER(WHERE a.created_at>=CURRENT_TIMESTAMP-INTERVAL \'7 days\') ads_7d,COUNT(*) FILTER(WHERE ph.created_at>=CURRENT_TIMESTAMP-INTERVAL \'7 days\') drops_7d FROM links l LEFT JOIN ads a ON a.link_id=l.id LEFT JOIN price_history ph ON ph.ad_id=a.id WHERE l.user_id=$1',[userId]),
+      this.pool.query('SELECT l.platform,COUNT(a.id)::int AS ads FROM links l LEFT JOIN ads a ON a.link_id=l.id WHERE l.user_id=$1 GROUP BY l.platform ORDER BY ads DESC',[userId]),
+      this.pool.query('SELECT DATE(ph.created_at) day,COUNT(*)::int drops,AVG(ph.price_change_percent)::float avg_drop FROM price_history ph WHERE ph.user_id=$1 AND ph.created_at>=CURRENT_TIMESTAMP-INTERVAL \'30 days\' GROUP BY DATE(ph.created_at) ORDER BY day',[userId]),
+      this.pool.query('SELECT COUNT(*)::int count FROM saved_ads WHERE user_id=$1',[userId]),
+    ]);
+    return {summary:summary.rows[0],platforms:platforms.rows,drops:drops.rows,savedCount:Number(saved.rows[0]?.count||0)};
+  }
+
 }
