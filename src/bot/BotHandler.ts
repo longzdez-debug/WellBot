@@ -29,7 +29,7 @@ export class BotHandler {
   }
 
   private getMainKeyboard() {
-    const webAppUrl = process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || '';
+    const webAppUrl = process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || process.env.MINI_APP_URL || '';
     if (!/^https:\/\//i.test(webAppUrl)) return undefined;
     return {
       inline_keyboard: [[{ text: '🚀 WELLBOT', web_app: { url: webAppUrl } }]],
