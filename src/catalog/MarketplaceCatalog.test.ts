@@ -13,6 +13,12 @@ describe('Marketplace catalog',()=>{
     expect(findMarketplaceNode('onliner',child!.id)?.title).toBe(child!.title);
     expect(findMarketplaceCategory('onliner',child!.id)?.id).toBe(onliner.id);
   });
+  test('maps AV categories to their native sections',()=>{
+    expect(buildMarketplaceSearchUrl('av',{categoryId:'av_1'})).toContain('cars.av.by/electrocars');
+    expect(buildMarketplaceSearchUrl('av',{categoryId:'av_2'})).toContain('salon.av.by');
+    expect(buildMarketplaceSearchUrl('av',{categoryId:'av_11'})).toContain('koleso.av.by');
+    expect(buildMarketplaceSearchUrl('av',{categoryId:'av_14'})).toContain('parts.av.by/moto');
+  });
   test('builds marketplace URLs without cross-marketplace leakage',()=>{
     const onliner=buildMarketplaceSearchUrl('onliner',{categoryId:'computers',subcategoryId:'computers_0',query:'iPhone',city:'minsk'});
     const av=buildMarketplaceSearchUrl('av',{categoryId:'cars',subcategoryId:'used',query:'BMW',minPrice:1000,maxPrice:5000});
