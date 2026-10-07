@@ -57,6 +57,24 @@ export class DatabaseService {
     return (r.rowCount||0)>0;
   }
 
+  async activateProFromTelegramPayment(telegramId:number,expiresAt:Date,starsAmount:number,telegramChargeId:string,providerChargeId:string|null,payload:string):Promise<boolean>{
+    if(!telegramChargeId.trim()||!Number.isSafeInteger(telegramId)||telegramId<=0) return false;
+    const client=await this.pool.connect();
+    try{
+      await client.query('BEGIN');
+      const claimed=await client.query(
+        'INSERT INTO wellbot_payment_events(telegram_payment_charge_id,telegram_id,payload,stars_amount) VALUES($1,$2,$3,$4) ON CONFLICT(telegram_payment_charge_id) DO NOTHING',
+        [telegramChargeId,telegramId,payload,starsAmount],
+      );
+      if((claimed.rowCount||0)===0){await client.query('ROLLBACK');return false;}
+      const user=await client.query<User>('SELECT * FROM users WHERE telegram_id=$1',[telegramId]);
+      if(!user.rows[0]) throw new Error('user_not_registered');
+      await client.query("INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,telegram_payment_charge_id,provider_payment_charge_id,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,$3,$4,$5,$6,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),telegram_payment_charge_id=EXCLUDED.telegram_payment_charge_id,provider_payment_charge_id=EXCLUDED.provider_payment_charge_id,stars_amount=EXCLUDED.stars_amount,last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",[user.rows[0].id,expiresAt,telegramChargeId,providerChargeId,starsAmount,payload]);
+      await client.query('COMMIT');
+      return true;
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  }
+
   async activateProSubscription(telegramId:number,expiresAt:Date,starsAmount:number,telegramChargeId:string,providerChargeId:string|null,payload:string):Promise<void>{
     const user=await this.getUser(telegramId); if(!user)throw new Error('user_not_registered');
     await this.pool.query("INSERT INTO pro_subscriptions(user_id,tier,status,expires_at,telegram_payment_charge_id,provider_payment_charge_id,stars_amount,last_invoice_payload,updated_at) VALUES($1,'pro','active',$2,$3,$4,$5,$6,CURRENT_TIMESTAMP) ON CONFLICT(user_id,tier) DO UPDATE SET status='active',expires_at=GREATEST(pro_subscriptions.expires_at,EXCLUDED.expires_at),telegram_payment_charge_id=EXCLUDED.telegram_payment_charge_id,provider_payment_charge_id=EXCLUDED.provider_payment_charge_id,stars_amount=EXCLUDED.stars_amount,last_invoice_payload=EXCLUDED.last_invoice_payload,updated_at=CURRENT_TIMESTAMP",[user.id,expiresAt,telegramChargeId,providerChargeId,starsAmount,payload]);
