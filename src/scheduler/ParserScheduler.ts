@@ -210,6 +210,7 @@ export class ParserScheduler {
       const existing = state.existingIds;
       const prices = state.prices;
       const previousMarket = state.market;
+      const monitorConfig = link.config;
       const processed = new Set<string>();
       const priceUpdates:Array<{id:number;price:string}>=[];
       const newCandidates: Ad[] = [];
@@ -230,8 +231,8 @@ export class ParserScheduler {
             }
             if (adData.market_median != null) marketUpdates.push({id:last.adId,status:adData.market_status ?? null,percent:adData.market_percent??null,median:adData.market_median,low:adData.market_low??null,high:adData.market_high??null,sellFast:adData.sell_fast??null,sellNormal:adData.sell_normal??null,sellMax:adData.sell_max??null,sampleSize:adData.market_sample_size??null,confidence:adData.market_confidence??null,quality:adData.market_quality??null});
           }
-          if(configuredIds.has(id) && config.minMarketDiscount != null) {
-            const threshold=Number(config.minMarketDiscount);
+          if(configuredIds.has(id) && monitorConfig?.minMarketDiscount != null) {
+            const threshold=Number(monitorConfig.minMarketDiscount);
             const currentPercent=typeof adData.market_percent==='number' ? adData.market_percent : null;
             const previous=previousMarket.get(id);
             const previousPercent=previous?.percent ?? null;
