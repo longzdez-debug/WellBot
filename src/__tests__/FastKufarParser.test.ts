@@ -49,11 +49,11 @@ describe('FastKufarParser catalog/search behavior', () => {
   test('enforces brand and model from monitor identity even without query text', async () => {
     const axiosMock = {
       get: jest.fn(async () => ({
-        data: nextData([
+        data: { ads: [
           { ad_id: 'ok', subject: 'Apple iPhone 17 Pro', description: '256 GB', ad_parameters: [{ p: 'condition', vl: 'Новое' }], company_ad: false, price_byn: 150000, ad_link: 'https://www.kufar.by/ad/ok' },
           { ad_id: 'wrong-brand', subject: 'Samsung Galaxy S26', description: '256 GB', ad_parameters: [{ p: 'condition', vl: 'Новое' }], company_ad: false, price_byn: 150000, ad_link: 'https://www.kufar.by/ad/wrong-brand' },
           { ad_id: 'wrong-model', subject: 'Apple iPhone 16 Pro', description: '256 GB', ad_parameters: [{ p: 'condition', vl: 'Новое' }], company_ad: false, price_byn: 150000, ad_link: 'https://www.kufar.by/ad/wrong-model' },
-        ]),
+        ] },
       })),
     } as any;
 
