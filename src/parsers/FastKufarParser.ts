@@ -246,7 +246,7 @@ export class FastKufarParser extends BaseParser {
       const requestStartedAt = Date.now();
       const response = await this.axiosInstance.get(endpoint, {
         params,
-        timeout: 6500,
+        timeout: 2600,
         headers: {
           Host: new URL(endpoint).host,
           'User-Agent': this.getRandomUserAgent(),
@@ -334,7 +334,7 @@ export class FastKufarParser extends BaseParser {
       else if (parts.includes('kupit')) body.listing_type = 'sell';
 
       const response = await this.axiosInstance.post(reefApiUrl(), body, {
-        timeout: 9000,
+        timeout: 6000,
         headers: {
           'x-api-key': apiKey,
           'Content-Type': 'application/json',
@@ -399,7 +399,7 @@ export class FastKufarParser extends BaseParser {
     const requestHtml = async (): Promise<Ad[]> => {
       const started = Date.now();
       const response = await this.axiosInstance.get(url, {
-        timeout: 7000,
+        timeout: 3200,
         headers: {
           'User-Agent': this.getRandomUserAgent(),
           Accept: 'text/html,application/xhtml+xml',
@@ -575,24 +575,10 @@ export class FastKufarParser extends BaseParser {
       // When the managed source is configured, do not fall back to Kufar HTML
       // after an API failure. DEPLEXO currently gets socket resets from the
       // rendered page, so this only adds noise and delays the scheduler backoff.
-      logger.warn('Kufar managed source failed; trying direct page fallback', {
-        url,
-        status,
-        error: errorSummary(error),
-      });
-      try {
-        return await requestHtml();
-      } catch (fallbackError: unknown) {
-        throw new Error(
-          'Kufar sources unavailable: ' + errorSummary(error) + ' | HTML fallback: ' + errorSummary(fallbackError),
-        );
-      }
+      if (reefApiKey()) throw error;
+      if (status === 403) throw error;
     }
 
-    try {
-      return await requestHtml();
-    } catch (fallbackError: unknown) {
-      throw new Error('Kufar page fallback failed: ' + errorSummary(fallbackError));
-    }
+    return await requestHtml();
   }
 }
