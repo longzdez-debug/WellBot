@@ -43,6 +43,9 @@ export class ParserScheduler {
   private databaseBackoffLogAt=0;
   private readonly databaseBackoffMs=Math.max(5000,Math.min(300000,Number.parseInt(process.env.DATABASE_ERROR_BACKOFF_MS||'30000',10)||30000));
   private notificationDrainWorkers=0;
+  private readonly marketSnapshotCache=new Map<Platform,{at:number;ads:Ad[]}>();
+  private readonly marketSnapshotTtlMs=5000;
+
   private readonly maxNotificationWorkers=2;
   private readonly metrics={cycles:0,cycleFailures:0,cycleOverruns:0,skippedTicks:0,linkFailures:0,linksParsed:0,newAds:0,priceDrops:0,notificationsSent:0,notificationsFailed:0,duplicateNotifications:0,notificationLatencies:[] as number[],sourceVisibilityLatencies:[] as number[],cycleDurations:[] as number[],cycleNewAds:[] as Array<{at:number,count:number}>};
   async getMetrics(){const sorted=[...this.metrics.cycleDurations].sort((a,b)=>a-b);const percentile=(p:number)=>sorted.length?sorted[Math.min(sorted.length-1,Math.ceil(sorted.length*p)-1)]:0;const notificationSorted=[...this.metrics.notificationLatencies].sort((a,b)=>a-b);const nPercentile=(p:number)=>notificationSorted.length?notificationSorted[Math.min(notificationSorted.length-1,Math.ceil(notificationSorted.length*p)-1)]:0;const sourceSorted=[...this.metrics.sourceVisibilityLatencies].sort((a,b)=>a-b);const sPercentile=(p:number)=>sourceSorted.length?sourceSorted[Math.min(sourceSorted.length-1,Math.ceil(sourceSorted.length*p)-1)]:0;const queue=await this.db.getPendingNotificationStats();const freshness=await this.db.getActiveLinkFreshnessStats();const cutoff=Date.now()-600000;this.metrics.cycleNewAds=this.metrics.cycleNewAds.filter(x=>x.at>=cutoff);const adsPerMinute=this.metrics.cycleNewAds.reduce((sum,x)=>sum+x.count,0)/10;return{scheduler:{running:this.isRunning,intervalMs:this.intervalMs,concurrency:this.concurrency,cycles:this.metrics.cycles,failures:this.metrics.cycleFailures,cycleOverruns:this.metrics.cycleOverruns,skippedTicks:this.metrics.skippedTicks,linkFailures:this.metrics.linkFailures,linksParsed:this.metrics.linksParsed,activeLinks:freshness.activeLinks,freshnessLagMs:{oldest:freshness.oldestAgeMs,avg:freshness.avgAgeMs},adsPerMinute:Number(adsPerMinute.toFixed(2)),cycleDurationMs:{p50:percentile(.5),p95:percentile(.95),p99:percentile(.99),last:this.metrics.cycleDurations.length?this.metrics.cycleDurations[this.metrics.cycleDurations.length-1]:0}},sourceVisibility:{p50:sPercentile(.5),p95:sPercentile(.95),p99:sPercentile(.99)},notifications:{draining:this.notificationDrainWorkers>0,workers:this.notificationDrainWorkers,concurrency:this.notificationConcurrency,sent:this.metrics.notificationsSent,failed:this.metrics.notificationsFailed,pending:queue.count,oldestAgeMs:queue.oldestAgeMs,latencyMs:{p50:nPercentile(.5),p95:nPercentile(.95),p99:nPercentile(.99)}},newAds:this.metrics.newAds,priceDrops:this.metrics.priceDrops,duplicateNotifications:this.metrics.duplicateNotifications,generatedAt:new Date().toISOString()};}
@@ -54,12 +57,7 @@ export class ParserScheduler {
       const marketAdsByPlatform=new Map<Platform,Ad[]>();
       const platforms=[...new Set(unique.map(link=>link.platform))];
       await Promise.all(platforms.map(async platform=>{
-        try{
-          marketAdsByPlatform.set(platform,await this.db.getGlobalRecentMarketAds(2000,platform));
-        }catch(error){
-          logger.warn('Market snapshot unavailable; continuing without comparable data',{platform,error:error instanceof Error?error.message:String(error)});
-          marketAdsByPlatform.set(platform,[]);
-        }
+        marketAdsByPlatform.set(platform,await this.getMarketSnapshot(platform));
       }));
       logger.info('🔄 Parsing cycle started',{linksCount:unique.length,concurrency:this.concurrency,marketSnapshots:platforms.length});
       const results=await this.mapWithConcurrency(unique,this.concurrency,async link=>{const currentConfig=isMonitorConfig(link.config)?link.config:undefined;const result=await this.parseLink({...link,config:currentConfig},marketAdsByPlatform.get(link.platform)??[]);const user=users.get(link.user_id);if(user){const pref=preferences.get(user.id);if(pref?.notificationsEnabled!==false){if(result.newAds.length)await this.notifyNewAds(result.newAds.map(ad=>({ad,telegramId:user.telegram_id,userId:user.id,platform:link.platform,minDealScore:pref?.minDealScore??65})));if(result.priceDrops.length)await this.notifyPriceDrops(result.priceDrops.map(drop=>({drop,telegramId:user.telegram_id,userId:user.id})));}if(result.newAds.length||result.priceDrops.length)void this.drainNotifications();}return result;});await this.db.scheduleNextChecks(unique.map((link,i)=>({linkId:link.id,delayMs:results[i]?.nextCheckDelayMs??this.intervalMs})));const totalNew=results.reduce((sum,result)=>sum+(result?.newAds.length??0),0);const totalDrops=results.reduce((sum,result)=>sum+(result?.priceDrops.length??0),0);const duration=Date.now()-startedAt;this.metrics.linksParsed+=unique.length;this.metrics.newAds+=totalNew;this.metrics.priceDrops+=totalDrops;this.metrics.cycleDurations.push(duration);if(this.metrics.cycleDurations.length>200)this.metrics.cycleDurations.shift();if(duration>this.intervalMs)this.metrics.cycleOverruns+=1;this.metrics.cycleNewAds.push({at:Date.now(),count:totalNew});if(this.metrics.cycleNewAds.length>200)this.metrics.cycleNewAds.shift();logger.info('Parsing cycle completed',{duration:`${duration}ms`,linksCount:unique.length,totalNewAds:totalNew,totalPriceDrops:totalDrops});}catch(error:unknown){this.metrics.cycleFailures+=1;const message=error instanceof Error?error.message:String(error);const stack=error instanceof Error?error.stack:undefined;if(this.isDatabaseQuotaError(message))this.enterDatabaseBackoff('parsing',message);logger.error('Parsing cycle failed',{error:message,stack});}finally{this.isRunning=false;if(this.pendingTrigger){this.pendingTrigger=false;setImmediate(()=>void this.runParsing());}}}
@@ -179,7 +177,6 @@ export class ParserScheduler {
       const marketUpdates:Array<{id:number;status:Exclude<Ad['market_status'], undefined>;percent:number|null;median:number|null;low:number|null;high:number|null;sellFast:number|null;sellNormal:number|null;sellMax:number|null;sampleSize:number|null;confidence:Exclude<Ad['market_confidence'], undefined>;quality:number|null}>=[];
       const baseline = !link.last_parsed_at;
       if (!baseline && rawAds.length > 0 && normalizedRaw.length === 0) {
-        this.metrics.linkFailures += 1;
         failureCount = await this.recordLinkFailure(link, 'Parser returned only invalid/malformed ads');
         return { newAds, priceDrops, nextCheckDelayMs: this.computeNextCheckDelay(link, failureCount) };
       }
@@ -340,6 +337,24 @@ export class ParserScheduler {
   private isDatabaseQuotaError(message:string):boolean{
     return /quota|exceeded.*limit|rate.?limit|too many connections|connection limit|remaining connection slots|out of connections/i.test(message);
   }
+  private async getMarketSnapshot(platform:Platform):Promise<Ad[]>{
+    const now=Date.now();
+    const cached=this.marketSnapshotCache.get(platform);
+    if(cached&&now-cached.at<this.marketSnapshotTtlMs)return cached.ads;
+    try{
+      const ads=await this.db.getGlobalRecentMarketAds(2000,platform);
+      this.marketSnapshotCache.set(platform,{at:Date.now(),ads});
+      return ads;
+    }catch(error){
+      if(cached){
+        logger.warn('Market snapshot refresh failed; using cached snapshot',{platform,ageMs:now-cached.at,error:error instanceof Error?error.message:String(error)});
+        return cached.ads;
+      }
+      logger.warn('Market snapshot unavailable; continuing without comparable data',{platform,error:error instanceof Error?error.message:String(error)});
+      return [];
+    }
+  }
+
   private enterDatabaseBackoff(source:string,message:string):void{
     const now=Date.now();
     this.databaseBackoffUntil=Math.max(this.databaseBackoffUntil,now+this.databaseBackoffMs);
