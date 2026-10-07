@@ -43,7 +43,8 @@ async function main() {
   if (!Number.isInteger(webPort) || webPort <= 0 || webPort >= 65536) throw new Error('PORT must be a valid TCP port');
 
   logger.info('Checking required environment variables');
-  const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN');
+  const TELEGRAM_BOT_TOKEN = requiredEnv('TELEGRAM_BOT_TOKEN').trim();
+  if (!TELEGRAM_BOT_TOKEN) throw new Error('TELEGRAM_BOT_TOKEN is empty');
   logger.info('TELEGRAM_BOT_TOKEN is configured');
   const DATABASE_URL = requiredEnv('DATABASE_URL');
   logger.info('DATABASE_URL is configured');
