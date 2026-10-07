@@ -352,7 +352,7 @@ export class DatabaseService {
   async getUserAnalytics(userId:number):Promise<any>{
     const [summary,platforms,drops,saved]=await Promise.all([
       this.pool.query('SELECT COUNT(DISTINCT l.id) FILTER(WHERE l.is_active) active_searches,COUNT(DISTINCT (l.platform || \':\' || a.external_id)) FILTER(WHERE a.id IS NOT NULL) total_ads,COUNT(DISTINCT (l.platform || \':\' || a.external_id)) FILTER(WHERE a.id IS NOT NULL AND a.created_at>=CURRENT_TIMESTAMP-INTERVAL \'24 hours\') ads_24h,COUNT(DISTINCT (l.platform || \':\' || a.external_id)) FILTER(WHERE a.id IS NOT NULL AND a.created_at>=CURRENT_TIMESTAMP-INTERVAL \'7 days\') ads_7d,COUNT(*) FILTER(WHERE ph.created_at>=CURRENT_TIMESTAMP-INTERVAL \'7 days\') drops_7d FROM links l LEFT JOIN ads a ON a.link_id=l.id LEFT JOIN price_history ph ON ph.ad_id=a.id WHERE l.user_id=$1',[userId]),
-      this.pool.query('SELECT l.platform,COUNT(a.id)::int AS ads FROM links l LEFT JOIN ads a ON a.link_id=l.id WHERE l.user_id=$1 GROUP BY l.platform ORDER BY ads DESC',[userId]),
+      this.pool.query("SELECT l.platform,COUNT(DISTINCT l.platform || ':' || a.external_id)::int AS ads FROM links l LEFT JOIN ads a ON a.link_id=l.id WHERE l.user_id=$1 GROUP BY l.platform ORDER BY ads DESC",[userId]),
       this.pool.query('SELECT DATE(ph.created_at) day,COUNT(*)::int drops,AVG(ph.price_change_percent)::float avg_drop FROM price_history ph WHERE ph.user_id=$1 AND ph.created_at>=CURRENT_TIMESTAMP-INTERVAL \'30 days\' GROUP BY DATE(ph.created_at) ORDER BY day',[userId]),
       this.pool.query('SELECT COUNT(*)::int count FROM saved_ads WHERE user_id=$1',[userId]),
     ]);
