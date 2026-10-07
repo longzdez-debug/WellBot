@@ -77,6 +77,15 @@ describe('ParserScheduler', () => {
     };
   }
 
+  test('runs digest retention cleanup during outbox maintenance', async () => {
+    const db = makeDb([]);
+    const scheduler = new ParserScheduler(db as never, bot as never);
+    const maintain = (scheduler as unknown as { maintainNotificationOutbox: () => Promise<void> }).maintainNotificationOutbox;
+    await maintain.call(scheduler);
+    expect(db.purgeNotificationOutbox).toHaveBeenCalled();
+    expect(db.purgeDigestDeliveries).toHaveBeenCalledWith(35);
+  });
+
   test('continues daily digest delivery when one user fails', async () => {
     const links = [makeLink(1)];
     const db = makeDb(links);
