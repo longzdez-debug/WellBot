@@ -169,7 +169,7 @@ describe('ParserScheduler notification reliability', () => {
   });
 
   test('does not mark a listing as a deal when resale margin is negative', async () => {
-    const { analyzeDeal } = await import('../services/DealScoreEngine');
+    const { analyzeDeal } = await import('../services/DealScoreEngine.js');
     const result = analyzeDeal({
       external_id: 'loss',
       title: 'Loss',
@@ -190,7 +190,7 @@ describe('ParserScheduler notification reliability', () => {
 
 
   test('Deal Score rejects weak market evidence and non-positive margin', async () => {
-    const { analyzeDeal } = await import('../services/DealScoreEngine');
+    const { analyzeDeal } = await import('../services/DealScoreEngine.js');
     const base:any = {
       external_id: 'deal-safety',
       title: 'Deal safety',
