@@ -77,6 +77,18 @@ describe('ParserScheduler', () => {
     };
   }
 
+  test('applies market discount filters to non-Kufar monitors', () => {
+    const scheduler = new ParserScheduler(makeDb([]) as never, bot as never);
+    const filter = (scheduler as unknown as { applyMonitorFilters: (link: Link, ads: Ad[]) => Ad[] }).applyMonitorFilters;
+    const link = { ...makeLink(1), platform: 'av', config: { source: 'av', categoryId: 'auto', minMarketDiscount: 20 } } as Link;
+    const ads: Ad[] = [
+      { external_id: 'deal', title: 'Deal', ad_url: 'https://cars.av.by/deal', market_percent: -25 },
+      { external_id: 'fair', title: 'Fair', ad_url: 'https://cars.av.by/fair', market_percent: -10 },
+      { external_id: 'unknown', title: 'Unknown', ad_url: 'https://cars.av.by/unknown', market_percent: null },
+    ];
+    expect(filter.call(scheduler, link, ads).map(ad => ad.external_id)).toEqual(['deal']);
+  });
+
   test('runs digest retention cleanup during outbox maintenance', async () => {
     const db = makeDb([]);
     const scheduler = new ParserScheduler(db as never, bot as never);
