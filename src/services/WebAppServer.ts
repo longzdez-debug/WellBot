@@ -164,7 +164,18 @@ export async function startWebAppServer(port: number, db: DatabaseService, botTo
 
       if (requestPath === '/health' || requestPath === '/healthz') {
         if (req.method !== 'GET' && req.method !== 'HEAD') { res.setHeader('Allow', 'GET, HEAD'); json(res, 405, { error: 'method_not_allowed' }); return; }
-        if (req.method === 'HEAD') { applySecurityHeaders(res); res.statusCode = 200; res.setHeader('Cache-Control', 'no-store'); res.end(); return; }
+        if (req.method === 'HEAD') {
+          try {
+            await db.healthCheck();
+            const metrics=metricsProvider ? await metricsProvider() as any : null;
+            const running=metrics?.scheduler?.running;
+            const ready=typeof running==='boolean' ? running===true : true;
+            applySecurityHeaders(res); res.statusCode=ready?200:503; res.setHeader('Cache-Control','no-store'); res.end();
+          } catch {
+            applySecurityHeaders(res); res.statusCode=503; res.setHeader('Cache-Control','no-store'); res.end();
+          }
+          return;
+        }
         try {
           const database=await db.healthCheck();
           const metrics=metricsProvider ? await metricsProvider() as any : null;
