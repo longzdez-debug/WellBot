@@ -88,48 +88,6 @@ export class DatabaseService {
   async resetErrorCount(linkId:number):Promise<void>{await this.pool.query('UPDATE links SET error_count=0 WHERE id=$1',[linkId]);}
   async bulkCreateAdsReturning(linkId:number,ads:Ad[]):Promise<Ad[]>{const unique=new Map<string,Ad>();for(const ad of ads)if(ad?.external_id&&!unique.has(ad.external_id))unique.set(ad.external_id,ad);const rows=[...unique.values()];if(!rows.length)return[];const inserted:Ad[]=[];const chunkSize=400;for(let start=0;start<rows.length;start+=chunkSize){const chunk=rows.slice(start,start+chunkSize);const values:unknown[]=[];const placeholders=chunk.map((ad,i)=>{const b=i*15;values.push(linkId,ad.external_id,ad.title,ad.description||null,ad.price||null,ad.image_url||null,ad.ad_url,ad.location||null,ad.address||null,ad.published_at||null,ad.detected_at||new Date(),ad.first_seen_at||ad.detected_at||new Date(),ad.first_seen_source||null,ad.first_seen_rank??null,ad.updated_at||null);return`(${b+1},${b+2},${b+3},${b+4},${b+5},${b+6},${b+7},${b+8},${b+9},${b+10},${b+11},${b+12},${b+13},${b+14},${b+15})`;}).join(',');const result=await this.pool.query<Ad>(`INSERT INTO ads (link_id,external_id,title,description,price,image_url,ad_url,location,address,published_at,detected_at,first_seen_at,first_seen_source,first_seen_rank,updated_at) VALUES ${placeholders} ON CONFLICT (external_id,link_id) DO NOTHING RETURNING *`,values);inserted.push(...result.rows);}return inserted;}
   async getAdByIdForUser(adId:number,userId:number):Promise<Ad|null>{const r=await this.pool.query<Ad>('SELECT a.* FROM ads a JOIN links l ON l.id=a.link_id WHERE a.id=$1 AND l.user_id=$2',[adId,userId]);return r.rows[0]||null;}
-  async dismissAdForUser(adId:number,telegramId:number):Promise<boolean>{
-    if(!Number.isSafeInteger(adId)||adId<=0||!Number.isSafeInteger(telegramId)||telegramId<=0)return false;
-    const r=await this.pool.query<{external_id:string}>(
-      `INSERT INTO dismissed_ads(user_id,external_id)
-       SELECT u.id,a.external_id
-       FROM ads a
-       JOIN links l ON l.id=a.link_id
-       JOIN users u ON u.id=l.user_id
-       WHERE a.id=$1 AND u.telegram_id=$2
-       ON CONFLICT(user_id,external_id) DO NOTHING
-       RETURNING external_id`,
-      [adId,telegramId],
-    );
-    return (r.rowCount||0)>0;
-  }
-
-  async isAdDismissedForUser(externalId:string,telegramId:number):Promise<boolean>{
-    if(!externalId||!Number.isSafeInteger(telegramId)||telegramId<=0)return false;
-    const r=await this.pool.query(
-      `SELECT 1
-       FROM dismissed_ads d
-       JOIN users u ON u.id=d.user_id
-       WHERE d.external_id=$1 AND u.telegram_id=$2
-       LIMIT 1`,
-      [externalId,telegramId],
-    );
-    return (r.rowCount||0)>0;
-  }
-
-  async getDismissedExternalIdsForUser(telegramId:number,externalIds:string[]):Promise<Set<string>>{
-    const ids=[...new Set(externalIds.filter(Boolean))];
-    if(!ids.length)return new Set();
-    const r=await this.pool.query<{external_id:string}>(
-      `SELECT d.external_id
-       FROM dismissed_ads d
-       JOIN users u ON u.id=d.user_id
-       WHERE u.telegram_id=$1 AND d.external_id=ANY($2::text[])`,
-      [telegramId,ids],
-    );
-    return new Set(r.rows.map(row=>row.external_id));
-  }
-
   async getUserRecentAds(userId:number,limit=100):Promise<Ad[]>{
     const safeLimit=Math.min(Math.max(Math.floor(limit),1),300);
     const r=await this.pool.query<Ad>(
