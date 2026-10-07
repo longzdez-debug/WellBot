@@ -258,9 +258,9 @@ export class DatabaseService {
   async updateUserPreferences(userId:number,input:Partial<{notificationsEnabled:boolean;minDealScore:number;digestEnabled:boolean;digestHour:number}>):Promise<{notificationsEnabled:boolean;minDealScore:number;digestEnabled:boolean;digestHour:number}>{
     const current=await this.getUserPreferences(userId);
     const notificationsEnabled=input.notificationsEnabled==null?current.notificationsEnabled:Boolean(input.notificationsEnabled);
-    const minDealScore=input.minDealScore==null?current.minDealScore:Math.min(100,Math.max(0,Math.floor(Number(input.minDealScore))));
+    const minScoreRaw=input.minDealScore==null?current.minDealScore:Number(input.minDealScore); const minDealScore=Number.isFinite(minScoreRaw)?Math.min(100,Math.max(0,Math.floor(minScoreRaw))):current.minDealScore;
     const digestEnabled=input.digestEnabled==null?current.digestEnabled:Boolean(input.digestEnabled);
-    const digestHour=input.digestHour==null?current.digestHour:Math.min(23,Math.max(0,Math.floor(Number(input.digestHour))));
+    const hourRaw=input.digestHour==null?current.digestHour:Number(input.digestHour); const digestHour=Number.isFinite(hourRaw)?Math.min(23,Math.max(0,Math.floor(hourRaw))):current.digestHour;
     const r=await this.pool.query('INSERT INTO user_preferences(user_id,notifications_enabled,min_deal_score,digest_enabled,digest_hour,updated_at) VALUES($1,$2,$3,$4,$5,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET notifications_enabled=EXCLUDED.notifications_enabled,min_deal_score=EXCLUDED.min_deal_score,digest_enabled=EXCLUDED.digest_enabled,digest_hour=EXCLUDED.digest_hour,updated_at=CURRENT_TIMESTAMP RETURNING notifications_enabled,min_deal_score,digest_enabled,digest_hour',[userId,notificationsEnabled,minDealScore,digestEnabled,digestHour]);
     const row=r.rows[0]; return {notificationsEnabled:Boolean(row.notifications_enabled),minDealScore:Number(row.min_deal_score),digestEnabled:Boolean(row.digest_enabled),digestHour:Number(row.digest_hour)};
   }
