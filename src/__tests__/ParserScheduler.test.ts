@@ -77,6 +77,19 @@ describe('ParserScheduler', () => {
     };
   }
 
+  test('applies condition and seller filters to non-Kufar monitors', () => {
+    const scheduler = new ParserScheduler(makeDb([]) as never, bot as never);
+    const filter = (scheduler as unknown as { applyMonitorFilters: (link: Link, ads: Ad[]) => Ad[] }).applyMonitorFilters;
+    const link = { ...makeLink(1), platform: 'onliner', config: { source: 'onliner', categoryId: 'phones', condition: 'new', seller: 'company' } } as Link;
+    const ads: Ad[] = [
+      { external_id: 'match', title: 'Match', ad_url: 'https://onliner.by/match', condition: 'new', is_company: true },
+      { external_id: 'used', title: 'Used', ad_url: 'https://onliner.by/used', condition: 'used', is_company: true },
+      { external_id: 'private', title: 'Private', ad_url: 'https://onliner.by/private', condition: 'new', is_company: false },
+      { external_id: 'unknown', title: 'Unknown', ad_url: 'https://onliner.by/unknown', condition: null, is_company: true },
+    ];
+    expect(filter.call(scheduler, link, ads).map(ad => ad.external_id)).toEqual(['match']);
+  });
+
   test('applies market discount filters to non-Kufar monitors', () => {
     const scheduler = new ParserScheduler(makeDb([]) as never, bot as never);
     const filter = (scheduler as unknown as { applyMonitorFilters: (link: Link, ads: Ad[]) => Ad[] }).applyMonitorFilters;
