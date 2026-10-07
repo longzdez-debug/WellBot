@@ -102,7 +102,7 @@ export function parseTelegramInitData(raw: string, botToken: string, nowSeconds 
           .map(([key, value]) => key + '=' + value)
           .join('\n');
         const signedData = botId + ':WebAppData\n' + dataCheckString;
-        const publicKeyBytes = Buffer.from('e7bf03d88dda5bb59f32ed8b02a56c187fe7d34caed242', 'hex');
+        const publicKeyBytes = Buffer.from('e7bf03a2fa4603d88dda5bb59f32ed8b02a56c187fe7d34caed242', 'hex');
         const derPrefix = Buffer.from('302a300506032b6570032100', 'hex');
         const publicKey = createPublicKey({ key: Buffer.concat([derPrefix, publicKeyBytes]), format: 'der', type: 'spki' });
         const signatureBytes = Buffer.from(signature, 'base64url');
