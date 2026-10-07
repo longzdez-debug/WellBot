@@ -25,7 +25,16 @@ export class BotHandler {
   }
 
   private getMainKeyboard() {
-    return { remove_keyboard: true } as TelegramBot.SendMessageOptions['reply_markup'];
+    const webAppUrl = process.env.WELLBOT_WEBAPP_URL || process.env.WEBAPP_URL || process.env.PUBLIC_URL || '';
+    const keyboard: any[][] = [];
+    if (/^https:\/\//i.test(webAppUrl)) {
+      keyboard.push([{ text: '🚀 Открыть WellBOT', web_app: { url: webAppUrl } }]);
+    }
+    keyboard.push(
+      [{ text: '📋 Мои поиски', callback_data: 'my_links' }, { text: '➕ Добавить поиск', callback_data: 'add_link' }],
+      [{ text: '👑 WellBOT PRO', callback_data: 'open_pro' }, { text: '📊 Статистика', callback_data: 'open_stats' }],
+    );
+    return { inline_keyboard: keyboard } as TelegramBot.SendMessageOptions['reply_markup'];
   }
 
   private setupHandlers(): void {
@@ -51,7 +60,9 @@ export class BotHandler {
       if (!this.rateLimiter.isAllowed(userId)) { await this.bot.answerCallbackQuery(query.id, { text: 'Слишком много запросов' }); return; }
       await this.bot.answerCallbackQuery(query.id);
       if (data === 'add_link') await this.handleAddLinkButton(chatId, userId);
-      else if (data === 'my_links') await this.handleMyLinks(chatId, userId);\n      else if (data === 'open_pro') await this.sendProInvoice(chatId, userId);\n      else if (data === 'open_stats') await this.handleStats(chatId, userId);
+      else if (data === 'my_links') await this.handleMyLinks(chatId, userId);
+      else if (data === 'open_pro') await this.sendProInvoice(chatId, userId);\n      else if (data === 'open_stats') await this.handleStats(chatId, userId);
+      else if (data?.startsWith('dismiss_ad_')) { const adId = parseInt(data.replace('dismiss_ad_', ''), 10); if (Number.isSafeInteger(adId) && adId > 0) await this.handleDismissAd(chatId, userId, adId, query.message.message_id); }
       else if (data?.startsWith('delete_')) { const linkId = parseInt(data.replace('delete_', ''), 10); if (Number.isSafeInteger(linkId) && linkId > 0) await this.handleDeleteLink(chatId, userId, linkId); }
       else if (data === 'delete_all') await this.handleDeleteAllLinks(chatId, userId);
       else if (data === 'confirm_delete_all') await this.handleConfirmDeleteAll(chatId, userId);
@@ -112,6 +123,29 @@ export class BotHandler {
   async handleAddLinkButton(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } if (await this.db.getUserLinksCount(user.id) >= 50) { await this.bot.sendMessage(chatId, '⚠️ Достигнут лимит в 50 поисков.'); return; }  await this.bot.sendMessage(chatId, '📂 Откройте WellBOT и выберите категорию, город и фильтры.\n\nWellBOT сам создаст и запустит поиск — ссылки больше не нужны.', { reply_markup: this.getMainKeyboard() }); } catch (error: any) { logger.error('Failed to handle add link button', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Произошла ошибка.'); } }
 
   async handleMyLinks(chatId: number, userId: number): Promise<void> { try { await this.db.createUser(userId, null); const user = await this.db.getUser(userId); if (!user?.id) { await this.bot.sendMessage(chatId, '❌ Ошибка: пользователь не найден.'); return; } const links = await this.db.getUserLinks(user.id); if (!links.length) { await this.bot.sendMessage(chatId, '📋 У вас пока нет поисков.', { reply_markup: { inline_keyboard: [[{ text: '➕ Добавить поиск', callback_data: 'add_link' }]] } }); return; } const platformEmoji: Record<Platform, string> = { kufar: '🟢', onliner: '🔵', av: '🚗' }; for (const link of links) { if (!platformEmoji[link.platform as Platform]) continue; const status = link.is_active ? '✅ Активна' : '❌ Неактивна'; const config = (link as Link & { config?: any }).config || {}; const category = typeof config.subcategoryId === 'string' ? config.subcategoryId : typeof config.categoryId === 'string' ? config.categoryId : 'Каталог'; const scope = [config.city, config.region].filter(Boolean).join(' · ') || 'Вся Беларусь'; const filters = [config.query, config.minPrice != null ? `от ${config.minPrice}` : '', config.maxPrice != null ? `до ${config.maxPrice}` : '', config.condition === 'new' ? 'Новое' : config.condition === 'used' ? 'Б/у' : '', config.seller === 'company' ? 'Компания' : config.seller === 'private' ? 'Частное лицо' : ''].filter(Boolean).join(' · '); await this.bot.sendMessage(chatId, `${platformEmoji[link.platform as Platform]} ${link.platform.toUpperCase()}\n\n📂 ${category}\n📍 ${scope}${filters ? `\n🔎 ${filters}` : ''}\n\nСтатус: ${status}`, { reply_markup: { inline_keyboard: [[{ text: '🔍 Проверить', callback_data: `check_${link.id}` }, { text: '🗑 Удалить', callback_data: `delete_${link.id}` }]] } }); } } catch (error: any) { logger.error('Failed to show searches', { userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Не удалось загрузить поиски.'); } }
+
+  async handleDismissAd(chatId: number, userId: number, adId: number, messageId?: number): Promise<void> {
+    try {
+      const dismissed = await this.db.dismissAdForUser(adId, userId);
+      if (!dismissed) {
+        await this.bot.sendMessage(chatId, '❌ Объявление не найдено или уже скрыто.');
+        return;
+      }
+      if (messageId) {
+        try {
+          await (this.bot as any).editMessageReplyMarkup(
+            { inline_keyboard: [] },
+            { chat_id: chatId, message_id: messageId },
+          );
+        } catch {}
+      }
+      await this.bot.sendMessage(chatId, '⏭ Объявление пропущено. Оно больше не будет показываться в WellBOT.');
+      logger.info('Ad dismissed from Telegram', { adId, userId });
+    } catch (error: any) {
+      logger.error('Failed to dismiss ad', { adId, userId, error: error.message });
+      await this.bot.sendMessage(chatId, '❌ Не удалось пропустить объявление. Попробуйте ещё раз.');
+    }
+  }
 
   async handleDeleteLink(chatId: number, userId: number, linkId: number): Promise<void> { try { const link = await this.db.getLinkForUser(linkId, userId); if (!link) { await this.bot.sendMessage(chatId, '❌ Поиск не найден или уже удалён.'); return; } await this.db.deleteLink(linkId, userId); await this.bot.sendMessage(chatId, '✅ Поиск удалён.'); logger.info('Link deleted', { linkId, userId }); } catch (error: any) { logger.error('Failed to delete link', { linkId, userId, error: error.message }); await this.bot.sendMessage(chatId, '❌ Не удалось удалить поиск.'); } }
 
