@@ -248,6 +248,21 @@ export class ParserScheduler {
         newCandidates.push(adData);
       }
 
+      logger.info('Monitor scan classification', {
+        linkId: link.id,
+        platform: link.platform,
+        rawAdsCount: rawAds.length,
+        normalizedAdsCount: normalizedRaw.length,
+        scannedAdsCount: scannedRaw.length,
+        existingAdsInScan: scannedRaw.filter(ad => existing.has(ad.external_id)).length,
+        newCandidatesCount: newCandidates.length,
+        configuredAdsCount: configured.length,
+        filteredByMonitorCount: Math.max(0, ads.length - configured.length),
+        newlyEligibleExistingCount: newlyEligibleExisting.length,
+        baseline: false,
+        lastParsedAt: link.last_parsed_at ?? null,
+      });
+
       if (newlyEligibleExisting.length) {
         const uniqueEligible=[...new Map(newlyEligibleExisting.map(ad=>[ad.external_id,ad])).values()];
         for(const adData of uniqueEligible){
