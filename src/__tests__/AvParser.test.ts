@@ -4,6 +4,7 @@ describe('AvParser',()=>{
   test('ignores listings without a stable id',async()=>{
     const axiosMock={
       get:jest.fn().mockResolvedValue({
+        status:200,
         data:'<script id="__NEXT_DATA__" type="application/json">{"props":{"initialState":{"ads":[{"title":"Broken without id"},{"id":"1","properties":[],"price":{"byn":{"amount":100,"currency":"BYN"}},"publicUrl":"/sale/1"}]}}}</script>'      }),
     } as any;
     const parser=new AvParser(axiosMock);
