@@ -13,7 +13,7 @@ function makeInitData(botToken: string, authDate: number, user: TestUser = { id:
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => `${key}=${value}`)
     .join('\n');
-  const secret = createHmac('sha256', botToken).update('WebAppData').digest();
+  const secret = createHmac('sha256', 'WebAppData').update(botToken).digest();
   const hash = createHmac('sha256', secret).update(dataCheckString).digest('hex');
   params.set('hash', hash);
   return params.toString();

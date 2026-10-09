@@ -77,6 +77,15 @@ describe('ParserScheduler', () => {
     };
   }
 
+  test('direct runParsing calls do not start background polling timers', async () => {
+    const scheduler = new ParserScheduler(makeDb([]) as never, bot as never);
+
+    await scheduler.runParsing();
+
+    expect((scheduler as any).intervalId).toBeNull();
+    await scheduler.stop();
+  });
+
   test('requires confirmed private seller metadata for private filters', () => {
     const scheduler = new ParserScheduler(makeDb([]) as never, bot as never);
     const filter = (scheduler as unknown as { applyMonitorFilters: (link: Link, ads: Ad[]) => Ad[] }).applyMonitorFilters;
