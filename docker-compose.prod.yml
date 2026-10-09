@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        WELLBOT_BUILD_REV: ${WELLBOT_BUILD_REV:-1}
+        WELLBOT_BUILD_REV: ${WELLBOT_BUILD_REV:-unknown}
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN must be set}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
