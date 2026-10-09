@@ -35,7 +35,7 @@ function safeError(error: unknown): { message: string; code?: string; name?: str
 }
 
 async function main() {
-  const buildRevision = process.env.WELLBOT_BUILD_REV || '4da3f8712bcba07d8c58f92ebeeb9e642256c343';
+  const buildRevision = process.env.WELLBOT_BUILD_REV || 'unknown';
   logger.info('Starting WellBOT...', { version: '2.0.4', buildRevision, miniAppApi: 'telegram-init-data' });
   const configuredWebPort = process.env.PORT || '3000';
   const webPort = Number(configuredWebPort);
