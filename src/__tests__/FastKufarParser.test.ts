@@ -188,4 +188,27 @@ describe('FastKufarParser catalog/search behavior', () => {
     }
   });
 
+  test('sniper mode merges fresh ads from every successful Kufar source', async () => {
+    const axiosMock = {
+      get: jest.fn(async (url: string) => ({
+        data: {
+          ads: url.includes('cre-api')
+            ? [{ ad_id: 'fresh-cre', subject: 'Apple iPhone 15', price_byn: 100000 }]
+            : [{ ad_id: 'older-search', subject: 'Apple iPhone 14', price_byn: 90000 }],
+          pagination: { pages: [] },
+        },
+      })),
+    } as any;
+    const identity = JSON.stringify({
+      v: 2, source: 'kufar', categoryId: 'phones', subcategoryId: '17010',
+      brand: 'apple', model: '', query: '', mode: 'sniper',
+    });
+    const parser = new FastKufarParser(axiosMock);
+    const ads = await parser.parseUrl(
+      'https://www.kufar.by/l/mobilnye-telefony/mt~apple?wb=' + encodeURIComponent(identity),
+    );
+    expect(axiosMock.get).toHaveBeenCalledTimes(2);
+    expect(ads.map(ad => ad.external_id).sort()).toEqual(['fresh-cre', 'older-search']);
+  });
+
 });
