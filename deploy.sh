@@ -46,8 +46,17 @@ if [[ "${WELLBOT_WEBAPP_URL:-}" == "https://wellbot.example.com/" ]]; then
   echo "WARNING: Replace WELLBOT_WEBAPP_URL with your real public HTTPS URL if you want the Mini App." >&2
 fi
 
+# Resolve the deployed source revision for startup logs and diagnostics.
+# Explicitly override any stale WELLBOT_BUILD_REV value loaded from .env.
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+  export WELLBOT_BUILD_REV="$(git rev-parse HEAD)"
+else
+  echo "WARNING: Git metadata is unavailable; build revision will be reported as unknown." >&2
+  export WELLBOT_BUILD_REV=unknown
+fi
+
 # Ensure the database schema is initialized by the application after PostgreSQL becomes healthy.
-echo "Building and starting WellBOT..."
+echo "Building and starting WellBOT (revision: $WELLBOT_BUILD_REV)..."
 docker compose -f docker-compose.prod.yml build --pull bot
 docker compose -f docker-compose.prod.yml up -d bot
 
