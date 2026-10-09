@@ -519,7 +519,10 @@ export class FastKufarParser extends BaseParser {
       const isSniper = String(identityValue(13,'mode')) === 'sniper';
       const sources = params.cat ? [...API_ENDPOINTS] : [];
       if (params.cat && reefApiKey()) sources.push('__reef__');
-      if (isSniper && !reefApiKey()) { params.size = 30; sources.push('__html__'); }
+      // Keep the HTML page as a fallback, not a third request on every scan.
+      // Repeated HTML polling is rate-limited by Kufar (HTTP 429) and does not
+      // help when both JSON APIs already return successfully.
+      if (isSniper && !reefApiKey()) params.size = 30;
 
       if (sources.length) {
         const startedAt = Date.now();
