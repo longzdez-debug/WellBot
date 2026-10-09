@@ -532,26 +532,11 @@ export class FastKufarParser extends BaseParser {
               : requestApi(source),
         }));
 
-        if (isSniper) {
-          try {
-            const first = await Promise.any(requests.map(async item => {
-              const ads = await item.promise;
-              if (!ads.length) throw new Error('empty source');
-              return item.source === '__html__'
-                ? ads.map(ad => ({...ad, first_seen_source: ad.first_seen_source ?? 'html'}))
-                : ads;
-            }));
-            logger.info('Kufar sniper first-hit source won', {
-              source: first[0]?.first_seen_source ?? 'unknown',
-              uniqueAds: first.length,
-              durationMs: Date.now() - startedAt,
-            });
-            return first;
-          } catch {
-            // All sources were empty/failed. Fall through to the full merge path
-            // so an established monitor still gets the same failure semantics.
-          }
-        }
+        // Even in sniper mode, merge every source that responds. Kufar's
+        // endpoints can have different indexing/cache freshness; returning the
+        // first non-empty response can permanently hide a fresh ad present in
+        // another source. Requests run concurrently and each has a bounded timeout.
+
 
         const settled = await Promise.allSettled(requests.map(item => item.promise));
         const merged = new Map<string, Ad>();
